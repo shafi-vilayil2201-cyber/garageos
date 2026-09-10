@@ -57,6 +57,33 @@ $statement->execute([
 ]);
 $lowStockParts = (int) $statement->fetchColumn();
 
+// Appointments booked for today
+$statement = $pdo->prepare("
+    SELECT
+        a.scheduled_at,
+        v.registration_no, v.make, v.model,
+        c.name AS customer_name
+    FROM appointments a
+    INNER JOIN vehicles v ON v.id = a.vehicle_id
+    INNER JOIN customers c ON c.id = a.customer_id
+    WHERE a.organization_id = :organization_id
+      AND a.status IN ('scheduled', 'confirmed')
+      AND a.scheduled_at::date = CURRENT_DATE
+    ORDER BY a.scheduled_at
+");
+$statement->execute(['organization_id' => $organizationId]);
+$todaysAppointments = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+// Reminders due within the next 7 days
+$statement = $pdo->prepare("
+    SELECT COUNT(*) FROM reminders
+    WHERE organization_id = :organization_id
+      AND status = 'pending'
+      AND due_date <= CURRENT_DATE + INTERVAL '7 days'
+");
+$statement->execute(['organization_id' => $organizationId]);
+$remindersDue = (int) $statement->fetchColumn();
+
 // Recent job cards
 $statement = $pdo->prepare("
     SELECT
@@ -196,8 +223,54 @@ $topbarTitle = 'Dashboard';
 
                     <div class="card-body" style="display:flex; flex-direction:column; gap:10px;">
                         <a href="/job-card-new.php" class="button">+ New job card</a>
+                        <a href="/appointment-new.php" class="button secondary">Book an appointment</a>
                         <a href="/customers.php" class="button secondary">Add a customer</a>
                         <a href="/parts.php" class="button secondary">Check parts stock</a>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="content-grid">
+
+                <div class="card">
+                    <div class="card-header">
+                        Today's appointments
+                        <a href="/appointments.php" style="font-size:13px; font-weight:500; color: var(--muted);">View all</a>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <?php if (empty($todaysAppointments)): ?>
+                            <div class="empty-state">Nothing booked for today.</div>
+                        <?php else: ?>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <tr><th>Time</th><th>Vehicle</th><th>Customer</th></tr>
+                                    <?php foreach ($todaysAppointments as $appointment): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars(date('h:i A', strtotime($appointment['scheduled_at']))) ?></td>
+                                            <td>
+                                                <?= htmlspecialchars($appointment['registration_no']) ?>
+                                                <div class="result-meta"><?= htmlspecialchars($appointment['make'] . ' ' . $appointment['model']) ?></div>
+                                            </td>
+                                            <td><?= htmlspecialchars($appointment['customer_name']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        Reminders
+                        <a href="/reminders.php" style="font-size:13px; font-weight:500; color: var(--muted);">View all</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-value"><?= $remindersDue ?></div>
+                        <p class="stat-meta <?= $remindersDue > 0 ? 'warning' : '' ?>">
+                            <?= $remindersDue > 0 ? 'Due for service or documents in the next 7 days' : 'Nothing due this week' ?>
+                        </p>
                     </div>
                 </div>
 

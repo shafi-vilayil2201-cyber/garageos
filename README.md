@@ -55,19 +55,21 @@ It asks for the workshop name, a short code, and the admin's details, then print
 
 ## What's working right now
 
-- Login / session auth, dashboard with live stats
+- Login / session auth, dashboard with live stats, today's appointments, and reminders due
 - Customers and vehicles (create + list)
 - Job cards: intake (search vehicle by plate or phone), add services and parts, status board, stock deduction on part use
 - Invoice generation from a job card, payment recording
 - Parts inventory (add part + opening stock, low-stock flag)
-- Suppliers (basic list + create)
+- Suppliers, and purchases (multi-line, restocks inventory and logs the movement)
+- Reports: 7-day revenue, technician productivity, top parts used, low stock
+- Appointments: book by searching a vehicle, convert straight into a job card on arrival
+- Reminders: auto-generated from vehicle insurance/PUC expiry dates and from job card delivery (next service due in 90 days) — mark contacted or dismiss; sending SMS/WhatsApp is not wired up yet, this is the in-app due-list only
 
-## What's a placeholder (Phase 2, see the roadmap in the docs)
+## What's a placeholder (see the roadmap in the docs)
 
-- Purchases (schema exists, no UI yet — restock via the Parts page for now)
-- Reports
 - Editable settings / branding
-- Appointments, reminders, cloud sync — not yet started
+- Actually sending reminder notifications (SMS/WhatsApp/email) — needs a provider decision first
+- Cloud sync, mobile/remote access — not yet started; blocked on deciding a cloud host and revisiting the `BIGSERIAL` primary key strategy (see docs §12)
 
 ## Conventions to follow when extending this
 

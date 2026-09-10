@@ -34,6 +34,16 @@ function nav_class(string $key, string $activeNav): string
                 <span>Job Cards</span>
             </a>
 
+            <a href="/appointments.php" class="<?= nav_class('appointments', $activeNav) ?>">
+                <span>▤</span>
+                <span>Appointments</span>
+            </a>
+
+            <a href="/reminders.php" class="<?= nav_class('reminders', $activeNav) ?>">
+                <span>◔</span>
+                <span>Reminders</span>
+            </a>
+
             <a href="/parts.php" class="<?= nav_class('parts', $activeNav) ?>">
                 <span>◫</span>
                 <span>Parts</span>

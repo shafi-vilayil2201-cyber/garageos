@@ -53,6 +53,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $statement->execute(['status' => $newStatus, 'id' => $jobCardId]);
 
+            if ($newStatus === 'delivered') {
+
+                // A fresh service resolves any reminder that was nudging
+                // the customer to come back — and starts the countdown
+                // to the next one.
+                $statement = $pdo->prepare("
+                    UPDATE reminders
+                    SET status = 'dismissed'
+                    WHERE vehicle_id = :vehicle_id AND due_type = 'service_due' AND status = 'pending'
+                ");
+                $statement->execute(['vehicle_id' => $jobCard['vehicle_id']]);
+
+                $statement = $pdo->prepare("
+                    INSERT INTO reminders (organization_id, customer_id, vehicle_id, due_type, due_date)
+                    VALUES (:organization_id, :customer_id, :vehicle_id, 'service_due', CURRENT_DATE + INTERVAL '90 days')
+                    ON CONFLICT (vehicle_id, due_type, due_date) DO NOTHING
+                ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'customer_id' => $jobCard['customer_id'],
+                    'vehicle_id' => $jobCard['vehicle_id']
+                ]);
+            }
+
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
         }
