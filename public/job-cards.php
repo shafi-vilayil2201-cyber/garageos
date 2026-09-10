@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -109,7 +110,12 @@ $topbarTitle = 'Job Cards';
             <div class="page-header">
                 <div>
                     <h1 class="page-title">Job Cards</h1>
-                    <p class="page-description">Every vehicle currently moving through the workshop.</p>
+                    <p class="page-description">
+                        Every vehicle currently moving through the workshop.
+                        <?php if ($canManageJobCards && !empty($jobCards)): ?>
+                            Drag a card forward to move it along — it can't go back a stage.
+                        <?php endif; ?>
+                    </p>
                 </div>
 
                 <?php if ($canManageJobCards): ?>
@@ -125,27 +131,40 @@ $topbarTitle = 'Job Cards';
                     </div>
                 </div>
             <?php else: ?>
-                <div class="kanban">
+                <div class="kanban" id="kanban-board">
                     <?php foreach ($columns as $statusKey => $statusLabel): ?>
-                        <div class="kanban-column">
+                        <div class="kanban-column col-<?= $statusKey ?>" data-status="<?= $statusKey ?>">
                             <div class="kanban-column-title">
                                 <span class="kanban-column-label"><?= icon($columnIcons[$statusKey], 15) ?><?= htmlspecialchars($statusLabel) ?></span>
-                                <span><?= count($byStatus[$statusKey]) ?></span>
+                                <span id="kanban-count-<?= $statusKey ?>"><?= count($byStatus[$statusKey]) ?></span>
                             </div>
 
-                            <?php foreach ($byStatus[$statusKey] as $jobCard): ?>
-                                <a href="/job-card.php?id=<?= (int) $jobCard['id'] ?>">
-                                    <div class="kanban-card">
-                                        <div class="kanban-card-job-no"><?= htmlspecialchars($jobCard['job_no']) ?></div>
-                                        <div class="kanban-card-vehicle">
-                                            <?= htmlspecialchars($jobCard['registration_no']) ?>
+                            <div class="kanban-column-cards">
+                                <?php foreach ($byStatus[$statusKey] as $jobCard): ?>
+                                    <a
+                                        href="/job-card.php?id=<?= (int) $jobCard['id'] ?>"
+                                        class="kanban-card-link"
+                                        data-job-card-id="<?= (int) $jobCard['id'] ?>"
+                                        data-status="<?= htmlspecialchars($jobCard['status']) ?>"
+                                        <?= $canManageJobCards && $jobCard['status'] !== 'delivered' ? 'draggable="true"' : '' ?>
+                                    >
+                                        <div class="kanban-card card-<?= htmlspecialchars($jobCard['status']) ?>">
+                                            <div class="kanban-card-top">
+                                                <span class="kanban-card-job-no"><?= htmlspecialchars($jobCard['job_no']) ?></span>
+                                                <?php if ($jobCard['status'] === 'on_hold'): ?>
+                                                    <span class="badge badge-on_hold"><?= icon('pause', 11) ?> On hold</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="kanban-card-vehicle">
+                                                <?= htmlspecialchars($jobCard['registration_no']) ?>
+                                            </div>
+                                            <div class="kanban-card-customer">
+                                                <?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?> · <?= htmlspecialchars($jobCard['customer_name']) ?>
+                                            </div>
                                         </div>
-                                        <div class="kanban-card-customer">
-                                            <?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?> · <?= htmlspecialchars($jobCard['customer_name']) ?>
-                                        </div>
-                                    </div>
-                                </a>
-                            <?php endforeach; ?>
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -177,6 +196,16 @@ $topbarTitle = 'Job Cards';
     <script src="/js/modal.js"></script>
     <script src="/js/vehicle-intake.js"></script>
     <script>initVehicleIntake('jobcard');</script>
+
+<?php endif; ?>
+
+<?php if ($canManageJobCards && !empty($jobCards)): ?>
+
+    <script>
+        window.JOB_CARD_STATUS_RANK = <?= json_encode(JOB_CARD_STATUS_RANK) ?>;
+        window.JOB_CARD_CSRF = <?= json_encode(csrf_token()) ?>;
+    </script>
+    <script src="/js/job-cards-board.js"></script>
 
 <?php endif; ?>
 

@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -37,7 +38,14 @@ if (!$jobCard) {
 }
 
 $error = null;
-$statuses = ['received', 'in_progress', 'quality_check', 'ready', 'delivered', 'on_hold', 'cancelled'];
+$allStatuses = ['received', 'in_progress', 'quality_check', 'ready', 'delivered', 'on_hold', 'cancelled'];
+
+// Only the current status and whatever it can legally move to next —
+// never a stage it's already passed.
+$statuses = array_values(array_filter(
+    $allStatuses,
+    fn(string $status) => job_card_can_transition($jobCard['status'], $status)
+));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -51,38 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $newStatus = $_POST['status'] ?? '';
 
-        if (in_array($newStatus, $statuses, true)) {
+        if (in_array($newStatus, $allStatuses, true) && job_card_can_transition($jobCard['status'], $newStatus)) {
 
-            $statement = $pdo->prepare("
-                UPDATE job_cards
-                SET status = :status, closed_at = " . ($newStatus === 'delivered' ? 'CURRENT_TIMESTAMP' : 'closed_at') . ", updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
-            ");
-            $statement->execute(['status' => $newStatus, 'id' => $jobCardId]);
-
-            if ($newStatus === 'delivered') {
-
-                // A fresh service resolves any reminder that was nudging
-                // the customer to come back — and starts the countdown
-                // to the next one.
-                $statement = $pdo->prepare("
-                    UPDATE reminders
-                    SET status = 'dismissed'
-                    WHERE vehicle_id = :vehicle_id AND due_type = 'service_due' AND status = 'pending'
-                ");
-                $statement->execute(['vehicle_id' => $jobCard['vehicle_id']]);
-
-                $statement = $pdo->prepare("
-                    INSERT INTO reminders (organization_id, customer_id, vehicle_id, due_type, due_date)
-                    VALUES (:organization_id, :customer_id, :vehicle_id, 'service_due', CURRENT_DATE + INTERVAL '90 days')
-                    ON CONFLICT (vehicle_id, due_type, due_date) DO NOTHING
-                ");
-                $statement->execute([
-                    'organization_id' => $organizationId,
-                    'customer_id' => $jobCard['customer_id'],
-                    'vehicle_id' => $jobCard['vehicle_id']
-                ]);
-            }
+            apply_job_card_status($pdo, $jobCard, $newStatus, $organizationId);
 
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
