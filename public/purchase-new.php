@@ -201,20 +201,28 @@ $topbarTitle = 'New Purchase';
             <?php if (empty($suppliers)): ?>
                 <div class="card">
                     <div class="empty-state">
+                        <?= icon('warehouse', 28) ?>
                         Add a supplier before recording a purchase.
-                        <br><a href="/suppliers.php" class="button secondary" style="margin-top:10px; display:inline-flex;">Add a supplier</a>
+                        <a href="/suppliers.php" class="button secondary"><?= icon('plus', 16) ?> Add a supplier</a>
                     </div>
                 </div>
             <?php elseif (empty($parts)): ?>
                 <div class="card">
                     <div class="empty-state">
+                        <?= icon('box', 28) ?>
                         Add a part before recording a purchase.
-                        <br><a href="/parts.php" class="button secondary" style="margin-top:10px; display:inline-flex;">Add a part</a>
+                        <a href="/parts.php" class="button secondary"><?= icon('plus', 16) ?> Add a part</a>
                     </div>
                 </div>
             <?php else: ?>
 
                 <div class="card" style="max-width: 760px;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('truck', 15) ?></span>
+                            Purchase details
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -244,10 +252,10 @@ $topbarTitle = 'New Purchase';
                                 <tbody id="line-items"></tbody>
                             </table>
 
-                            <button type="button" class="button secondary" id="add-line-button">+ Add line</button>
+                            <button type="button" class="button secondary" id="add-line-button"><?= icon('plus', 16) ?> Add line</button>
 
                             <div class="form-actions">
-                                <button type="submit" class="button">Save purchase</button>
+                                <button type="submit" class="button"><?= icon('check', 16) ?> Save purchase</button>
                             </div>
 
                         </form>

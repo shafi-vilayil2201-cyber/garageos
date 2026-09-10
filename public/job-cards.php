@@ -44,6 +44,14 @@ $columns = [
     'delivered' => 'Delivered'
 ];
 
+$columnIcons = [
+    'received' => 'clipboard-list',
+    'in_progress' => 'settings',
+    'quality_check' => 'check-circle',
+    'ready' => 'bell',
+    'delivered' => 'car'
+];
+
 $byStatus = array_fill_keys(array_keys($columns), []);
 
 foreach ($jobCards as $jobCard) {
@@ -86,19 +94,24 @@ $topbarTitle = 'Job Cards';
                     <p class="page-description">Every vehicle currently moving through the workshop.</p>
                 </div>
 
-                <a href="/job-card-new.php" class="button">+ New Job Card</a>
+                <?php if (user_can($user, 'job_cards.manage')): ?>
+                    <a href="/job-card-new.php" class="button"><?= icon('plus', 16) ?> New Job Card</a>
+                <?php endif; ?>
             </div>
 
             <?php if (empty($jobCards)): ?>
                 <div class="card">
-                    <div class="empty-state">No job cards yet. Create the first one.</div>
+                    <div class="empty-state">
+                        <?= icon('job-card', 28) ?>
+                        No job cards yet. Create the first one.
+                    </div>
                 </div>
             <?php else: ?>
                 <div class="kanban">
                     <?php foreach ($columns as $statusKey => $statusLabel): ?>
                         <div class="kanban-column">
                             <div class="kanban-column-title">
-                                <span><?= htmlspecialchars($statusLabel) ?></span>
+                                <span class="kanban-column-label"><?= icon($columnIcons[$statusKey], 15) ?><?= htmlspecialchars($statusLabel) ?></span>
                                 <span><?= count($byStatus[$statusKey]) ?></span>
                             </div>
 

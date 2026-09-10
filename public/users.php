@@ -131,7 +131,12 @@ $topbarTitle = 'Users';
             <div class="content-grid" style="grid-template-columns: 1fr 380px;">
 
                 <div class="card">
-                    <div class="card-header">All users</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('team', 15) ?></span>
+                            All users
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <div class="table-wrap">
                             <table class="data-table">
@@ -140,7 +145,13 @@ $topbarTitle = 'Users';
                                     <tr>
                                         <td><?= htmlspecialchars($u['name']) ?></td>
                                         <td><?= htmlspecialchars($u['email']) ?></td>
-                                        <td><?= htmlspecialchars($u['role_names'] ?? 'No role assigned') ?></td>
+                                        <td>
+                                            <?php if ($u['role_names']): ?>
+                                                <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
+                                            <?php else: ?>
+                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
@@ -149,7 +160,12 @@ $topbarTitle = 'Users';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Add a user</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
+                            Add a user
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -188,7 +204,7 @@ $topbarTitle = 'Users';
                                 </div>
 
                                 <div class="form-actions">
-                                    <button type="submit" class="button">Create user</button>
+                                    <button type="submit" class="button"><?= icon('check', 16) ?> Create user</button>
                                 </div>
 
                             </form>

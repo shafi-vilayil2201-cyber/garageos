@@ -65,14 +65,20 @@ $topbarTitle = 'Purchases';
                     <p class="page-description">Restocking parts from your suppliers.</p>
                 </div>
 
-                <a href="/purchase-new.php" class="button">+ New Purchase</a>
+                <a href="/purchase-new.php" class="button"><?= icon('plus', 16) ?> New Purchase</a>
             </div>
 
             <div class="card">
-                <div class="card-header">All purchases</div>
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('truck', 15) ?></span>
+                        All purchases
+                    </div>
+                </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($purchases)): ?>
                         <div class="empty-state">
+                            <?= icon('truck', 28) ?>
                             No purchases recorded yet.
                             <?php
                                 $statement = $pdo->prepare("SELECT COUNT(*) FROM suppliers WHERE organization_id = :organization_id");
@@ -80,7 +86,7 @@ $topbarTitle = 'Purchases';
                                 $hasSuppliers = (int) $statement->fetchColumn() > 0;
                             ?>
                             <?php if (!$hasSuppliers): ?>
-                                <br><a href="/suppliers.php" style="color:var(--primary); font-weight:600;">Add a supplier first</a>.
+                                <a href="/suppliers.php" class="link-action"><?= icon('plus', 14) ?> Add a supplier first</a>
                             <?php endif; ?>
                         </div>
                     <?php else: ?>
@@ -97,7 +103,7 @@ $topbarTitle = 'Purchases';
                                         <td><strong><?= htmlspecialchars($purchase['purchase_no']) ?></strong></td>
                                         <td><?= htmlspecialchars($purchase['supplier_name']) ?></td>
                                         <td><?= htmlspecialchars(date('d M Y', strtotime($purchase['created_at']))) ?></td>
-                                        <td>₹<?= number_format($purchase['total'], 2) ?></td>
+                                        <td class="num">₹<?= number_format($purchase['total'], 2) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>

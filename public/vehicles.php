@@ -119,10 +119,18 @@ $topbarTitle = 'Vehicles';
             <div class="content-grid" style="grid-template-columns: 1fr 380px;">
 
                 <div class="card">
-                    <div class="card-header">All vehicles</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('car', 15) ?></span>
+                            All vehicles
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($vehicles)): ?>
-                            <div class="empty-state">No vehicles yet. Add one for an existing customer.</div>
+                            <div class="empty-state">
+                                <?= icon('car', 28) ?>
+                                No vehicles yet. Add one for an existing customer.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -152,7 +160,12 @@ $topbarTitle = 'Vehicles';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Add a vehicle</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
+                            Add a vehicle
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -214,7 +227,7 @@ $topbarTitle = 'Vehicles';
                                 </div>
 
                                 <div class="form-actions">
-                                    <button type="submit" class="button">Save vehicle</button>
+                                    <button type="submit" class="button"><?= icon('check', 16) ?> Save vehicle</button>
                                 </div>
 
                             </form>

@@ -1,17 +1,24 @@
 :root {
     --bg: #f4f3f1;
     --surface: #ffffff;
+    --surface-sunken: #faf9f6;
     --border: #e5e3dd;
     --text: #1c1a17;
     --muted: #6b6660;
     --primary: #c2660a;
     --primary-dark: #9c5108;
+    --primary-soft: #f7e6d3;
     --sidebar: #1c1917;
     --sidebar-text: #d6d3ce;
+    --sidebar-muted: #8a847a;
     --sidebar-active: #29241f;
     --success: #16a34a;
+    --success-soft: #dcfce7;
     --danger: #dc2626;
+    --danger-dark: #b91c1c;
+    --danger-soft: #fee2e2;
     --warning: #d97706;
+    --warning-soft: #fef3c7;
 
     --radius: 12px;
     --shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
@@ -31,6 +38,7 @@ body {
         sans-serif;
     background: var(--bg);
     color: var(--text);
+    line-height: 1.45;
 }
 
 a {
@@ -43,6 +51,26 @@ input,
 select,
 textarea {
     font: inherit;
+}
+
+svg {
+    flex-shrink: 0;
+}
+
+/* Keyboard focus is always visible — never remove this without replacing it */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Numbers that should line up in a column: prices, quantities, counts */
+.num {
+    font-variant-numeric: tabular-nums;
 }
 
 /* Application shell */
@@ -88,6 +116,7 @@ textarea {
     font-size: 21px;
     font-weight: 700;
     letter-spacing: -0.5px;
+    line-height: 1.2;
 }
 
 .brand-subtitle {
@@ -106,18 +135,27 @@ textarea {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #8a847a;
+    color: var(--sidebar-muted);
 }
 
 .nav-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    margin-bottom: 3px;
+    gap: 12px;
+    padding: 9px 12px;
+    margin-bottom: 2px;
     border-radius: 8px;
     font-size: 14px;
-    transition: background 0.15s ease;
+    font-weight: 500;
+    color: var(--sidebar-text);
+    border-left: 3px solid transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-item .nav-icon {
+    display: flex;
+    color: var(--sidebar-muted);
+    transition: color 0.15s ease;
 }
 
 .nav-item:hover {
@@ -125,9 +163,18 @@ textarea {
     color: #ffffff;
 }
 
+.nav-item:hover .nav-icon {
+    color: var(--sidebar-text);
+}
+
 .nav-item.active {
     background: var(--sidebar-active);
     color: #ffffff;
+    border-left-color: var(--primary);
+}
+
+.nav-item.active .nav-icon {
+    color: var(--primary);
 }
 
 /* Main area */
@@ -173,12 +220,20 @@ textarea {
 }
 
 .logout-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 13px;
+    font-weight: 500;
     color: var(--muted);
+    padding: 6px 10px;
+    border-radius: 7px;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .logout-link:hover {
     color: var(--text);
+    background: var(--surface-sunken);
 }
 
 /* Page */
@@ -210,10 +265,11 @@ textarea {
 .button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     height: 42px;
     padding: 0 18px;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 8px;
     background: var(--primary);
     color: #ffffff;
@@ -221,20 +277,59 @@ textarea {
     font-size: 14px;
     cursor: pointer;
     white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.button svg {
+    width: 16px;
+    height: 16px;
 }
 
 .button:hover {
     background: var(--primary-dark);
 }
 
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .button.secondary {
     background: var(--surface);
     color: var(--text);
-    border: 1px solid var(--border);
+    border-color: var(--border);
 }
 
 .button.secondary:hover {
-    background: #f0efe9;
+    background: var(--surface-sunken);
+    border-color: #d6d3cb;
+}
+
+/* Destructive actions get their own unmistakable style, never the same
+   look as a neutral "view" or "secondary" action. */
+.button.danger {
+    background: var(--surface);
+    color: var(--danger-dark);
+    border-color: #f3c7c7;
+}
+
+.button.danger:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger);
+}
+
+/* Compact variant for inline row actions inside tables/lists */
+.button.sm {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    gap: 6px;
+    border-radius: 7px;
+}
+
+.button.sm svg {
+    width: 14px;
+    height: 14px;
 }
 
 /* Cards */
@@ -256,6 +351,27 @@ textarea {
     padding: 20px;
 }
 
+.stat-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.stat-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--primary-soft);
+    color: var(--primary-dark);
+    flex-shrink: 0;
+}
+
+.stat-icon.success { background: var(--success-soft); color: #166534; }
+.stat-icon.warning { background: var(--warning-soft); color: #92400e; }
+
 .stat-label {
     color: var(--muted);
     font-size: 13px;
@@ -266,6 +382,7 @@ textarea {
     font-size: 25px;
     font-weight: 700;
     letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
 }
 
 .stat-meta {
@@ -276,6 +393,7 @@ textarea {
 
 .stat-meta.warning {
     color: var(--warning);
+    font-weight: 600;
 }
 
 /* Content grid */
@@ -288,13 +406,60 @@ textarea {
 }
 
 .card-header {
-    padding: 18px 20px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border);
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+}
+
+.card-header-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.card-header-title .icon-badge {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--surface-sunken);
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.card-header-link {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.card-header-link:hover {
+    color: var(--primary-dark);
+}
+
+.link-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+.link-action:hover {
+    color: var(--primary);
+}
+
+.link-action svg {
+    width: 14px;
+    height: 14px;
 }
 
 .card-body {
@@ -303,12 +468,20 @@ textarea {
 
 .empty-state {
     min-height: 120px;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     color: var(--muted);
     font-size: 14px;
     text-align: center;
-    padding: 20px;
+    padding: 24px 20px;
+    line-height: 1.6;
+}
+
+.empty-state svg {
+    color: #c9c5bb;
 }
 
 /* Tables */
@@ -370,12 +543,18 @@ table.data-table {
 .badge {
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     padding: 4px 10px;
     border-radius: 99px;
     font-size: 11.5px;
     font-weight: 600;
     text-transform: capitalize;
     white-space: nowrap;
+}
+
+.badge svg {
+    width: 12px;
+    height: 12px;
 }
 
 .badge-received { background: #e0e7ff; color: #3730a3; }
@@ -520,7 +699,18 @@ table.data-table {
     color: var(--muted);
     margin-bottom: 12px;
     display: flex;
+    align-items: center;
     justify-content: space-between;
+}
+
+.kanban-column-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.kanban-column-label svg {
+    color: #a39d8f;
 }
 
 .kanban-card {
@@ -620,6 +810,65 @@ table.data-table {
     background: var(--primary-dark);
 }
 
+/* Layout utilities — replace one-off inline styles so spacing stays
+   consistent everywhere instead of drifting page by page. */
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stack-sm {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.inline-form {
+    display: inline-flex;
+}
+
+.panel-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+}
+
+.selected-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface-sunken);
+    border-radius: 9px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+
+.selected-summary .icon-badge {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
 /* Responsive */
 
 @media (max-width: 1100px) {
@@ -649,9 +898,11 @@ table.data-table {
         padding: 20px 8px;
     }
 
+    .brand-name,
     .brand-subtitle,
     .nav-label,
-    .nav-item span:last-child {
+    .nav-item span:last-child,
+    .sidebar-footer {
         display: none;
     }
 

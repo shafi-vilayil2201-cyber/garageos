@@ -353,6 +353,16 @@ $statement = $pdo->prepare("SELECT id, invoice_no, status FROM invoices WHERE jo
 $statement->execute(['job_card_id' => $jobCardId]);
 $invoice = $statement->fetch(PDO::FETCH_ASSOC);
 
+$statusIcons = [
+    'received' => 'clipboard-list',
+    'in_progress' => 'settings',
+    'quality_check' => 'check-circle',
+    'ready' => 'bell',
+    'delivered' => 'car',
+    'on_hold' => 'pause',
+    'cancelled' => 'x'
+];
+
 $activeNav = 'job_cards';
 $topbarTitle = $jobCard['job_no'];
 
@@ -384,6 +394,7 @@ $topbarTitle = $jobCard['job_no'];
                     <h1 class="page-title">
                         <?= htmlspecialchars($jobCard['job_no']) ?>
                         <span class="badge badge-<?= htmlspecialchars($jobCard['status']) ?>" style="margin-left:10px; vertical-align:middle;">
+                            <?= icon($statusIcons[$jobCard['status']] ?? 'job-card', 12) ?>
                             <?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?>
                         </span>
                     </h1>
@@ -395,12 +406,12 @@ $topbarTitle = $jobCard['job_no'];
                 </div>
 
                 <?php if ($invoice): ?>
-                    <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary">View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
+                    <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary"><?= icon('receipt', 16) ?> View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
                 <?php else: ?>
                     <form method="POST" action="">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="generate_invoice">
-                        <button type="submit" class="button">Generate invoice</button>
+                        <button type="submit" class="button"><?= icon('receipt', 16) ?> Generate invoice</button>
                     </form>
                 <?php endif; ?>
             </div>
@@ -411,13 +422,18 @@ $topbarTitle = $jobCard['job_no'];
 
             <div class="content-grid" style="grid-template-columns: 1fr 340px;">
 
-                <div style="display:flex; flex-direction:column; gap:20px;">
+                <div class="stack">
 
                     <div class="card">
-                        <div class="card-header">Services</div>
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('settings', 15) ?></span>
+                                Services
+                            </div>
+                        </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($serviceLines)): ?>
-                                <div class="empty-state">No services added yet.</div>
+                                <div class="empty-state"><?= icon('settings', 26) ?>No services added yet.</div>
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
@@ -426,13 +442,13 @@ $topbarTitle = $jobCard['job_no'];
                                             <tr>
                                                 <td><?= htmlspecialchars($line['name']) ?></td>
                                                 <td><?= htmlspecialchars($line['technician_name'] ?? '—') ?></td>
-                                                <td>₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
+                                                <td class="num">₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </table>
                                 </div>
                             <?php endif; ?>
-                            <form method="POST" action="" style="padding:16px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:end;">
+                            <form method="POST" action="" class="panel-footer actions">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="add_service">
                                 <div class="form-field" style="flex:1;">
@@ -452,16 +468,21 @@ $topbarTitle = $jobCard['job_no'];
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
-                                <button type="submit" class="button secondary">Add</button>
+                                <button type="submit" class="button secondary"><?= icon('plus', 16) ?> Add</button>
                             </form>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="card-header">Parts used</div>
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('box', 15) ?></span>
+                                Parts used
+                            </div>
+                        </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($partLines)): ?>
-                                <div class="empty-state">No parts added yet.</div>
+                                <div class="empty-state"><?= icon('box', 26) ?>No parts added yet.</div>
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
@@ -469,36 +490,39 @@ $topbarTitle = $jobCard['job_no'];
                                         <?php foreach ($partLines as $line): ?>
                                             <tr>
                                                 <td><?= htmlspecialchars($line['name']) ?></td>
-                                                <td><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
-                                                <td>₹<?= number_format($line['unit_price'], 2) ?></td>
-                                                <td>₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
+                                                <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
+                                                <td class="num">₹<?= number_format($line['unit_price'], 2) ?></td>
+                                                <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </table>
                                 </div>
                             <?php endif; ?>
 
-                            <div style="padding:16px 20px; border-top:1px solid var(--border);">
+                            <div class="panel-footer">
                                 <div class="search-row" style="margin-bottom:10px;">
                                     <input type="search" id="part-search" placeholder="Search part by name or SKU..." autocomplete="off">
-                                    <button type="button" class="button secondary" id="part-search-button">Search</button>
+                                    <button type="button" class="button secondary" id="part-search-button"><?= icon('search', 16) ?> Search</button>
                                 </div>
                                 <div id="part-results"></div>
 
-                                <form method="POST" action="" id="add-part-form" style="display:none; gap:10px; align-items:end;">
+                                <form method="POST" action="" id="add-part-form" style="display:none;">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="add_part">
                                     <input type="hidden" name="part_id" id="selected_part_id">
-                                    <div style="display:flex; gap:10px; align-items:end;">
-                                        <div class="card" style="background:#faf9f6; padding:10px 14px; flex:1;">
-                                            <strong id="selected_part_label"></strong>
-                                            <div class="result-meta" id="selected_part_stock"></div>
+                                    <div class="actions" style="align-items:end;">
+                                        <div class="selected-summary" style="flex:1; margin-bottom:0;">
+                                            <span class="icon-badge"><?= icon('box', 16) ?></span>
+                                            <div>
+                                                <strong id="selected_part_label"></strong>
+                                                <div class="result-meta" id="selected_part_stock"></div>
+                                            </div>
                                         </div>
                                         <div class="form-field" style="width:100px;">
                                             <label>Qty</label>
                                             <input type="number" name="quantity" id="part_quantity" min="0.01" step="0.01" value="1" required>
                                         </div>
-                                        <button type="submit" class="button secondary">Add</button>
+                                        <button type="submit" class="button secondary"><?= icon('plus', 16) ?> Add</button>
                                     </div>
                                 </form>
                             </div>
@@ -507,17 +531,27 @@ $topbarTitle = $jobCard['job_no'];
 
                     <?php if ($jobCard['customer_complaint']): ?>
                         <div class="card">
-                            <div class="card-header">Customer complaint</div>
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('message', 15) ?></span>
+                                    Customer complaint
+                                </div>
+                            </div>
                             <div class="card-body"><?= nl2br(htmlspecialchars($jobCard['customer_complaint'])) ?></div>
                         </div>
                     <?php endif; ?>
 
                 </div>
 
-                <div style="display:flex; flex-direction:column; gap:20px;">
+                <div class="stack">
 
                     <div class="card">
-                        <div class="card-header">Update status</div>
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('settings', 15) ?></span>
+                                Update status
+                            </div>
+                        </div>
                         <div class="card-body">
                             <form method="POST" action="">
                                 <?= csrf_field() ?>
@@ -536,7 +570,12 @@ $topbarTitle = $jobCard['job_no'];
                     </div>
 
                     <div class="card">
-                        <div class="card-header">Running total</div>
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('wallet', 15) ?></span>
+                                Running total
+                            </div>
+                        </div>
                         <div class="card-body">
                             <div class="stat-value">₹<?= number_format($runningTotal, 2) ?></div>
                             <p class="stat-meta">Before tax — generate the invoice for the final amount.</p>

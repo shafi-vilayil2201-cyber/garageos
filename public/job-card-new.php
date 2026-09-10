@@ -107,6 +107,12 @@ $topbarTitle = 'New Job Card';
             </div>
 
             <div class="card" style="max-width: 640px;">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('search', 15) ?></span>
+                        Find the vehicle
+                    </div>
+                </div>
                 <div class="card-body">
 
                     <?php if ($error): ?>
@@ -120,14 +126,14 @@ $topbarTitle = 'New Job Card';
                             placeholder="Registration no. or customer phone..."
                             autocomplete="off"
                         >
-                        <button type="button" class="button" id="vehicle-search-button">Search</button>
+                        <button type="button" class="button" id="vehicle-search-button"><?= icon('search', 16) ?> Search</button>
                     </div>
 
                     <div id="vehicle-results"></div>
 
                     <div id="vehicle-not-found" style="display:none; margin-bottom:16px;">
                         <p class="page-description">No match found.</p>
-                        <a href="/vehicles.php" class="button secondary">Register a new vehicle</a>
+                        <a href="/vehicles.php" class="button secondary"><?= icon('plus', 16) ?> Register a new vehicle</a>
                     </div>
 
                     <form method="POST" action="" id="job-card-form" style="display:none;">
@@ -137,9 +143,12 @@ $topbarTitle = 'New Job Card';
                         <input type="hidden" name="vehicle_id" id="selected_vehicle_id">
                         <input type="hidden" name="customer_id" id="selected_customer_id">
 
-                        <div class="card" style="background:#faf9f6; padding:14px 16px; margin-bottom:16px;">
-                            <strong id="selected_vehicle_label"></strong>
-                            <div class="result-meta" id="selected_customer_label"></div>
+                        <div class="selected-summary">
+                            <span class="icon-badge"><?= icon('car', 16) ?></span>
+                            <div>
+                                <strong id="selected_vehicle_label"></strong>
+                                <div class="result-meta" id="selected_customer_label"></div>
+                            </div>
                         </div>
 
                         <div class="form-grid single">
@@ -157,7 +166,7 @@ $topbarTitle = 'New Job Card';
                         </div>
 
                         <div class="form-actions">
-                            <button type="submit" class="button">Create job card</button>
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Create job card</button>
                         </div>
 
                     </form>

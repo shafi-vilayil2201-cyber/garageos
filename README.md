@@ -72,6 +72,17 @@ It asks for the workshop name, a short code, and the admin's details, then print
 - Appointments: book by searching a vehicle, convert straight into a job card on arrival
 - Reminders: auto-generated from vehicle insurance/PUC expiry dates and from job card delivery (next service due in 90 days) — mark contacted or dismiss; sending SMS/WhatsApp is not wired up yet, this is the in-app due-list only
 
+## Design system
+
+A small, deliberate set of conventions in `public/css/app.css` and `app/View/Icons.php` — apply these to any new screen rather than inventing new patterns:
+
+- **Icons are real and contextual**, not decorative unicode glyphs — `icon('name', size)` from `app/View/Icons.php` returns inline SVG (feather-style, `currentColor` stroke) themed for the sidebar/badges/buttons automatically. Every nav item, card header, empty state, and button that benefits from one uses the icon that actually matches its meaning (a car for vehicles, a bell for reminders, a wallet for money, a truck for purchases).
+- **Buttons have three distinct roles, not one style with color variants**: `.button` (primary action), `.button.secondary` (neutral/view), `.button.danger` (destructive — Cancel, Dismiss). Never give a destructive action the same visual weight as a neutral one. `.button.sm` is the compact variant for inline table-row actions.
+- **A visible action is always a usable action** — buttons and links are gated by `user_can($user, 'permission.code')` in the markup, matching the `require_permission()` check the same page enforces server-side. A Technician should never see "New Job Card" only to hit a 403; the button simply isn't there. Empty sidebar sections (an "Operations" heading with nothing under it) are suppressed the same way.
+- **Layout utilities over inline styles**: `.stack` / `.stack-sm` (vertical flex + gap), `.actions` / `.row-actions` (horizontal button groups), `.card-header-title` + `.icon-badge` (icon next to a card title), `.selected-summary` (the "you picked this vehicle/part" confirmation block), `.link-action` (a small icon+text link). Reach for these before writing a new `style="display:flex..."` attribute.
+- **Numbers that should line up get the `.num` class** (`font-variant-numeric: tabular-nums`) — every price, quantity, and count column.
+- **Keyboard focus is always visible** (`:focus-visible` outline, defined once, globally) — never remove it without replacing it.
+
 ## What's a placeholder (see the roadmap in the docs)
 
 - Editable settings / branding beyond the name shown today

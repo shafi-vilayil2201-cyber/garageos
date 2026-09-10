@@ -138,10 +138,18 @@ $topbarTitle = 'Parts';
             <div class="content-grid" style="grid-template-columns: 1fr 380px;">
 
                 <div class="card">
-                    <div class="card-header">Inventory</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('box', 15) ?></span>
+                            Inventory
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($parts)): ?>
-                            <div class="empty-state">No parts yet. Add your first one.</div>
+                            <div class="empty-state">
+                                <?= icon('box', 28) ?>
+                                No parts yet. Add your first one.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -151,9 +159,10 @@ $topbarTitle = 'Parts';
                                         <tr>
                                             <td><?= htmlspecialchars($part['name']) ?></td>
                                             <td><?= htmlspecialchars($part['sku']) ?></td>
-                                            <td>₹<?= number_format($part['selling_price'], 2) ?></td>
-                                            <td>
-                                                <span class="<?= $low ? 'stat-meta warning' : '' ?>" style="font-weight:600;">
+                                            <td class="num">₹<?= number_format($part['selling_price'], 2) ?></td>
+                                            <td class="num">
+                                                <span class="badge <?= $low ? 'badge-on_hold' : 'badge-ready' ?>">
+                                                    <?php if ($low): ?><?= icon('alert-triangle', 12) ?><?php endif; ?>
                                                     <?= rtrim(rtrim(number_format($part['stock_quantity'], 2), '0'), '.') ?>
                                                     <?= $low ? ' — reorder' : '' ?>
                                                 </span>
@@ -167,7 +176,12 @@ $topbarTitle = 'Parts';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Add a part</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
+                            Add a part
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -203,7 +217,7 @@ $topbarTitle = 'Parts';
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="button">Save part</button>
+                                <button type="submit" class="button"><?= icon('check', 16) ?> Save part</button>
                             </div>
                         </form>
                     </div>

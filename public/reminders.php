@@ -96,6 +96,13 @@ $dueTypeLabels = [
     'follow_up' => 'Follow-up'
 ];
 
+$dueTypeIcons = [
+    'service_due' => 'settings',
+    'insurance_expiry' => 'receipt',
+    'puc_expiry' => 'receipt',
+    'follow_up' => 'message'
+];
+
 $activeNav = 'reminders';
 $topbarTitle = 'Reminders';
 
@@ -130,10 +137,18 @@ $topbarTitle = 'Reminders';
             </div>
 
             <div class="card">
-                <div class="card-header">Due in the next 30 days</div>
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('bell', 15) ?></span>
+                        Due in the next 30 days
+                    </div>
+                </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($reminders)): ?>
-                        <div class="empty-state">Nothing due. New reminders appear automatically as vehicles approach their next service or document expiry.</div>
+                        <div class="empty-state">
+                            <?= icon('check-circle', 28) ?>
+                            Nothing due. New reminders appear automatically as vehicles approach their next service or document expiry.
+                        </div>
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
@@ -148,14 +163,17 @@ $topbarTitle = 'Reminders';
                                     <?php $overdue = $reminder['days_until'] < 0; ?>
                                     <tr>
                                         <td>
-                                            <strong class="<?= $overdue ? 'stat-meta warning' : '' ?>">
+                                            <strong class="<?= $overdue ? 'stat-meta warning' : '' ?>" style="display:inline-flex; align-items:center; gap:6px;">
+                                                <?php if ($overdue): ?><?= icon('alert-triangle', 14) ?><?php endif; ?>
                                                 <?= htmlspecialchars(date('d M Y', strtotime($reminder['due_date']))) ?>
                                             </strong>
                                             <div class="result-meta">
                                                 <?= $overdue ? abs($reminder['days_until']) . ' days overdue' : $reminder['days_until'] . ' days away' ?>
                                             </div>
                                         </td>
-                                        <td><?= htmlspecialchars($dueTypeLabels[$reminder['due_type']] ?? $reminder['due_type']) ?></td>
+                                        <td>
+                                            <span class="kanban-column-label"><?= icon($dueTypeIcons[$reminder['due_type']] ?? 'bell', 14) ?><?= htmlspecialchars($dueTypeLabels[$reminder['due_type']] ?? $reminder['due_type']) ?></span>
+                                        </td>
                                         <td>
                                             <?= htmlspecialchars($reminder['registration_no']) ?>
                                             <div class="result-meta"><?= htmlspecialchars($reminder['make'] . ' ' . $reminder['model']) ?></div>
@@ -164,25 +182,29 @@ $topbarTitle = 'Reminders';
                                             <?= htmlspecialchars($reminder['customer_name']) ?>
                                             <div class="result-meta"><?= htmlspecialchars($reminder['customer_phone']) ?></div>
                                         </td>
-                                        <td style="white-space:nowrap;">
-                                            <form method="POST" action="" style="display:inline-flex; gap:6px; align-items:center;">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
-                                                <input type="hidden" name="action" value="mark_sent">
-                                                <select name="channel" style="height:32px; font-size:12.5px; border:1px solid var(--border); border-radius:6px;">
-                                                    <option value="call">Call</option>
-                                                    <option value="sms">SMS</option>
-                                                    <option value="whatsapp">WhatsApp</option>
-                                                    <option value="email">Email</option>
-                                                </select>
-                                                <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Mark contacted</button>
-                                            </form>
-                                            <form method="POST" action="" style="display:inline;">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
-                                                <input type="hidden" name="action" value="dismiss">
-                                                <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Dismiss</button>
-                                            </form>
+                                        <td>
+                                            <?php if (user_can($user, 'job_cards.manage')): ?>
+                                                <div class="row-actions">
+                                                    <form method="POST" action="" class="actions" style="gap:6px;">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
+                                                        <input type="hidden" name="action" value="mark_sent">
+                                                        <select name="channel" style="height:32px; font-size:12.5px; border:1px solid var(--border); border-radius:6px;">
+                                                            <option value="call">Call</option>
+                                                            <option value="sms">SMS</option>
+                                                            <option value="whatsapp">WhatsApp</option>
+                                                            <option value="email">Email</option>
+                                                        </select>
+                                                        <button type="submit" class="button secondary sm"><?= icon('phone', 14) ?> Mark contacted</button>
+                                                    </form>
+                                                    <form method="POST" action="" class="inline-form">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
+                                                        <input type="hidden" name="action" value="dismiss">
+                                                        <button type="submit" class="button danger sm"><?= icon('x', 14) ?> Dismiss</button>
+                                                    </form>
+                                                </div>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

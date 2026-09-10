@@ -53,7 +53,12 @@ $topbarTitle = 'Settings';
             </div>
 
             <div class="card" style="max-width: 480px;">
-                <div class="card-header">Organization</div>
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
+                        Organization
+                    </div>
+                </div>
                 <div class="card-body">
                     <div class="form-grid single">
                         <div class="form-field">
@@ -77,10 +82,15 @@ $topbarTitle = 'Settings';
 
             <?php if (user_can($user, 'users.manage')): ?>
                 <div class="card" style="max-width: 480px; margin-top:20px;">
-                    <div class="card-header">Staff &amp; roles</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('team', 15) ?></span>
+                            Staff &amp; roles
+                        </div>
+                    </div>
                     <div class="card-body">
                         <p class="page-description">Create staff accounts and assign what they can access.</p>
-                        <a href="/users.php" class="button secondary" style="margin-top:10px; display:inline-flex;">Manage users</a>
+                        <a href="/users.php" class="button secondary" style="margin-top:10px;"><?= icon('team', 16) ?> Manage users</a>
                     </div>
                 </div>
             <?php endif; ?>

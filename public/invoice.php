@@ -108,6 +108,13 @@ $payments = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
 
+$invoiceStatusIcons = [
+    'unpaid' => 'alert-triangle',
+    'partial' => 'wallet',
+    'paid' => 'check-circle',
+    'void' => 'x'
+];
+
 $activeNav = 'job_cards';
 $topbarTitle = $invoice['invoice_no'];
 
@@ -139,6 +146,7 @@ $topbarTitle = $invoice['invoice_no'];
                     <h1 class="page-title">
                         <?= htmlspecialchars($invoice['invoice_no']) ?>
                         <span class="badge badge-<?= htmlspecialchars($invoice['status']) ?>" style="margin-left:10px; vertical-align:middle;">
+                            <?= icon($invoiceStatusIcons[$invoice['status']] ?? 'receipt', 12) ?>
                             <?= htmlspecialchars($invoice['status']) ?>
                         </span>
                     </h1>
@@ -149,14 +157,17 @@ $topbarTitle = $invoice['invoice_no'];
                     </p>
                 </div>
 
-                <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary">Back to job card</a>
+                <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
             </div>
 
             <div class="content-grid" style="grid-template-columns: 1fr 340px;">
 
                 <div class="card">
                     <div class="card-header">
-                        <?= htmlspecialchars($invoice['organization_name']) ?>
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('receipt', 15) ?></span>
+                            <?= htmlspecialchars($invoice['organization_name']) ?>
+                        </div>
                         <span style="font-weight:400; color:var(--muted); font-size:13px;">
                             Billed to <?= htmlspecialchars($invoice['customer_name']) ?>
                         </span>
@@ -168,31 +179,36 @@ $topbarTitle = $invoice['invoice_no'];
                                 <?php foreach ($items as $item): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($item['description']) ?></td>
-                                        <td><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
-                                        <td>₹<?= number_format($item['unit_price'], 2) ?></td>
-                                        <td>₹<?= number_format($item['total'], 2) ?></td>
+                                        <td class="num"><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
+                                        <td class="num">₹<?= number_format($item['unit_price'], 2) ?></td>
+                                        <td class="num">₹<?= number_format($item['total'], 2) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
                         </div>
                         <div style="padding:18px 20px; border-top:1px solid var(--border);">
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>Subtotal</span><strong>₹<?= number_format($invoice['subtotal'], 2) ?></strong>
+                                <span>Subtotal</span><strong class="num">₹<?= number_format($invoice['subtotal'], 2) ?></strong>
                             </div>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>Tax</span><strong>₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
+                                <span>Tax</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
                             </div>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); margin-top:6px; font-size:18px;">
-                                <span>Total</span><strong>₹<?= number_format($invoice['total'], 2) ?></strong>
+                                <span>Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div style="display:flex; flex-direction:column; gap:20px;">
+                <div class="stack">
 
                     <div class="card">
-                        <div class="card-header">Balance due</div>
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('wallet', 15) ?></span>
+                                Balance due
+                            </div>
+                        </div>
                         <div class="card-body">
                             <div class="stat-value">₹<?= number_format($balanceDue, 2) ?></div>
                             <p class="stat-meta">of ₹<?= number_format($invoice['total'], 2) ?> total</p>
@@ -201,7 +217,12 @@ $topbarTitle = $invoice['invoice_no'];
 
                     <?php if ($balanceDue > 0.009): ?>
                         <div class="card">
-                            <div class="card-header">Record payment</div>
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('check-circle', 15) ?></span>
+                                    Record payment
+                                </div>
+                            </div>
                             <div class="card-body">
 
                                 <?php if ($error): ?>
@@ -230,7 +251,7 @@ $topbarTitle = $invoice['invoice_no'];
                                         </div>
                                     </div>
                                     <div class="form-actions">
-                                        <button type="submit" class="button">Record payment</button>
+                                        <button type="submit" class="button"><?= icon('check', 16) ?> Record payment</button>
                                     </div>
                                 </form>
                             </div>
@@ -239,7 +260,12 @@ $topbarTitle = $invoice['invoice_no'];
 
                     <?php if (!empty($payments)): ?>
                         <div class="card">
-                            <div class="card-header">Payments received</div>
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('receipt', 15) ?></span>
+                                    Payments received
+                                </div>
+                            </div>
                             <div class="card-body" style="padding:0;">
                                 <div class="table-wrap">
                                     <table class="data-table">
@@ -247,7 +273,7 @@ $topbarTitle = $invoice['invoice_no'];
                                         <?php foreach ($payments as $payment): ?>
                                             <tr>
                                                 <td style="text-transform:capitalize;"><?= htmlspecialchars(str_replace('_', ' ', $payment['method'])) ?></td>
-                                                <td>₹<?= number_format($payment['amount'], 2) ?></td>
+                                                <td class="num">₹<?= number_format($payment['amount'], 2) ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </table>

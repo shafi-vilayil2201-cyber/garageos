@@ -9,6 +9,24 @@ function nav_class(string $key, string $activeNav): string
     return $key === $activeNav ? 'nav-item active' : 'nav-item';
 }
 
+function nav_link(string $href, string $key, string $activeNav, string $iconName, string $label): void
+{
+    printf(
+        '<a href="%s" class="%s"><span class="nav-icon">%s</span><span>%s</span></a>',
+        htmlspecialchars($href),
+        nav_class($key, $activeNav),
+        icon($iconName),
+        htmlspecialchars($label)
+    );
+}
+
+// A section label only renders when at least one link inside it will be
+// visible — an empty "Operations" heading with nothing under it is clutter,
+// not navigation, for a restricted role like Technician.
+$showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
+$showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'purchases.view') || user_can($user, 'suppliers.view');
+$showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage') || user_can($user, 'settings.manage');
+
 ?>
 <aside class="sidebar">
 
@@ -19,109 +37,77 @@ function nav_class(string $key, string $activeNav): string
 
     <nav>
 
-        <div class="nav-section">
+        <?php if ($showWorkspace): ?>
+            <div class="nav-section">
 
-            <div class="nav-label">
-                Workspace
+                <div class="nav-label">
+                    Workspace
+                </div>
+
+                <?php if (user_can($user, 'dashboard.view')): ?>
+                    <?php nav_link('/dashboard.php', 'dashboard', $activeNav, 'dashboard', 'Dashboard'); ?>
+                <?php endif; ?>
+
+                <?php if (user_can($user, 'job_cards.view')): ?>
+                    <?php nav_link('/job-cards.php', 'job_cards', $activeNav, 'job-card', 'Job Cards'); ?>
+                    <?php nav_link('/appointments.php', 'appointments', $activeNav, 'calendar', 'Appointments'); ?>
+                    <?php nav_link('/reminders.php', 'reminders', $activeNav, 'bell', 'Reminders'); ?>
+                <?php endif; ?>
+
+                <?php if (user_can($user, 'parts.view')): ?>
+                    <?php nav_link('/parts.php', 'parts', $activeNav, 'box', 'Parts'); ?>
+                <?php endif; ?>
+
             </div>
+        <?php endif; ?>
 
-            <?php if (user_can($user, 'dashboard.view')): ?>
-                <a href="/dashboard.php" class="<?= nav_class('dashboard', $activeNav) ?>">
-                    <span>▦</span>
-                    <span>Dashboard</span>
-                </a>
-            <?php endif; ?>
+        <?php if ($showOperations): ?>
+            <div class="nav-section">
 
-            <?php if (user_can($user, 'job_cards.view')): ?>
-                <a href="/job-cards.php" class="<?= nav_class('job_cards', $activeNav) ?>">
-                    <span>▣</span>
-                    <span>Job Cards</span>
-                </a>
+                <div class="nav-label">
+                    Operations
+                </div>
 
-                <a href="/appointments.php" class="<?= nav_class('appointments', $activeNav) ?>">
-                    <span>▤</span>
-                    <span>Appointments</span>
-                </a>
+                <?php if (user_can($user, 'customers.view')): ?>
+                    <?php nav_link('/customers.php', 'customers', $activeNav, 'person', 'Customers'); ?>
+                <?php endif; ?>
 
-                <a href="/reminders.php" class="<?= nav_class('reminders', $activeNav) ?>">
-                    <span>◔</span>
-                    <span>Reminders</span>
-                </a>
-            <?php endif; ?>
+                <?php if (user_can($user, 'vehicles.view')): ?>
+                    <?php nav_link('/vehicles.php', 'vehicles', $activeNav, 'car', 'Vehicles'); ?>
+                <?php endif; ?>
 
-            <?php if (user_can($user, 'parts.view')): ?>
-                <a href="/parts.php" class="<?= nav_class('parts', $activeNav) ?>">
-                    <span>◫</span>
-                    <span>Parts</span>
-                </a>
-            <?php endif; ?>
+                <?php if (user_can($user, 'purchases.view')): ?>
+                    <?php nav_link('/purchases.php', 'purchases', $activeNav, 'truck', 'Purchases'); ?>
+                <?php endif; ?>
 
-        </div>
+                <?php if (user_can($user, 'suppliers.view')): ?>
+                    <?php nav_link('/suppliers.php', 'suppliers', $activeNav, 'warehouse', 'Suppliers'); ?>
+                <?php endif; ?>
 
-        <div class="nav-section">
-
-            <div class="nav-label">
-                Operations
             </div>
+        <?php endif; ?>
 
-            <?php if (user_can($user, 'customers.view')): ?>
-                <a href="/customers.php" class="<?= nav_class('customers', $activeNav) ?>">
-                    <span>☺</span>
-                    <span>Customers</span>
-                </a>
-            <?php endif; ?>
+        <?php if ($showInsights): ?>
+            <div class="nav-section">
 
-            <?php if (user_can($user, 'vehicles.view')): ?>
-                <a href="/vehicles.php" class="<?= nav_class('vehicles', $activeNav) ?>">
-                    <span>▭</span>
-                    <span>Vehicles</span>
-                </a>
-            <?php endif; ?>
+                <div class="nav-label">
+                    Insights
+                </div>
 
-            <?php if (user_can($user, 'purchases.view')): ?>
-                <a href="/purchases.php" class="<?= nav_class('purchases', $activeNav) ?>">
-                    <span>↗</span>
-                    <span>Purchases</span>
-                </a>
-            <?php endif; ?>
+                <?php if (user_can($user, 'reports.view')): ?>
+                    <?php nav_link('/reports.php', 'reports', $activeNav, 'chart', 'Reports'); ?>
+                <?php endif; ?>
 
-            <?php if (user_can($user, 'suppliers.view')): ?>
-                <a href="/suppliers.php" class="<?= nav_class('suppliers', $activeNav) ?>">
-                    <span>♧</span>
-                    <span>Suppliers</span>
-                </a>
-            <?php endif; ?>
+                <?php if (user_can($user, 'users.manage')): ?>
+                    <?php nav_link('/users.php', 'users', $activeNav, 'team', 'Users'); ?>
+                <?php endif; ?>
 
-        </div>
+                <?php if (user_can($user, 'settings.manage')): ?>
+                    <?php nav_link('/settings.php', 'settings', $activeNav, 'settings', 'Settings'); ?>
+                <?php endif; ?>
 
-        <div class="nav-section">
-
-            <div class="nav-label">
-                Insights
             </div>
-
-            <?php if (user_can($user, 'reports.view')): ?>
-                <a href="/reports.php" class="<?= nav_class('reports', $activeNav) ?>">
-                    <span>▥</span>
-                    <span>Reports</span>
-                </a>
-            <?php endif; ?>
-
-            <?php if (user_can($user, 'users.manage')): ?>
-                <a href="/users.php" class="<?= nav_class('users', $activeNav) ?>">
-                    <span>♟</span>
-                    <span>Users</span>
-                </a>
-            <?php endif; ?>
-
-            <?php if (user_can($user, 'settings.manage')): ?>
-                <a href="/settings.php" class="<?= nav_class('settings', $activeNav) ?>">
-                    <span>⚙</span>
-                    <span>Settings</span>
-                </a>
-            <?php endif; ?>
-
-        </div>
+        <?php endif; ?>
 
     </nav>
 

@@ -20,7 +20,7 @@ $initial = strtoupper(substr($user['name'], 0, 1));
             <?= htmlspecialchars($initial) ?>
         </div>
 
-        <a href="/logout.php" class="logout-link">Logout</a>
+        <a href="/logout.php" class="logout-link"><?= icon('logout', 15) ?> Logout</a>
 
     </div>
 

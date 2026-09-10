@@ -121,12 +121,20 @@ $topbarTitle = 'Reports';
             <div class="content-grid" style="grid-template-columns: 1.4fr 1fr;">
 
                 <div class="card">
-                    <div class="card-header">Revenue — last 7 days</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('trending-up', 15) ?></span>
+                            Revenue — last 7 days
+                        </div>
+                    </div>
                     <div class="card-body">
                         <?php if (array_sum($last7Days) == 0): ?>
-                            <div class="empty-state">No payments recorded in the last 7 days.</div>
+                            <div class="empty-state">
+                                <?= icon('trending-up', 28) ?>
+                                No payments recorded in the last 7 days.
+                            </div>
                         <?php else: ?>
-                            <div style="display:flex; flex-direction:column; gap:10px;">
+                            <div class="stack-sm">
                                 <?php foreach ($last7Days as $date => $amount): ?>
                                     <div style="display:flex; align-items:center; gap:12px;">
                                         <div style="width:64px; font-size:12.5px; color:var(--muted);">
@@ -135,7 +143,7 @@ $topbarTitle = 'Reports';
                                         <div style="flex:1; background:#ece9e2; border-radius:6px; overflow:hidden; height:22px;">
                                             <div style="width:<?= max(2, round($amount / $maxRevenue * 100)) ?>%; background:var(--primary); height:100%;"></div>
                                         </div>
-                                        <div style="width:90px; text-align:right; font-weight:600; font-size:13.5px;">
+                                        <div class="num" style="width:90px; text-align:right; font-weight:600; font-size:13.5px;">
                                             ₹<?= number_format($amount, 0) ?>
                                         </div>
                                     </div>
@@ -146,10 +154,18 @@ $topbarTitle = 'Reports';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Low stock</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('box', 15) ?></span>
+                            Low stock
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($lowStock)): ?>
-                            <div class="empty-state">All parts well stocked.</div>
+                            <div class="empty-state">
+                                <?= icon('check-circle', 28) ?>
+                                All parts well stocked.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -160,8 +176,8 @@ $topbarTitle = 'Reports';
                                                 <?= htmlspecialchars($part['name']) ?>
                                                 <div class="result-meta"><?= htmlspecialchars($part['sku']) ?></div>
                                             </td>
-                                            <td class="stat-meta warning" style="font-weight:600;">
-                                                <?= rtrim(rtrim(number_format($part['quantity'], 2), '0'), '.') ?>
+                                            <td class="num">
+                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?><?= rtrim(rtrim(number_format($part['quantity'], 2), '0'), '.') ?></span>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -172,10 +188,18 @@ $topbarTitle = 'Reports';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Technician productivity</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('team', 15) ?></span>
+                            Technician productivity
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($technicianStats)): ?>
-                            <div class="empty-state">No services assigned to a technician yet.</div>
+                            <div class="empty-state">
+                                <?= icon('team', 28) ?>
+                                No services assigned to a technician yet.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -183,8 +207,8 @@ $topbarTitle = 'Reports';
                                     <?php foreach ($technicianStats as $stat): ?>
                                         <tr>
                                             <td><?= htmlspecialchars($stat['name']) ?></td>
-                                            <td><?= (int) $stat['jobs_count'] ?></td>
-                                            <td>₹<?= number_format($stat['revenue'], 2) ?></td>
+                                            <td class="num"><?= (int) $stat['jobs_count'] ?></td>
+                                            <td class="num">₹<?= number_format($stat['revenue'], 2) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </table>
@@ -194,10 +218,18 @@ $topbarTitle = 'Reports';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Top parts used</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('box', 15) ?></span>
+                            Top parts used
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($topParts)): ?>
-                            <div class="empty-state">No parts consumed yet.</div>
+                            <div class="empty-state">
+                                <?= icon('box', 28) ?>
+                                No parts consumed yet.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -205,8 +237,8 @@ $topbarTitle = 'Reports';
                                     <?php foreach ($topParts as $part): ?>
                                         <tr>
                                             <td><?= htmlspecialchars($part['name']) ?></td>
-                                            <td><?= rtrim(rtrim(number_format($part['quantity_used'], 2), '0'), '.') ?></td>
-                                            <td>₹<?= number_format($part['revenue'], 2) ?></td>
+                                            <td class="num"><?= rtrim(rtrim(number_format($part['quantity_used'], 2), '0'), '.') ?></td>
+                                            <td class="num">₹<?= number_format($part['revenue'], 2) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </table>

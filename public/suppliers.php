@@ -101,10 +101,18 @@ $topbarTitle = 'Suppliers';
             <div class="content-grid" style="grid-template-columns: 1fr 380px;">
 
                 <div class="card">
-                    <div class="card-header">All suppliers</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
+                            All suppliers
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($suppliers)): ?>
-                            <div class="empty-state">No suppliers yet.</div>
+                            <div class="empty-state">
+                                <?= icon('warehouse', 28) ?>
+                                No suppliers yet.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -124,7 +132,12 @@ $topbarTitle = 'Suppliers';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Add a supplier</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
+                            Add a supplier
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -144,7 +157,7 @@ $topbarTitle = 'Suppliers';
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="button">Save supplier</button>
+                                <button type="submit" class="button"><?= icon('check', 16) ?> Save supplier</button>
                             </div>
                         </form>
                     </div>

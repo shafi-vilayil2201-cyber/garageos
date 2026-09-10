@@ -113,10 +113,18 @@ $topbarTitle = 'Customers';
             <div class="content-grid" style="grid-template-columns: 1fr 380px;">
 
                 <div class="card">
-                    <div class="card-header">All customers</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('person', 15) ?></span>
+                            All customers
+                        </div>
+                    </div>
                     <div class="card-body" style="padding:0;">
                         <?php if (empty($customers)): ?>
-                            <div class="empty-state">No customers yet. Add your first one.</div>
+                            <div class="empty-state">
+                                <?= icon('person', 28) ?>
+                                No customers yet. Add your first one.
+                            </div>
                         <?php else: ?>
                             <div class="table-wrap">
                                 <table class="data-table">
@@ -133,10 +141,10 @@ $topbarTitle = 'Customers';
                                                 <div class="result-meta"><?= htmlspecialchars($customer['code']) ?></div>
                                             </td>
                                             <td><?= htmlspecialchars($customer['phone']) ?></td>
-                                            <td><?= (int) $customer['vehicle_count'] ?></td>
+                                            <td class="num"><?= (int) $customer['vehicle_count'] ?></td>
                                             <td>
-                                                <a href="/vehicles.php?customer_id=<?= (int) $customer['id'] ?>" style="font-size:13px; color: var(--primary); font-weight:600;">
-                                                    + Add vehicle
+                                                <a href="/vehicles.php?customer_id=<?= (int) $customer['id'] ?>" class="link-action">
+                                                    <?= icon('plus', 14) ?> Add vehicle
                                                 </a>
                                             </td>
                                         </tr>
@@ -148,7 +156,12 @@ $topbarTitle = 'Customers';
                 </div>
 
                 <div class="card">
-                    <div class="card-header">Add a customer</div>
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
+                            Add a customer
+                        </div>
+                    </div>
                     <div class="card-body">
 
                         <?php if ($error): ?>
@@ -184,7 +197,7 @@ $topbarTitle = 'Customers';
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="button">Save customer</button>
+                                <button type="submit" class="button"><?= icon('check', 16) ?> Save customer</button>
                             </div>
 
                         </form>

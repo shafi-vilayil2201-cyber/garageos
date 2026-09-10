@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/Permissions.php';
+require_once __DIR__ . '/../View/Icons.php';
 
 class Auth
 {

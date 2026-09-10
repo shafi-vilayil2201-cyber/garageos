@@ -159,14 +159,24 @@ $topbarTitle = 'Appointments';
                     <p class="page-description">Vehicles booked for a future visit.</p>
                 </div>
 
-                <a href="/appointment-new.php" class="button">+ New Appointment</a>
+                <?php if (user_can($user, 'job_cards.manage')): ?>
+                    <a href="/appointment-new.php" class="button"><?= icon('plus', 16) ?> New Appointment</a>
+                <?php endif; ?>
             </div>
 
             <div class="card">
-                <div class="card-header">Upcoming</div>
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('calendar', 15) ?></span>
+                        Upcoming
+                    </div>
+                </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($appointments)): ?>
-                        <div class="empty-state">No upcoming appointments. Book the first one.</div>
+                        <div class="empty-state">
+                            <?= icon('calendar', 28) ?>
+                            No upcoming appointments. Book the first one.
+                        </div>
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
@@ -192,20 +202,24 @@ $topbarTitle = 'Appointments';
                                             <div class="result-meta"><?= htmlspecialchars($appointment['customer_phone']) ?></div>
                                         </td>
                                         <td><?= htmlspecialchars($appointment['service_name'] ?? '—') ?></td>
-                                        <td><span class="badge badge-received"><?= htmlspecialchars($appointment['status']) ?></span></td>
-                                        <td style="white-space:nowrap;">
-                                            <form method="POST" action="" style="display:inline;">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
-                                                <input type="hidden" name="action" value="convert_to_job_card">
-                                                <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Create job card</button>
-                                            </form>
-                                            <form method="POST" action="" style="display:inline;">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
-                                                <input type="hidden" name="action" value="cancel">
-                                                <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Cancel</button>
-                                            </form>
+                                        <td><span class="badge badge-received"><?= icon('calendar', 12) ?><?= htmlspecialchars($appointment['status']) ?></span></td>
+                                        <td>
+                                            <?php if (user_can($user, 'job_cards.manage')): ?>
+                                                <div class="row-actions">
+                                                    <form method="POST" action="" class="inline-form">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
+                                                        <input type="hidden" name="action" value="convert_to_job_card">
+                                                        <button type="submit" class="button secondary sm"><?= icon('job-card', 14) ?> Create job card</button>
+                                                    </form>
+                                                    <form method="POST" action="" class="inline-form">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
+                                                        <input type="hidden" name="action" value="cancel">
+                                                        <button type="submit" class="button danger sm"><?= icon('x', 14) ?> Cancel</button>
+                                                    </form>
+                                                </div>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
