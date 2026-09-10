@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/VehicleIntake.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -17,6 +19,62 @@ require_permission($user, 'dashboard.view');
 
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
+
+$canManageJobCards = user_can($user, 'job_cards.manage');
+
+if ($canManageJobCards) {
+
+    $jobCardExtraFields = '
+        <div class="form-grid single">
+            <div class="form-field">
+                <label for="jobcard-odometer_in">Odometer reading (km)</label>
+                <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
+            </div>
+            <div class="form-field">
+                <label for="jobcard-customer_complaint">Customer complaint / request</label>
+                <textarea id="jobcard-customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
+            </div>
+        </div>
+    ';
+
+    $statement = $pdo->prepare("SELECT id, name FROM services WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
+    $statement->execute(['organization_id' => $organizationId]);
+    $dashboardServices = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+    $dashboardServiceOptions = '<option value="">Not decided yet</option>';
+    foreach ($dashboardServices as $service) {
+        $dashboardServiceOptions .= '<option value="' . (int) $service['id'] . '">' . htmlspecialchars($service['name']) . '</option>';
+    }
+
+    $appointmentExtraFields = '
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="appt-scheduled_date">Date</label>
+                <input type="date" id="appt-scheduled_date" name="scheduled_date" required>
+            </div>
+            <div class="form-field">
+                <label for="appt-scheduled_time">Time</label>
+                <input type="time" id="appt-scheduled_time" name="scheduled_time" required>
+            </div>
+            <div class="form-field">
+                <label for="appt-service_id">Service (optional)</label>
+                <select id="appt-service_id" name="service_id">' . $dashboardServiceOptions . '</select>
+            </div>
+            <div class="form-field">
+                <label for="appt-source">Booked via</label>
+                <select id="appt-source" name="source">
+                    <option value="phone">Phone</option>
+                    <option value="walk_in">Walk-in</option>
+                    <option value="landing_page">Landing page</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-field" style="margin-top:16px;">
+            <label for="appt-notes">Notes (optional)</label>
+            <textarea id="appt-notes" name="notes"></textarea>
+        </div>
+    ';
+}
 
 // Job cards currently open (not delivered/cancelled)
 $statement = $pdo->prepare("
@@ -142,8 +200,8 @@ $topbarTitle = 'Dashboard';
                     </p>
                 </div>
 
-                <?php if (user_can($user, 'job_cards.manage')): ?>
-                    <a href="/job-card-new.php" class="button"><?= icon('plus', 16) ?> New Job Card</a>
+                <?php if ($canManageJobCards): ?>
+                    <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
                 <?php endif; ?>
             </div>
 
@@ -253,9 +311,9 @@ $topbarTitle = 'Dashboard';
                     </div>
 
                     <div class="card-body stack-sm">
-                        <?php if (user_can($user, 'job_cards.manage')): ?>
-                            <a href="/job-card-new.php" class="button"><?= icon('plus', 16) ?> New job card</a>
-                            <a href="/appointment-new.php" class="button secondary"><?= icon('calendar', 16) ?> Book an appointment</a>
+                        <?php if ($canManageJobCards): ?>
+                            <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New job card</button>
+                            <button type="button" class="button secondary" onclick="openModal('appt-modal')"><?= icon('calendar', 16) ?> Book an appointment</button>
                         <?php endif; ?>
                         <?php if (user_can($user, 'customers.manage')): ?>
                             <a href="/customers.php" class="button secondary"><?= icon('person', 16) ?> Add a customer</a>
@@ -333,6 +391,47 @@ $topbarTitle = 'Dashboard';
     </main>
 
 </div>
+
+<?php if ($canManageJobCards): ?>
+
+    <div class="modal-backdrop" id="jobcard-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('job-card', 16) ?></span>
+                    New Job Card
+                </div>
+                <button type="button" class="modal-close" data-close-modal="jobcard-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <?= vehicle_intake_form('jobcard', '/job-card-new.php', $jobCardExtraFields, 'check', 'Create job card') ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="appt-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('calendar', 16) ?></span>
+                    New Appointment
+                </div>
+                <button type="button" class="modal-close" data-close-modal="appt-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <?= vehicle_intake_form('appt', '/appointment-new.php', $appointmentExtraFields, 'calendar', 'Book appointment') ?>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+    <script src="/js/vehicle-intake.js"></script>
+    <script>
+        initVehicleIntake('jobcard');
+        initVehicleIntake('appt');
+    </script>
+
+<?php endif; ?>
 
 </body>
 </html>

@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/VehicleIntake.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -180,6 +181,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $activeNav = 'job_cards';
 $topbarTitle = 'New Job Card';
 
+$extraFields = '
+    <div class="form-grid single">
+        <div class="form-field">
+            <label for="jobcard-odometer_in">Odometer reading (km)</label>
+            <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
+        </div>
+        <div class="form-field">
+            <label for="jobcard-customer_complaint">Customer complaint / request</label>
+            <textarea id="jobcard-customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
+        </div>
+    </div>
+';
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -223,97 +237,7 @@ $topbarTitle = 'New Job Card';
                         <div class="form-error"><?= htmlspecialchars($error) ?></div>
                     <?php endif; ?>
 
-                    <div class="search-row">
-                        <input
-                            type="search"
-                            id="vehicle-search"
-                            placeholder="Registration no. or customer phone..."
-                            autocomplete="off"
-                        >
-                        <button type="button" class="button" id="vehicle-search-button"><?= icon('search', 16) ?> Search</button>
-                    </div>
-
-                    <div id="vehicle-results"></div>
-
-                    <div id="vehicle-not-found" style="display:none; margin-bottom:16px;">
-                        <p class="page-description">No match found.</p>
-                        <button type="button" class="button secondary" id="add-new-button"><?= icon('plus', 16) ?> Add new customer &amp; vehicle</button>
-                    </div>
-
-                    <form method="POST" action="" id="job-card-form" style="display:none;">
-
-                        <?= csrf_field() ?>
-
-                        <input type="hidden" name="mode" id="form_mode" value="existing">
-                        <input type="hidden" name="vehicle_id" id="selected_vehicle_id">
-                        <input type="hidden" name="customer_id" id="selected_customer_id">
-
-                        <div class="selected-summary" id="selected-summary">
-                            <span class="icon-badge"><?= icon('car', 16) ?></span>
-                            <div>
-                                <strong id="selected_vehicle_label"></strong>
-                                <div class="result-meta" id="selected_customer_label"></div>
-                            </div>
-                        </div>
-
-                        <div id="new-customer-vehicle" style="display:none; margin-bottom:16px;">
-                            <div class="form-grid">
-                                <div class="form-field">
-                                    <label for="new_customer_name">Customer name</label>
-                                    <input type="text" id="new_customer_name" name="new_customer_name">
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_customer_phone">Customer phone</label>
-                                    <input type="tel" id="new_customer_phone" name="new_customer_phone">
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_registration_no">Registration number</label>
-                                    <input type="text" id="new_registration_no" name="new_registration_no" placeholder="KL-14-AB-1234">
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_fuel_type">Fuel type</label>
-                                    <select id="new_fuel_type" name="new_fuel_type">
-                                        <option value="petrol">Petrol</option>
-                                        <option value="diesel">Diesel</option>
-                                        <option value="ev">EV</option>
-                                        <option value="hybrid">Hybrid</option>
-                                        <option value="cng">CNG</option>
-                                    </select>
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_make">Make</label>
-                                    <input type="text" id="new_make" name="new_make" placeholder="Maruti Suzuki">
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_model">Model</label>
-                                    <input type="text" id="new_model" name="new_model" placeholder="Swift">
-                                </div>
-                                <div class="form-field">
-                                    <label for="new_year">Year (optional)</label>
-                                    <input type="number" id="new_year" name="new_year" min="1980" max="2100">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-grid single">
-
-                            <div class="form-field">
-                                <label for="odometer_in">Odometer reading (km)</label>
-                                <input type="number" id="odometer_in" name="odometer_in" min="0">
-                            </div>
-
-                            <div class="form-field">
-                                <label for="customer_complaint">Customer complaint / request</label>
-                                <textarea id="customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
-                            </div>
-
-                        </div>
-
-                        <div class="form-actions">
-                            <button type="submit" class="button"><?= icon('check', 16) ?> Create job card</button>
-                        </div>
-
-                    </form>
+                    <?= vehicle_intake_form('jobcard', '/job-card-new.php', $extraFields, 'check', 'Create job card') ?>
 
                 </div>
             </div>
@@ -324,6 +248,7 @@ $topbarTitle = 'New Job Card';
 
 </div>
 
-<script src="/js/job-card-new.js"></script>
+<script src="/js/vehicle-intake.js"></script>
+<script>initVehicleIntake('jobcard');</script>
 </body>
 </html>

@@ -65,6 +65,7 @@ It asks for the workshop name, a short code, and the admin's details, then print
 - **Indexed for scale** — 22 indexes on the foreign keys and status filters every list/dashboard query actually uses
 - Customers and vehicles (create + list)
 - Job cards: intake (search vehicle by plate or phone, or add a brand-new customer + vehicle inline in the same form — no detour to another screen), add services and parts, status board, stock deduction on part use
+- **"+ New Job Card" / "+ New Appointment" open as a quick-create modal** from the Dashboard, Job Cards, and Appointments pages — no navigating to an empty page first. Both the search box and "Add new customer & vehicle" are visible from the first render, not one hidden behind a failed search of the other. The dedicated `/job-card-new.php` and `/appointment-new.php` pages still exist standalone (direct links, no-JS fallback) and share the exact same form markup and backend, via `vehicle_intake_form()` in `app/View/VehicleIntake.php` and `initVehicleIntake(prefix)` in `public/js/vehicle-intake.js`.
 - Invoice generation from a job card, payment recording
 - Parts inventory (add part + opening stock, low-stock flag)
 - Suppliers, and purchases (multi-line, restocks inventory and logs the movement)
@@ -82,6 +83,7 @@ A small, deliberate set of conventions in `public/css/app.css` and `app/View/Ico
 - **Layout utilities over inline styles**: `.stack` / `.stack-sm` (vertical flex + gap), `.actions` / `.row-actions` (horizontal button groups), `.card-header-title` + `.icon-badge` (icon next to a card title), `.selected-summary` (the "you picked this vehicle/part" confirmation block), `.link-action` (a small icon+text link). Reach for these before writing a new `style="display:flex..."` attribute.
 - **Numbers that should line up get the `.num` class** (`font-variant-numeric: tabular-nums`) — every price, quantity, and count column.
 - **Keyboard focus is always visible** (`:focus-visible` outline, defined once, globally) — never remove it without replacing it.
+- **Quick-create modals over blank pages**: `.modal-backdrop` / `.modal` (see `public/js/modal.js` — `openModal(id)` / `closeModal(id)`, Escape and backdrop-click both close). The form inside still POSTs normally to a real page (no AJAX, no SPA) — the modal is presentation only, so the backend stays the same simple PHP pattern. When a form can appear more than once on a page (e.g. a job-card modal and an appointment modal both on the Dashboard), every element id must be namespaced by a `$prefix` — see `vehicle_intake_form()` for the pattern.
 
 ## What's a placeholder (see the roadmap in the docs)
 

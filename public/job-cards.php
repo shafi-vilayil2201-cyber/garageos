@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/VehicleIntake.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -16,6 +18,22 @@ if (!$user) {
 require_permission($user, 'job_cards.view');
 
 $organizationId = $user['organization_id'];
+$canManageJobCards = user_can($user, 'job_cards.manage');
+
+if ($canManageJobCards) {
+    $jobCardExtraFields = '
+        <div class="form-grid single">
+            <div class="form-field">
+                <label for="jobcard-odometer_in">Odometer reading (km)</label>
+                <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
+            </div>
+            <div class="form-field">
+                <label for="jobcard-customer_complaint">Customer complaint / request</label>
+                <textarea id="jobcard-customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
+            </div>
+        </div>
+    ';
+}
 
 $statement = $pdo->prepare("
     SELECT
@@ -94,8 +112,8 @@ $topbarTitle = 'Job Cards';
                     <p class="page-description">Every vehicle currently moving through the workshop.</p>
                 </div>
 
-                <?php if (user_can($user, 'job_cards.manage')): ?>
-                    <a href="/job-card-new.php" class="button"><?= icon('plus', 16) ?> New Job Card</a>
+                <?php if ($canManageJobCards): ?>
+                    <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
                 <?php endif; ?>
             </div>
 
@@ -138,6 +156,29 @@ $topbarTitle = 'Job Cards';
     </main>
 
 </div>
+
+<?php if ($canManageJobCards): ?>
+
+    <div class="modal-backdrop" id="jobcard-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('job-card', 16) ?></span>
+                    New Job Card
+                </div>
+                <button type="button" class="modal-close" data-close-modal="jobcard-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <?= vehicle_intake_form('jobcard', '/job-card-new.php', $jobCardExtraFields, 'check', 'Create job card') ?>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+    <script src="/js/vehicle-intake.js"></script>
+    <script>initVehicleIntake('jobcard');</script>
+
+<?php endif; ?>
 
 </body>
 </html>
