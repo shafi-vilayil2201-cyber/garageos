@@ -20,6 +20,8 @@ require_permission($user, 'job_cards.view');
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
 $jobCardId = (int) ($_GET['id'] ?? 0);
+$canManageJobCards = user_can($user, 'job_cards.manage');
+$canManageInvoices = user_can($user, 'invoices.manage');
 
 $statement = $pdo->prepare("
     SELECT jc.*, v.registration_no, v.make, v.model, v.year, v.fuel_type,
@@ -38,6 +40,7 @@ if (!$jobCard) {
 }
 
 $error = null;
+$errorAction = null;
 $allStatuses = ['received', 'in_progress', 'quality_check', 'ready', 'delivered', 'on_hold', 'cancelled'];
 
 // Only the current status and whatever it can legally move to next —
@@ -78,7 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $statement->execute(['id' => $serviceId, 'organization_id' => $organizationId]);
         $price = $statement->fetchColumn();
 
-        if ($price !== false) {
+        if ($price === false) {
+            $error = 'Select a valid service before adding it.';
+            $errorAction = 'add_service';
+        } else {
+
             $statement = $pdo->prepare("
                 INSERT INTO job_card_items (job_card_id, service_id, technician_id, price)
                 VALUES (:job_card_id, :service_id, :technician_id, :price)
@@ -89,10 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'technician_id' => $technicianId,
                 'price' => $price
             ]);
-        }
 
-        header('Location: /job-card.php?id=' . $jobCardId);
-        exit;
+            header('Location: /job-card.php?id=' . $jobCardId);
+            exit;
+        }
 
     } elseif ($action === 'add_part') {
 
@@ -157,7 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $e) {
                 $pdo->rollBack();
                 $error = $e->getMessage();
+                $errorAction = 'add_part';
             }
+        } else {
+            $error = 'Search for a part and enter a quantity before adding it.';
+            $errorAction = 'add_part';
         }
 
         if (!$error) {
@@ -386,11 +397,16 @@ $topbarTitle = $jobCard['job_no'];
 
                 <?php if ($invoice): ?>
                     <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary"><?= icon('receipt', 16) ?> View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
-                <?php else: ?>
+                <?php elseif ($canManageInvoices): ?>
+                    <?php $hasLines = !empty($serviceLines) || !empty($partLines); ?>
                     <form method="POST" action="">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="generate_invoice">
-                        <button type="submit" class="button"><?= icon('receipt', 16) ?> Generate invoice</button>
+                        <button
+                            type="submit"
+                            class="button"
+                            <?= $hasLines ? '' : 'disabled title="Add at least one service or part first"' ?>
+                        ><?= icon('receipt', 16) ?> Generate invoice</button>
                     </form>
                 <?php endif; ?>
             </div>
@@ -409,10 +425,16 @@ $topbarTitle = $jobCard['job_no'];
                                 <span class="icon-badge"><?= icon('settings', 15) ?></span>
                                 Services
                             </div>
+                            <?php if ($canManageJobCards): ?>
+                                <button type="button" class="button" onclick="openModal('add-service-modal')"><?= icon('plus', 16) ?> Add Service</button>
+                            <?php endif; ?>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($serviceLines)): ?>
-                                <div class="empty-state"><?= icon('settings', 26) ?>No services added yet.</div>
+                                <div class="empty-state">
+                                    <?= icon('settings', 26) ?>
+                                    <?= $canManageJobCards ? 'No services added yet — add one above.' : 'No services added yet.' ?>
+                                </div>
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
@@ -427,28 +449,6 @@ $topbarTitle = $jobCard['job_no'];
                                     </table>
                                 </div>
                             <?php endif; ?>
-                            <form method="POST" action="" class="panel-footer actions">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="add_service">
-                                <div class="form-field" style="flex:1;">
-                                    <label>Add service</label>
-                                    <select name="service_id" required>
-                                        <?php foreach ($services as $service): ?>
-                                            <option value="<?= (int) $service['id'] ?>"><?= htmlspecialchars($service['name']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <div class="form-field" style="flex:1;">
-                                    <label>Technician</label>
-                                    <select name="technician_id">
-                                        <option value="">Unassigned</option>
-                                        <?php foreach ($technicians as $technician): ?>
-                                            <option value="<?= (int) $technician['id'] ?>"><?= htmlspecialchars($technician['name']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <button type="submit" class="button secondary"><?= icon('plus', 16) ?> Add</button>
-                            </form>
                         </div>
                     </div>
 
@@ -458,10 +458,16 @@ $topbarTitle = $jobCard['job_no'];
                                 <span class="icon-badge"><?= icon('box', 15) ?></span>
                                 Parts used
                             </div>
+                            <?php if ($canManageJobCards): ?>
+                                <button type="button" class="button" onclick="openModal('add-part-modal')"><?= icon('plus', 16) ?> Add Part</button>
+                            <?php endif; ?>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($partLines)): ?>
-                                <div class="empty-state"><?= icon('box', 26) ?>No parts added yet.</div>
+                                <div class="empty-state">
+                                    <?= icon('box', 26) ?>
+                                    <?= $canManageJobCards ? 'No parts added yet — add one above.' : 'No parts added yet.' ?>
+                                </div>
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
@@ -477,34 +483,6 @@ $topbarTitle = $jobCard['job_no'];
                                     </table>
                                 </div>
                             <?php endif; ?>
-
-                            <div class="panel-footer">
-                                <div class="search-row" style="margin-bottom:10px;">
-                                    <input type="search" id="part-search" placeholder="Search part by name or SKU..." autocomplete="off">
-                                    <button type="button" class="button secondary" id="part-search-button"><?= icon('search', 16) ?> Search</button>
-                                </div>
-                                <div id="part-results"></div>
-
-                                <form method="POST" action="" id="add-part-form" style="display:none;">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="action" value="add_part">
-                                    <input type="hidden" name="part_id" id="selected_part_id">
-                                    <div class="actions" style="align-items:end;">
-                                        <div class="selected-summary" style="flex:1; margin-bottom:0;">
-                                            <span class="icon-badge"><?= icon('box', 16) ?></span>
-                                            <div>
-                                                <strong id="selected_part_label"></strong>
-                                                <div class="result-meta" id="selected_part_stock"></div>
-                                            </div>
-                                        </div>
-                                        <div class="form-field" style="width:100px;">
-                                            <label>Qty</label>
-                                            <input type="number" name="quantity" id="part_quantity" min="0.01" step="0.01" value="1" required>
-                                        </div>
-                                        <button type="submit" class="button secondary"><?= icon('plus', 16) ?> Add</button>
-                                    </div>
-                                </form>
-                            </div>
                         </div>
                     </div>
 
@@ -524,29 +502,69 @@ $topbarTitle = $jobCard['job_no'];
 
                 <div class="stack">
 
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('settings', 15) ?></span>
-                                Update status
+                    <?php if ($canManageJobCards): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('settings', 15) ?></span>
+                                    Update status
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($jobCard['status'] === 'cancelled'): ?>
+                                    <p class="stat-meta">This job card has been cancelled.</p>
+                                <?php else: ?>
+                                    <?php
+                                        $trackerStages = [
+                                            'received' => 'Received',
+                                            'in_progress' => 'In Progress',
+                                            'quality_check' => 'Quality Check',
+                                            'ready' => 'Ready',
+                                            'delivered' => 'Delivered'
+                                        ];
+                                        $trackerColors = [
+                                            'received' => '#4338ca',
+                                            'in_progress' => '#b45309',
+                                            'on_hold' => '#b91c1c',
+                                            'quality_check' => '#6d28d9',
+                                            'ready' => '#15803d',
+                                            'delivered' => '#78716c'
+                                        ];
+                                        $currentRank = job_card_status_rank($jobCard['status']);
+                                    ?>
+                                    <div class="status-tracker">
+                                        <?php foreach ($trackerStages as $stageKey => $stageLabel): ?>
+                                            <?php
+                                                $stageRank = job_card_status_rank($stageKey);
+                                                $isOnHoldHere = $jobCard['status'] === 'on_hold' && $stageKey === 'in_progress';
+                                                $filled = $stageRank <= $currentRank;
+                                                $color = $isOnHoldHere ? $trackerColors['on_hold'] : $trackerColors[$stageKey];
+                                            ?>
+                                            <div class="status-tracker-segment<?= $filled ? ' filled' : '' ?>" style="<?= $filled ? '--stage-color:' . $color . ';' : '' ?>">
+                                                <span class="status-tracker-dot"></span>
+                                                <span class="status-tracker-label"><?= htmlspecialchars($stageLabel) ?><?= $isOnHoldHere ? ' (On hold)' : '' ?></span>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <form method="POST" action="">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="update_status">
+                                    <div class="form-field">
+                                        <label>Status</label>
+                                        <select name="status" onchange="this.form.submit()">
+                                            <?php foreach ($statuses as $status): ?>
+                                                <option value="<?= $status ?>" <?= $status === $jobCard['status'] ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars(str_replace('_', ' ', ucfirst($status))) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </form>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <form method="POST" action="">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="update_status">
-                                <div class="form-field">
-                                    <select name="status" onchange="this.form.submit()">
-                                        <?php foreach ($statuses as $status): ?>
-                                            <option value="<?= $status ?>" <?= $status === $jobCard['status'] ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars(str_replace('_', ' ', ucfirst($status))) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                    <?php endif; ?>
 
                     <div class="card">
                         <div class="card-header">
@@ -571,6 +589,95 @@ $topbarTitle = $jobCard['job_no'];
 
 </div>
 
-<script src="/js/job-card-detail.js"></script>
+<?php if ($canManageJobCards): ?>
+
+    <div class="modal-backdrop<?= $errorAction === 'add_service' ? ' open' : '' ?>" id="add-service-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('settings', 16) ?></span>
+                    Add Service
+                </div>
+                <button type="button" class="modal-close" data-close-modal="add-service-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <?php if ($errorAction === 'add_service' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+                <form method="POST" action="" class="stack">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_service">
+                    <div class="form-field">
+                        <label for="service_id">Service</label>
+                        <select name="service_id" id="service_id" required>
+                            <?php foreach ($services as $service): ?>
+                                <option value="<?= (int) $service['id'] ?>"><?= htmlspecialchars($service['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label for="technician_id">Technician</label>
+                        <select name="technician_id" id="technician_id">
+                            <option value="">Unassigned</option>
+                            <?php foreach ($technicians as $technician): ?>
+                                <option value="<?= (int) $technician['id'] ?>"><?= htmlspecialchars($technician['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="actions">
+                        <button type="submit" class="button"><?= icon('plus', 16) ?> Add service</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop<?= $errorAction === 'add_part' ? ' open' : '' ?>" id="add-part-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('box', 16) ?></span>
+                    Add Part
+                </div>
+                <button type="button" class="modal-close" data-close-modal="add-part-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <?php if ($errorAction === 'add_part' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+                <div class="search-row" style="margin-bottom:10px;">
+                    <input type="search" id="part-search" placeholder="Search part by name or SKU..." autocomplete="off">
+                    <button type="button" class="button secondary" id="part-search-button"><?= icon('search', 16) ?> Search</button>
+                </div>
+                <div id="part-results"></div>
+
+                <form method="POST" action="" id="add-part-form" style="display:none;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_part">
+                    <input type="hidden" name="part_id" id="selected_part_id">
+                    <div class="actions" style="align-items:end;">
+                        <div class="selected-summary" style="flex:1; margin-bottom:0;">
+                            <span class="icon-badge"><?= icon('box', 16) ?></span>
+                            <div>
+                                <strong id="selected_part_label"></strong>
+                                <div class="result-meta" id="selected_part_stock"></div>
+                            </div>
+                        </div>
+                        <div class="form-field" style="width:100px;">
+                            <label>Qty</label>
+                            <input type="number" name="quantity" id="part_quantity" min="0.01" step="0.01" value="1" required>
+                        </div>
+                        <button type="submit" class="button"><?= icon('plus', 16) ?> Add part</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+    <script src="/js/job-card-detail.js"></script>
+
+<?php endif; ?>
+
 </body>
 </html>

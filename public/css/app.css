@@ -820,6 +820,45 @@ table.data-table {
     transform: translateX(-50%) translateY(0);
 }
 
+/* Status tracker — same stage colours as the kanban board, so the job
+   card detail page reads as the same object, not a different UI. */
+.status-tracker {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.status-tracker-segment {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.status-tracker-dot {
+    width: 100%;
+    height: 6px;
+    border-radius: 4px;
+    background: var(--border);
+}
+
+.status-tracker-segment.filled .status-tracker-dot {
+    background: var(--stage-color, var(--primary));
+}
+
+.status-tracker-label {
+    font-size: 10.5px;
+    color: var(--muted);
+    line-height: 1.3;
+}
+
+.status-tracker-segment.filled .status-tracker-label {
+    color: var(--stage-color, var(--text));
+    font-weight: 600;
+}
+
 /* Login */
 
 .auth-shell {
