@@ -43,6 +43,16 @@ Full project rationale, roadmap, and schema reference: [docs/project-documentati
 
    Open `http://localhost:8000` and sign in with the admin email/password from step 3.
 
+## Onboarding a new client
+
+One command creates a fully working workshop — organization, branch, admin login, the standard role set (Owner, Manager, Service Advisor, Technician, Accountant, Parts Manager) with permissions matching [docs/project-documentation.md](docs/project-documentation.md) §7, and a starter service catalog:
+
+```
+php database/onboard-client.php
+```
+
+It asks for the workshop name, a short code, and the admin's details, then prints a summary. This is the whole "close the deal" setup step — no manual database work, no code changes per client. Verified against a second live organization (Highway Motors) with full data isolation from the demo workshop.
+
 ## What's working right now
 
 - Login / session auth, dashboard with live stats
