@@ -126,100 +126,114 @@ $topbarTitle = 'Users';
                     <h1 class="page-title">Users</h1>
                     <p class="page-description">Staff accounts and what they're allowed to do.</p>
                 </div>
+
+                <?php if (!empty($roles)): ?>
+                    <button type="button" class="button" onclick="openModal('user-modal')"><?= icon('plus', 16) ?> Add User</button>
+                <?php endif; ?>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 380px;">
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('team', 15) ?></span>
-                            All users
-                        </div>
-                    </div>
-                    <div class="card-body" style="padding:0;">
-                        <div class="table-wrap">
-                            <table class="data-table">
-                                <tr><th>Name</th><th>Email</th><th>Role</th></tr>
-                                <?php foreach ($users as $u): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($u['name']) ?></td>
-                                        <td><?= htmlspecialchars($u['email']) ?></td>
-                                        <td>
-                                            <?php if ($u['role_names']): ?>
-                                                <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
-                                            <?php else: ?>
-                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </table>
-                        </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('team', 15) ?></span>
+                        All users
                     </div>
                 </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
-                            Add a user
-                        </div>
-                    </div>
-                    <div class="card-body">
-
-                        <?php if ($error): ?>
-                            <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                        <?php endif; ?>
-
-                        <?php if (empty($roles)): ?>
-                            <p class="page-description">No roles exist for this organization yet.</p>
-                        <?php else: ?>
-                            <form method="POST" action="">
-
-                                <?= csrf_field() ?>
-
-                                <div class="form-grid single">
-                                    <div class="form-field">
-                                        <label>Full name</label>
-                                        <input type="text" name="name" required>
-                                    </div>
-                                    <div class="form-field">
-                                        <label>Email</label>
-                                        <input type="email" name="email" required>
-                                    </div>
-                                    <div class="form-field">
-                                        <label>Temporary password</label>
-                                        <input type="password" name="password" minlength="8" required>
-                                    </div>
-                                    <div class="form-field">
-                                        <label>Role</label>
-                                        <select name="role_id" required>
-                                            <option value="">Select role</option>
-                                            <?php foreach ($roles as $role): ?>
-                                                <option value="<?= (int) $role['id'] ?>"><?= htmlspecialchars($role['name']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="submit" class="button"><?= icon('check', 16) ?> Create user</button>
-                                </div>
-
-                            </form>
-                        <?php endif; ?>
-
+                <div class="card-body" style="padding:0;">
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+                            <?php foreach ($users as $u): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($u['name']) ?></td>
+                                    <td><?= htmlspecialchars($u['email']) ?></td>
+                                    <td>
+                                        <?php if ($u['role_names']): ?>
+                                            <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
+                                        <?php else: ?>
+                                            <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </table>
                     </div>
                 </div>
-
             </div>
+
+            <?php if (empty($roles)): ?>
+                <div class="card" style="margin-top:20px;">
+                    <div class="empty-state">
+                        <?= icon('team', 28) ?>
+                        No roles exist for this organization yet — create one before adding staff.
+                    </div>
+                </div>
+            <?php endif; ?>
 
         </section>
 
     </main>
 
 </div>
+
+<?php if (!empty($roles)): ?>
+
+    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="user-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('team', 16) ?></span>
+                    Add User
+                </div>
+                <button type="button" class="modal-close" data-close-modal="user-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST" action="">
+
+                    <?= csrf_field() ?>
+
+                    <div class="form-grid single">
+                        <div class="form-field">
+                            <label>Full name</label>
+                            <input type="text" name="name" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Email</label>
+                            <input type="email" name="email" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Temporary password</label>
+                            <input type="password" name="password" minlength="8" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Role</label>
+                            <select name="role_id" required>
+                                <option value="">Select role</option>
+                                <?php foreach ($roles as $role): ?>
+                                    <option value="<?= (int) $role['id'] ?>"><?= htmlspecialchars($role['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Create user</button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+
+<?php endif; ?>
 
 </body>
 </html>

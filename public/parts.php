@@ -18,6 +18,7 @@ require_permission($user, 'parts.view');
 
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
+$canManageParts = user_can($user, 'parts.manage');
 
 $error = null;
 
@@ -133,96 +134,48 @@ $topbarTitle = 'Parts';
                     <h1 class="page-title">Parts</h1>
                     <p class="page-description">Stock on hand at this branch.</p>
                 </div>
+
+                <?php if ($canManageParts): ?>
+                    <button type="button" class="button" onclick="openModal('part-modal')"><?= icon('plus', 16) ?> Add Part</button>
+                <?php endif; ?>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 380px;">
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('box', 15) ?></span>
-                            Inventory
-                        </div>
-                    </div>
-                    <div class="card-body" style="padding:0;">
-                        <?php if (empty($parts)): ?>
-                            <div class="empty-state">
-                                <?= icon('box', 28) ?>
-                                No parts yet. Add your first one.
-                            </div>
-                        <?php else: ?>
-                            <div class="table-wrap">
-                                <table class="data-table">
-                                    <tr><th>Part</th><th>SKU</th><th>Price</th><th>Stock</th></tr>
-                                    <?php foreach ($parts as $part): ?>
-                                        <?php $low = $part['stock_quantity'] <= $part['reorder_level']; ?>
-                                        <tr>
-                                            <td><?= htmlspecialchars($part['name']) ?></td>
-                                            <td><?= htmlspecialchars($part['sku']) ?></td>
-                                            <td class="num">₹<?= number_format($part['selling_price'], 2) ?></td>
-                                            <td class="num">
-                                                <span class="badge <?= $low ? 'badge-on_hold' : 'badge-ready' ?>">
-                                                    <?php if ($low): ?><?= icon('alert-triangle', 12) ?><?php endif; ?>
-                                                    <?= rtrim(rtrim(number_format($part['stock_quantity'], 2), '0'), '.') ?>
-                                                    <?= $low ? ' — reorder' : '' ?>
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </table>
-                            </div>
-                        <?php endif; ?>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('box', 15) ?></span>
+                        Inventory
                     </div>
                 </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
-                            Add a part
+                <div class="card-body" style="padding:0;">
+                    <?php if (empty($parts)): ?>
+                        <div class="empty-state">
+                            <?= icon('box', 28) ?>
+                            No parts yet. Add your first one.
                         </div>
-                    </div>
-                    <div class="card-body">
-
-                        <?php if ($error): ?>
-                            <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                        <?php endif; ?>
-
-                        <form method="POST" action="">
-                            <?= csrf_field() ?>
-                            <div class="form-grid single">
-                                <div class="form-field">
-                                    <label>Name</label>
-                                    <input type="text" name="name" required>
-                                </div>
-                                <div class="form-field">
-                                    <label>SKU</label>
-                                    <input type="text" name="sku" required>
-                                </div>
-                                <div class="form-field">
-                                    <label>Cost price</label>
-                                    <input type="number" name="cost_price" step="0.01" min="0" value="0">
-                                </div>
-                                <div class="form-field">
-                                    <label>Selling price</label>
-                                    <input type="number" name="selling_price" step="0.01" min="0" value="0">
-                                </div>
-                                <div class="form-field">
-                                    <label>Opening stock</label>
-                                    <input type="number" name="opening_stock" step="0.01" min="0" value="0">
-                                </div>
-                                <div class="form-field">
-                                    <label>Reorder level</label>
-                                    <input type="number" name="reorder_level" step="0.01" min="0" value="0">
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="button"><?= icon('check', 16) ?> Save part</button>
-                            </div>
-                        </form>
-                    </div>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Part</th><th>SKU</th><th>Price</th><th>Stock</th></tr>
+                                <?php foreach ($parts as $part): ?>
+                                    <?php $low = $part['stock_quantity'] <= $part['reorder_level']; ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($part['name']) ?></td>
+                                        <td><?= htmlspecialchars($part['sku']) ?></td>
+                                        <td class="num">₹<?= number_format($part['selling_price'], 2) ?></td>
+                                        <td class="num">
+                                            <span class="badge <?= $low ? 'badge-on_hold' : 'badge-ready' ?>">
+                                                <?php if ($low): ?><?= icon('alert-triangle', 12) ?><?php endif; ?>
+                                                <?= rtrim(rtrim(number_format($part['stock_quantity'], 2), '0'), '.') ?>
+                                                <?= $low ? ' — reorder' : '' ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
-
             </div>
 
         </section>
@@ -230,6 +183,63 @@ $topbarTitle = 'Parts';
     </main>
 
 </div>
+
+<?php if ($canManageParts): ?>
+
+    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="part-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('box', 16) ?></span>
+                    Add Part
+                </div>
+                <button type="button" class="modal-close" data-close-modal="part-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST" action="">
+                    <?= csrf_field() ?>
+                    <div class="form-grid single">
+                        <div class="form-field">
+                            <label>Name</label>
+                            <input type="text" name="name" required>
+                        </div>
+                        <div class="form-field">
+                            <label>SKU</label>
+                            <input type="text" name="sku" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Cost price</label>
+                            <input type="number" name="cost_price" step="0.01" min="0" value="0">
+                        </div>
+                        <div class="form-field">
+                            <label>Selling price</label>
+                            <input type="number" name="selling_price" step="0.01" min="0" value="0">
+                        </div>
+                        <div class="form-field">
+                            <label>Opening stock</label>
+                            <input type="number" name="opening_stock" step="0.01" min="0" value="0">
+                        </div>
+                        <div class="form-field">
+                            <label>Reorder level</label>
+                            <input type="number" name="reorder_level" step="0.01" min="0" value="0">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save part</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+
+<?php endif; ?>
 
 </body>
 </html>

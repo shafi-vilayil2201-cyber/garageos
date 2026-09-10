@@ -17,6 +17,7 @@ if (!$user) {
 require_permission($user, 'customers.view');
 
 $organizationId = $user['organization_id'];
+$canManageCustomers = user_can($user, 'customers.manage');
 
 $error = null;
 
@@ -108,103 +109,53 @@ $topbarTitle = 'Customers';
                     <h1 class="page-title">Customers</h1>
                     <p class="page-description">Everyone who's ever brought a vehicle to your workshop.</p>
                 </div>
+
+                <?php if ($canManageCustomers): ?>
+                    <button type="button" class="button" onclick="openModal('customer-modal')"><?= icon('plus', 16) ?> Add Customer</button>
+                <?php endif; ?>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 380px;">
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('person', 15) ?></span>
-                            All customers
-                        </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('person', 15) ?></span>
+                        All customers
                     </div>
-                    <div class="card-body" style="padding:0;">
-                        <?php if (empty($customers)): ?>
-                            <div class="empty-state">
-                                <?= icon('person', 28) ?>
-                                No customers yet. Add your first one.
-                            </div>
-                        <?php else: ?>
-                            <div class="table-wrap">
-                                <table class="data-table">
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <?php if (empty($customers)): ?>
+                        <div class="empty-state">
+                            <?= icon('person', 28) ?>
+                            No customers yet. Add your first one.
+                        </div>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Vehicles</th>
+                                    <th></th>
+                                </tr>
+                                <?php foreach ($customers as $customer): ?>
                                     <tr>
-                                        <th>Name</th>
-                                        <th>Phone</th>
-                                        <th>Vehicles</th>
-                                        <th></th>
+                                        <td>
+                                            <strong><?= htmlspecialchars($customer['name']) ?></strong>
+                                            <div class="result-meta"><?= htmlspecialchars($customer['code']) ?></div>
+                                        </td>
+                                        <td><?= htmlspecialchars($customer['phone']) ?></td>
+                                        <td class="num"><?= (int) $customer['vehicle_count'] ?></td>
+                                        <td>
+                                            <a href="/vehicles.php?customer_id=<?= (int) $customer['id'] ?>" class="link-action">
+                                                <?= icon('plus', 14) ?> Add vehicle
+                                            </a>
+                                        </td>
                                     </tr>
-                                    <?php foreach ($customers as $customer): ?>
-                                        <tr>
-                                            <td>
-                                                <strong><?= htmlspecialchars($customer['name']) ?></strong>
-                                                <div class="result-meta"><?= htmlspecialchars($customer['code']) ?></div>
-                                            </td>
-                                            <td><?= htmlspecialchars($customer['phone']) ?></td>
-                                            <td class="num"><?= (int) $customer['vehicle_count'] ?></td>
-                                            <td>
-                                                <a href="/vehicles.php?customer_id=<?= (int) $customer['id'] ?>" class="link-action">
-                                                    <?= icon('plus', 14) ?> Add vehicle
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </table>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
-                            Add a customer
+                                <?php endforeach; ?>
+                            </table>
                         </div>
-                    </div>
-                    <div class="card-body">
-
-                        <?php if ($error): ?>
-                            <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                        <?php endif; ?>
-
-                        <form method="POST" action="">
-
-                            <?= csrf_field() ?>
-
-                            <div class="form-grid single">
-
-                                <div class="form-field">
-                                    <label for="name">Full name</label>
-                                    <input type="text" id="name" name="name" required>
-                                </div>
-
-                                <div class="form-field">
-                                    <label for="phone">Phone</label>
-                                    <input type="tel" id="phone" name="phone" required>
-                                </div>
-
-                                <div class="form-field">
-                                    <label for="email">Email (optional)</label>
-                                    <input type="email" id="email" name="email">
-                                </div>
-
-                                <div class="form-field">
-                                    <label for="address">Address (optional)</label>
-                                    <textarea id="address" name="address"></textarea>
-                                </div>
-
-                            </div>
-
-                            <div class="form-actions">
-                                <button type="submit" class="button"><?= icon('check', 16) ?> Save customer</button>
-                            </div>
-
-                        </form>
-
-                    </div>
+                    <?php endif; ?>
                 </div>
-
             </div>
 
         </section>
@@ -212,6 +163,65 @@ $topbarTitle = 'Customers';
     </main>
 
 </div>
+
+<?php if ($canManageCustomers): ?>
+
+    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="customer-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('person', 16) ?></span>
+                    Add Customer
+                </div>
+                <button type="button" class="modal-close" data-close-modal="customer-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST" action="">
+
+                    <?= csrf_field() ?>
+
+                    <div class="form-grid single">
+
+                        <div class="form-field">
+                            <label for="name">Full name</label>
+                            <input type="text" id="name" name="name" required>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email">Email (optional)</label>
+                            <input type="email" id="email" name="email">
+                        </div>
+
+                        <div class="form-field">
+                            <label for="address">Address (optional)</label>
+                            <textarea id="address" name="address"></textarea>
+                        </div>
+
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save customer</button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+
+<?php endif; ?>
 
 </body>
 </html>

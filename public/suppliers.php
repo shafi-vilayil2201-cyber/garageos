@@ -17,6 +17,7 @@ if (!$user) {
 require_permission($user, 'suppliers.view');
 
 $organizationId = $user['organization_id'];
+$canManageSuppliers = user_can($user, 'suppliers.manage');
 
 $error = null;
 
@@ -96,73 +97,41 @@ $topbarTitle = 'Suppliers';
                     <h1 class="page-title">Suppliers</h1>
                     <p class="page-description">Who you buy parts from.</p>
                 </div>
+
+                <?php if ($canManageSuppliers): ?>
+                    <button type="button" class="button" onclick="openModal('supplier-modal')"><?= icon('plus', 16) ?> Add Supplier</button>
+                <?php endif; ?>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 380px;">
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
-                            All suppliers
-                        </div>
-                    </div>
-                    <div class="card-body" style="padding:0;">
-                        <?php if (empty($suppliers)): ?>
-                            <div class="empty-state">
-                                <?= icon('warehouse', 28) ?>
-                                No suppliers yet.
-                            </div>
-                        <?php else: ?>
-                            <div class="table-wrap">
-                                <table class="data-table">
-                                    <tr><th>Name</th><th>Phone</th></tr>
-                                    <?php foreach ($suppliers as $supplier): ?>
-                                        <tr>
-                                            <td><strong><?= htmlspecialchars($supplier['name']) ?></strong>
-                                                <div class="result-meta"><?= htmlspecialchars($supplier['code']) ?></div>
-                                            </td>
-                                            <td><?= htmlspecialchars($supplier['phone'] ?? '—') ?></td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </table>
-                            </div>
-                        <?php endif; ?>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
+                        All suppliers
                     </div>
                 </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('plus', 15) ?></span>
-                            Add a supplier
+                <div class="card-body" style="padding:0;">
+                    <?php if (empty($suppliers)): ?>
+                        <div class="empty-state">
+                            <?= icon('warehouse', 28) ?>
+                            No suppliers yet.
                         </div>
-                    </div>
-                    <div class="card-body">
-
-                        <?php if ($error): ?>
-                            <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                        <?php endif; ?>
-
-                        <form method="POST" action="">
-                            <?= csrf_field() ?>
-                            <div class="form-grid single">
-                                <div class="form-field">
-                                    <label>Name</label>
-                                    <input type="text" name="name" required>
-                                </div>
-                                <div class="form-field">
-                                    <label>Phone (optional)</label>
-                                    <input type="tel" name="phone">
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="button"><?= icon('check', 16) ?> Save supplier</button>
-                            </div>
-                        </form>
-                    </div>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Name</th><th>Phone</th></tr>
+                                <?php foreach ($suppliers as $supplier): ?>
+                                    <tr>
+                                        <td><strong><?= htmlspecialchars($supplier['name']) ?></strong>
+                                            <div class="result-meta"><?= htmlspecialchars($supplier['code']) ?></div>
+                                        </td>
+                                        <td><?= htmlspecialchars($supplier['phone'] ?? '—') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
-
             </div>
 
         </section>
@@ -170,6 +139,47 @@ $topbarTitle = 'Suppliers';
     </main>
 
 </div>
+
+<?php if ($canManageSuppliers): ?>
+
+    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="supplier-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('warehouse', 16) ?></span>
+                    Add Supplier
+                </div>
+                <button type="button" class="modal-close" data-close-modal="supplier-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST" action="">
+                    <?= csrf_field() ?>
+                    <div class="form-grid single">
+                        <div class="form-field">
+                            <label>Name</label>
+                            <input type="text" name="name" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Phone (optional)</label>
+                            <input type="tel" name="phone">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save supplier</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/modal.js"></script>
+
+<?php endif; ?>
 
 </body>
 </html>
