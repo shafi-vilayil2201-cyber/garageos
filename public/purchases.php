@@ -13,6 +13,8 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'purchases.view');
+
 $organizationId = $user['organization_id'];
 
 $statement = $pdo->prepare("

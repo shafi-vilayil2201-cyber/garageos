@@ -13,6 +13,8 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'reports.view');
+
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
 

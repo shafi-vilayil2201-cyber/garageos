@@ -56,6 +56,13 @@ It asks for the workshop name, a short code, and the admin's details, then print
 ## What's working right now
 
 - Login / session auth, dashboard with live stats, today's appointments, and reminders due
+- **Dynamic branding** — the sidebar and login page show the client's own organization name (falls back to "GarageOS" only when a database serves more than one org, as in this shared dev setup); "Powered by GarageOS" is the vendor attribution
+- **Role-based access control, actually enforced** — the six roles seeded at onboarding (Owner, Manager, Service Advisor, Technician, Accountant, Parts Manager) gate both the nav (hidden if you can't use it) and every page/action server-side (`require_permission()`), not just the UI. Verified live: a Technician account sees only Dashboard/Job Cards/Appointments/Reminders, and hitting `/parts.php` directly returns a 403, not a page.
+- **Users page** (`/users.php`) — create staff accounts and assign a role; the front door to RBAC
+- **CSRF protection** on every form (verified: a POST without a valid token is rejected with 419)
+- **Login rate-limiting** — 5 failed attempts per email locks that email out for 15 minutes, even against the correct password (verified live)
+- **HTTPS-aware secure cookies** — the session cookie's `secure` flag follows the actual request scheme instead of being hardcoded off
+- **Indexed for scale** — 22 indexes on the foreign keys and status filters every list/dashboard query actually uses
 - Customers and vehicles (create + list)
 - Job cards: intake (search vehicle by plate or phone), add services and parts, status board, stock deduction on part use
 - Invoice generation from a job card, payment recording
@@ -67,7 +74,9 @@ It asks for the workshop name, a short code, and the admin's details, then print
 
 ## What's a placeholder (see the roadmap in the docs)
 
-- Editable settings / branding
+- Editable settings / branding beyond the name shown today
+- An audit log for financial edits and permission changes — deferred to keep this hardening pass shippable; the RBAC/CSRF/rate-limiting work above was prioritized first
+- Full pagination on list pages — currently unbounded queries, fine at demo scale, worth adding before a client has years of history
 - Actually sending reminder notifications (SMS/WhatsApp/email) — needs a provider decision first
 - Cloud sync, mobile/remote access — not yet started; blocked on deciding a cloud host and revisiting the `BIGSERIAL` primary key strategy (see docs §12)
 

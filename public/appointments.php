@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,9 +14,14 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'job_cards.view');
+
 $organizationId = $user['organization_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'job_cards.manage');
 
     $appointmentId = (int) ($_POST['appointment_id'] ?? 0);
     $action = $_POST['action'] ?? '';
@@ -189,11 +195,13 @@ $topbarTitle = 'Appointments';
                                         <td><span class="badge badge-received"><?= htmlspecialchars($appointment['status']) ?></span></td>
                                         <td style="white-space:nowrap;">
                                             <form method="POST" action="" style="display:inline;">
+                                                <?= csrf_field() ?>
                                                 <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
                                                 <input type="hidden" name="action" value="convert_to_job_card">
                                                 <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Create job card</button>
                                             </form>
                                             <form method="POST" action="" style="display:inline;">
+                                                <?= csrf_field() ?>
                                                 <input type="hidden" name="appointment_id" value="<?= (int) $appointment['id'] ?>">
                                                 <input type="hidden" name="action" value="cancel">
                                                 <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Cancel</button>

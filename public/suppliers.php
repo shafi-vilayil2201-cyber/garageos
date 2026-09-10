@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,11 +14,16 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'suppliers.view');
+
 $organizationId = $user['organization_id'];
 
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'suppliers.manage');
 
     $name = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
@@ -126,6 +132,7 @@ $topbarTitle = 'Suppliers';
                         <?php endif; ?>
 
                         <form method="POST" action="">
+                            <?= csrf_field() ?>
                             <div class="form-grid single">
                                 <div class="form-field">
                                     <label>Name</label>

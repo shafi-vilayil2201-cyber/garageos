@@ -1,8 +1,13 @@
 <?php
 
+require_once __DIR__ . '/Permissions.php';
+
 class Auth
 {
     private PDO $pdo;
+
+    private const MAX_LOGIN_ATTEMPTS = 5;
+    private const LOGIN_ATTEMPT_WINDOW_MINUTES = 15;
 
     public function __construct(PDO $pdo)
     {
@@ -11,6 +16,10 @@ class Auth
 
     public function attempt(string $email, string $password): ?array
     {
+        if ($this->isRateLimited($email)) {
+            return null;
+        }
+
         $statement = $this->pdo->prepare("
             SELECT
                 id,
@@ -32,17 +41,37 @@ class Auth
 
         $user = $statement->fetch(PDO::FETCH_ASSOC);
 
-        if (!$user) {
-            return null;
-        }
-
-        if (!password_verify($password, $user['password_hash'])) {
+        if (!$user || !password_verify($password, $user['password_hash'])) {
+            $this->recordFailedAttempt($email);
             return null;
         }
 
         unset($user['password_hash']);
 
         return $user;
+    }
+
+    private function isRateLimited(string $email): bool
+    {
+        $statement = $this->pdo->prepare("
+            SELECT COUNT(*) FROM login_attempts
+            WHERE identifier = :identifier
+              AND attempted_at > CURRENT_TIMESTAMP - (:window_minutes || ' minutes')::interval
+        ");
+        $statement->execute([
+            'identifier' => $email,
+            'window_minutes' => self::LOGIN_ATTEMPT_WINDOW_MINUTES
+        ]);
+
+        return (int) $statement->fetchColumn() >= self::MAX_LOGIN_ATTEMPTS;
+    }
+
+    private function recordFailedAttempt(string $email): void
+    {
+        $statement = $this->pdo->prepare(
+            'INSERT INTO login_attempts (identifier) VALUES (:identifier)'
+        );
+        $statement->execute(['identifier' => $email]);
     }
 
     public function login(array $user): void
@@ -83,7 +112,7 @@ class Auth
                 'path' => '/',
                 'httponly' => true,
                 'samesite' => 'Lax',
-                'secure' => false
+                'secure' => $this->isHttps()
             ]
         );
     }
@@ -105,10 +134,13 @@ class Auth
                 u.branch_id,
                 u.name,
                 u.email,
-                u.status
+                u.status,
+                o.name AS organization_name
             FROM sessions s
             INNER JOIN users u
                 ON u.id = s.user_id
+            INNER JOIN organizations o
+                ON o.id = u.organization_id
             WHERE s.token_hash = :token_hash
               AND s.expires_at > CURRENT_TIMESTAMP
               AND u.status = 'active'
@@ -135,7 +167,29 @@ class Auth
             'token_hash' => $tokenHash
         ]);
 
+        $user['permissions'] = $this->permissionsFor((int) $user['id']);
+
         return $user;
+    }
+
+    private function permissionsFor(int $userId): array
+    {
+        $statement = $this->pdo->prepare("
+            SELECT DISTINCT p.code
+            FROM user_roles ur
+            INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
+            INNER JOIN permissions p ON p.id = rp.permission_id
+            WHERE ur.user_id = :user_id
+        ");
+        $statement->execute(['user_id' => $userId]);
+
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    private function isHttps(): bool
+    {
+        return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
     }
 
     public function logout(): void
@@ -159,7 +213,7 @@ class Auth
             'path' => '/',
             'httponly' => true,
             'samesite' => 'Lax',
-            'secure' => false
+            'secure' => $this->isHttps()
         ]);
     }
 }

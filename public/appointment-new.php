@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,12 +14,16 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'job_cards.manage');
+
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
 
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
 
     $vehicleId = (int) ($_POST['vehicle_id'] ?? 0);
     $customerId = (int) ($_POST['customer_id'] ?? 0);
@@ -114,6 +119,8 @@ $topbarTitle = 'New Appointment';
                     </div>
 
                     <form method="POST" action="" id="appointment-form" style="display:none;">
+
+                        <?= csrf_field() ?>
 
                         <input type="hidden" name="vehicle_id" id="selected_vehicle_id">
                         <input type="hidden" name="customer_id" id="selected_customer_id">

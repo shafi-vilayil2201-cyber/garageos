@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -12,6 +13,8 @@ if (!$user) {
     header('Location: /');
     exit;
 }
+
+require_permission($user, 'invoices.view');
 
 $organizationId = $user['organization_id'];
 $invoiceId = (int) ($_GET['id'] ?? 0);
@@ -38,6 +41,9 @@ if (!$invoice) {
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'invoices.manage');
 
     $method = $_POST['method'] ?? '';
     $amount = (float) ($_POST['amount'] ?? 0);
@@ -203,6 +209,7 @@ $topbarTitle = $invoice['invoice_no'];
                                 <?php endif; ?>
 
                                 <form method="POST" action="">
+                                    <?= csrf_field() ?>
                                     <div class="form-grid single">
                                         <div class="form-field">
                                             <label>Method</label>

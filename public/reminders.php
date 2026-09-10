@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,9 +14,14 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'job_cards.view');
+
 $organizationId = $user['organization_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'job_cards.manage');
 
     $reminderId = (int) ($_POST['reminder_id'] ?? 0);
     $action = $_POST['action'] ?? '';
@@ -160,6 +166,7 @@ $topbarTitle = 'Reminders';
                                         </td>
                                         <td style="white-space:nowrap;">
                                             <form method="POST" action="" style="display:inline-flex; gap:6px; align-items:center;">
+                                                <?= csrf_field() ?>
                                                 <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
                                                 <input type="hidden" name="action" value="mark_sent">
                                                 <select name="channel" style="height:32px; font-size:12.5px; border:1px solid var(--border); border-radius:6px;">
@@ -171,6 +178,7 @@ $topbarTitle = 'Reminders';
                                                 <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Mark contacted</button>
                                             </form>
                                             <form method="POST" action="" style="display:inline;">
+                                                <?= csrf_field() ?>
                                                 <input type="hidden" name="reminder_id" value="<?= (int) $reminder['id'] ?>">
                                                 <input type="hidden" name="action" value="dismiss">
                                                 <button type="submit" class="button secondary" style="height:32px; padding:0 12px; font-size:12.5px;">Dismiss</button>

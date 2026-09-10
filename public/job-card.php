@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -12,6 +13,8 @@ if (!$user) {
     header('Location: /');
     exit;
 }
+
+require_permission($user, 'job_cards.view');
 
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
@@ -38,9 +41,13 @@ $statuses = ['received', 'in_progress', 'quality_check', 'ready', 'delivered', '
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    csrf_verify();
+
     $action = $_POST['action'] ?? '';
 
     if ($action === 'update_status') {
+
+        require_permission($user, 'job_cards.manage');
 
         $newStatus = $_POST['status'] ?? '';
 
@@ -83,6 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'add_service') {
 
+        require_permission($user, 'job_cards.manage');
+
         $serviceId = (int) ($_POST['service_id'] ?? 0);
         $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
 
@@ -107,6 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } elseif ($action === 'add_part') {
+
+        require_permission($user, 'job_cards.manage');
 
         $partId = (int) ($_POST['part_id'] ?? 0);
         $quantity = (float) ($_POST['quantity'] ?? 0);
@@ -176,6 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } elseif ($action === 'generate_invoice') {
+
+        require_permission($user, 'invoices.manage');
 
         $statement = $pdo->prepare("SELECT id FROM invoices WHERE job_card_id = :job_card_id");
         $statement->execute(['job_card_id' => $jobCardId]);
@@ -385,6 +398,7 @@ $topbarTitle = $jobCard['job_no'];
                     <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary">View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
                 <?php else: ?>
                     <form method="POST" action="">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="action" value="generate_invoice">
                         <button type="submit" class="button">Generate invoice</button>
                     </form>
@@ -419,6 +433,7 @@ $topbarTitle = $jobCard['job_no'];
                                 </div>
                             <?php endif; ?>
                             <form method="POST" action="" style="padding:16px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:end;">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="add_service">
                                 <div class="form-field" style="flex:1;">
                                     <label>Add service</label>
@@ -471,6 +486,7 @@ $topbarTitle = $jobCard['job_no'];
                                 <div id="part-results"></div>
 
                                 <form method="POST" action="" id="add-part-form" style="display:none; gap:10px; align-items:end;">
+                                    <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="add_part">
                                     <input type="hidden" name="part_id" id="selected_part_id">
                                     <div style="display:flex; gap:10px; align-items:end;">
@@ -504,6 +520,7 @@ $topbarTitle = $jobCard['job_no'];
                         <div class="card-header">Update status</div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="update_status">
                                 <div class="form-field">
                                     <select name="status" onchange="this.form.submit()">

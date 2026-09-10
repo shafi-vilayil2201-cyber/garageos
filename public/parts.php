@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,12 +14,17 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'parts.view');
+
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
 
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'parts.manage');
 
     $name = trim($_POST['name'] ?? '');
     $sku = strtoupper(trim($_POST['sku'] ?? ''));
@@ -169,6 +175,7 @@ $topbarTitle = 'Parts';
                         <?php endif; ?>
 
                         <form method="POST" action="">
+                            <?= csrf_field() ?>
                             <div class="form-grid single">
                                 <div class="form-field">
                                     <label>Name</label>

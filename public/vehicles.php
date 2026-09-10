@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -13,12 +14,17 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'vehicles.view');
+
 $organizationId = $user['organization_id'];
 
 $error = null;
 $preselectedCustomerId = isset($_GET['customer_id']) ? (int) $_GET['customer_id'] : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'vehicles.manage');
 
     $customerId = (int) ($_POST['customer_id'] ?? 0);
     $registrationNo = strtoupper(trim($_POST['registration_no'] ?? ''));
@@ -157,6 +163,8 @@ $topbarTitle = 'Vehicles';
                             <p class="page-description">Add a customer first before registering their vehicle.</p>
                         <?php else: ?>
                             <form method="POST" action="">
+
+                                <?= csrf_field() ?>
 
                                 <div class="form-grid single">
 

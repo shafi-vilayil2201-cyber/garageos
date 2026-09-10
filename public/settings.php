@@ -13,6 +13,8 @@ if (!$user) {
     exit;
 }
 
+require_permission($user, 'settings.manage');
+
 $statement = $pdo->prepare("SELECT * FROM organizations WHERE id = :id");
 $statement->execute(['id' => $user['organization_id']]);
 $organization = $statement->fetch(PDO::FETCH_ASSOC);
@@ -68,10 +70,20 @@ $topbarTitle = 'Settings';
                         </div>
                     </div>
                     <p class="page-description" style="margin-top:16px;">
-                        Editable branding, service catalog management, and notification templates are on the Phase 2 roadmap.
+                        Editable branding, service catalog management, and notification templates are on the roadmap.
                     </p>
                 </div>
             </div>
+
+            <?php if (user_can($user, 'users.manage')): ?>
+                <div class="card" style="max-width: 480px; margin-top:20px;">
+                    <div class="card-header">Staff &amp; roles</div>
+                    <div class="card-body">
+                        <p class="page-description">Create staff accounts and assign what they can access.</p>
+                        <a href="/users.php" class="button secondary" style="margin-top:10px; display:inline-flex;">Manage users</a>
+                    </div>
+                </div>
+            <?php endif; ?>
 
         </section>
 
