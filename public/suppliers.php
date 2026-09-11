@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -57,13 +58,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM suppliers WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalSuppliers = (int) $statement->fetchColumn();
+$page = paginate_page($totalSuppliers);
+
 $statement = $pdo->prepare("
     SELECT name, code, phone, email
     FROM suppliers
     WHERE organization_id = :organization_id
     ORDER BY created_at DESC
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $suppliers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $activeNav = 'suppliers';
@@ -130,6 +140,7 @@ $topbarTitle = 'Suppliers';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalSuppliers) ?>
                     <?php endif; ?>
                 </div>
             </div>

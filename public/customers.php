@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -63,6 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalCustomers = (int) $statement->fetchColumn();
+$page = paginate_page($totalCustomers);
+
 $statement = $pdo->prepare("
     SELECT
         c.id,
@@ -74,8 +80,12 @@ $statement = $pdo->prepare("
     FROM customers c
     WHERE c.organization_id = :organization_id
     ORDER BY c.created_at DESC
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $customers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $activeNav = 'customers';
@@ -154,6 +164,7 @@ $topbarTitle = 'Customers';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalCustomers) ?>
                     <?php endif; ?>
                 </div>
             </div>

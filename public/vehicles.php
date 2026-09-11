@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -67,6 +68,11 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId]);
 $customers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM vehicles WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalVehicles = (int) $statement->fetchColumn();
+$page = paginate_page($totalVehicles);
+
 $statement = $pdo->prepare("
     SELECT
         v.id,
@@ -80,8 +86,12 @@ $statement = $pdo->prepare("
     INNER JOIN customers c ON c.id = v.customer_id
     WHERE v.organization_id = :organization_id
     ORDER BY v.created_at DESC
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $vehicles = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 // Open straight to the form if we arrived from "+ Add vehicle" on a
@@ -162,6 +172,7 @@ $topbarTitle = 'Vehicles';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalVehicles) ?>
                     <?php endif; ?>
                 </div>
             </div>

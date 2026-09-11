@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -92,6 +93,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM parts WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalParts = (int) $statement->fetchColumn();
+$page = paginate_page($totalParts);
+
 $statement = $pdo->prepare("
     SELECT p.id, p.name, p.sku, p.selling_price, p.reorder_level,
            COALESCE(i.quantity, 0) AS stock_quantity
@@ -99,8 +105,13 @@ $statement = $pdo->prepare("
     LEFT JOIN inventory i ON i.part_id = p.id AND i.branch_id = :branch_id
     WHERE p.organization_id = :organization_id
     ORDER BY p.name
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId, 'branch_id' => $branchId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('branch_id', $branchId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $parts = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $activeNav = 'parts';
@@ -174,6 +185,7 @@ $topbarTitle = 'Parts';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalParts) ?>
                     <?php endif; ?>
                 </div>
             </div>

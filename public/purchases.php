@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -17,6 +18,11 @@ require_permission($user, 'purchases.view');
 
 $organizationId = $user['organization_id'];
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM purchases WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalPurchases = (int) $statement->fetchColumn();
+$page = paginate_page($totalPurchases);
+
 $statement = $pdo->prepare("
     SELECT
         pu.id,
@@ -29,8 +35,12 @@ $statement = $pdo->prepare("
     INNER JOIN suppliers s ON s.id = pu.supplier_id
     WHERE pu.organization_id = :organization_id
     ORDER BY pu.created_at DESC
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $purchases = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $activeNav = 'purchases';
@@ -108,6 +118,7 @@ $topbarTitle = 'Purchases';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalPurchases) ?>
                     <?php endif; ?>
                 </div>
             </div>

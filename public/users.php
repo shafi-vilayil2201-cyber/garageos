@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -79,6 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$statement = $pdo->prepare("SELECT COUNT(*) FROM users WHERE organization_id = :organization_id");
+$statement->execute(['organization_id' => $organizationId]);
+$totalUsers = (int) $statement->fetchColumn();
+$page = paginate_page($totalUsers);
+
 $statement = $pdo->prepare("
     SELECT u.id, u.name, u.email, u.status, STRING_AGG(r.name, ', ' ORDER BY r.name) AS role_names
     FROM users u
@@ -87,8 +93,12 @@ $statement = $pdo->prepare("
     WHERE u.organization_id = :organization_id
     GROUP BY u.id, u.name, u.email, u.status
     ORDER BY u.name
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $users = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $statement = $pdo->prepare("SELECT id, name, description FROM roles WHERE organization_id = :organization_id ORDER BY name");
@@ -140,24 +150,32 @@ $topbarTitle = 'Users';
                     </div>
                 </div>
                 <div class="card-body" style="padding:0;">
-                    <div class="table-wrap">
-                        <table class="data-table">
-                            <tr><th>Name</th><th>Email</th><th>Role</th></tr>
-                            <?php foreach ($users as $u): ?>
-                                <tr>
-                                    <td><?= htmlspecialchars($u['name']) ?></td>
-                                    <td><?= htmlspecialchars($u['email']) ?></td>
-                                    <td>
-                                        <?php if ($u['role_names']): ?>
-                                            <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
-                                        <?php else: ?>
-                                            <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </table>
-                    </div>
+                    <?php if (empty($users)): ?>
+                        <div class="empty-state">
+                            <?= icon('team', 28) ?>
+                            No users yet.
+                        </div>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+                                <?php foreach ($users as $u): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($u['name']) ?></td>
+                                        <td><?= htmlspecialchars($u['email']) ?></td>
+                                        <td>
+                                            <?php if ($u['role_names']): ?>
+                                                <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
+                                            <?php else: ?>
+                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                        <?= render_pagination($page, $totalUsers) ?>
+                    <?php endif; ?>
                 </div>
             </div>
 

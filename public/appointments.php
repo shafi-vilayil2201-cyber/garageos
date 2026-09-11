@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -154,6 +155,15 @@ if ($canManageJobCards) {
 }
 
 $statement = $pdo->prepare("
+    SELECT COUNT(*) FROM appointments
+    WHERE organization_id = :organization_id
+      AND status IN ('scheduled', 'confirmed')
+");
+$statement->execute(['organization_id' => $organizationId]);
+$totalAppointments = (int) $statement->fetchColumn();
+$page = paginate_page($totalAppointments);
+
+$statement = $pdo->prepare("
     SELECT
         a.id, a.scheduled_at, a.status, a.source, a.job_card_id,
         v.registration_no, v.make, v.model,
@@ -166,8 +176,12 @@ $statement = $pdo->prepare("
     WHERE a.organization_id = :organization_id
       AND a.status IN ('scheduled', 'confirmed')
     ORDER BY a.scheduled_at
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
+$statement->execute();
 $appointments = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $activeNav = 'appointments';
@@ -268,6 +282,7 @@ $topbarTitle = 'Appointments';
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?= render_pagination($page, $totalAppointments) ?>
                     <?php endif; ?>
                 </div>
             </div>
