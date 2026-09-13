@@ -2,8 +2,13 @@
 
 // Creates a brand new, ready-to-use workshop: organization, branch, admin
 // user, the standard role set with permissions, and a starter service
-// catalog. Run this once per new client — it's the whole "close the deal"
-// setup step from the project docs.
+// catalog.
+//
+// Each customer gets their own dedicated database (one organization per
+// database, not many organizations sharing one) — so this script runs
+// exactly once, against that customer's own fresh database, as one step
+// of scripts/install-garageos.sh. It is not run against a shared
+// database across multiple customers.
 //
 // Usage: php database/onboard-client.php
 
@@ -16,6 +21,29 @@ function prompt(string $label, ?string $default = null): string
     $value = trim(fgets(STDIN));
 
     return $value === '' && $default !== null ? $default : $value;
+}
+
+function promptPassword(string $label): string
+{
+    echo "{$label}: ";
+
+    // Hide the typed password where the terminal supports it (stty is
+    // available on Linux/macOS; falls back to visible input elsewhere,
+    // e.g. if run under a shell without a real tty).
+    $hasStty = stripos(PHP_OS, 'WIN') !== 0 && shell_exec('stty -a 2>/dev/null');
+
+    if ($hasStty) {
+        shell_exec('stty -echo');
+    }
+
+    $value = trim(fgets(STDIN));
+
+    if ($hasStty) {
+        shell_exec('stty echo');
+        echo "\n";
+    }
+
+    return $value;
 }
 
 echo "GarageOS — New Client Onboarding\n";
@@ -35,17 +63,22 @@ echo "\n";
 
 $adminName = prompt('Admin full name', 'Administrator');
 $adminEmail = prompt('Admin email');
-$adminPassword = prompt('Admin password');
+$adminPassword = promptPassword('Admin password');
 
 if ($organizationName === '' || $organizationCode === '' || $adminEmail === '' || $adminPassword === '') {
     exit("\nWorkshop name, short code, admin email and password are all required.\n");
 }
 
-$statement = $pdo->prepare('SELECT 1 FROM organizations WHERE code = :code');
-$statement->execute(['code' => $organizationCode]);
+// This database belongs to exactly one customer, so any existing
+// organization row here means onboarding already ran — re-running it
+// would create a second, unexpected organization in a database the rest
+// of the app assumes holds only one.
+$statement = $pdo->query('SELECT name, code FROM organizations LIMIT 1');
+$existing = $statement->fetch(PDO::FETCH_ASSOC);
 
-if ($statement->fetch()) {
-    exit("\nAn organization with code '{$organizationCode}' already exists. Choose a different code.\n");
+if ($existing) {
+    exit("\nThis database is already onboarded for '{$existing['name']}' ({$existing['code']}). " .
+        "Each customer gets one database — onboarding a second workshop here isn't supported.\n");
 }
 
 $pdo->beginTransaction();

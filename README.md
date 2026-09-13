@@ -1,10 +1,28 @@
 # GarageOS
 
-A workshop & garage management system: customers, vehicles, job cards, a service catalog, parts inventory, and invoicing — built to run locally on the shop's own PC. Plain PHP + PostgreSQL, no framework, following the same architectural conventions as its sister project RetailOS (numbered SQL migrations, cookie-session auth, organization/branch RBAC).
+A workshop & garage management system: customers, vehicles, job cards, a service catalog, parts inventory, and invoicing. Plain PHP + PostgreSQL, no framework, following the same architectural conventions as its sister project RetailOS (numbered SQL migrations, cookie-session auth, organization/branch RBAC).
 
 Full project rationale, roadmap, and schema reference: [docs/project-documentation.md](docs/project-documentation.md).
 
-## Setup
+## Architecture at a glance
+
+Each customer runs their own independent GarageOS instance, on infrastructure they own — not a shop PC, not a shared multi-tenant server:
+
+```
+Customer's own VPS (Ubuntu/Debian)
+├── nginx            (HTTPS, reverse proxy to PHP-FPM)
+├── PHP-FPM           (runs GarageOS)
+├── GarageOS           (this application — public/ is the only web-exposed directory)
+└── PostgreSQL         (this customer's own database, never exposed publicly)
+```
+
+Every device the customer uses — the shop's Windows PC, a Mac, the owner's phone, a mechanic's tablet — is just a browser pointed at `https://<customer-domain>`. None of them run any part of the application locally, and none of them need to be powered on for the others to work: the VPS is the one thing that has to stay up. There is exactly one database per customer, no synchronization between devices, and no dependency on any one customer's device being online.
+
+Cloudflare (DNS/proxy/HTTPS) is an optional layer a customer can put in front of their own domain if they want it — it is never required, and GarageOS never depends on a Cloudflare Tunnel or any other single vendor.
+
+## Local development
+
+This is for developing GarageOS itself, not how a customer runs it in production — see **Production deployment** below for that.
 
 1. Create the database and user (PostgreSQL):
 
@@ -14,7 +32,7 @@ Full project rationale, roadmap, and schema reference: [docs/project-documentati
    GRANT ALL PRIVILEGES ON DATABASE garageos TO garageos_user;
    ```
 
-   Update `config/database.php` if you use different credentials.
+   These match `config/database.php`'s built-in defaults, used automatically when no `.env` file is present. To use different credentials instead, copy `.env.example` to `.env` and fill it in — `.env` is never committed.
 
 2. Run migrations:
 
@@ -43,15 +61,49 @@ Full project rationale, roadmap, and schema reference: [docs/project-documentati
 
    Open `http://localhost:8000` and sign in with the admin email/password from step 3.
 
+   This built-in PHP server is a development convenience only — never use it in production (see below).
+
+## Production deployment
+
+A production install is one dedicated Ubuntu/Debian VPS per customer, running nginx + PHP-FPM + PostgreSQL — never the PHP development server, never a shop PC.
+
+**Building a release** (done once per version, by whoever maintains GarageOS):
+
+```
+./scripts/build-release.sh
+```
+
+Produces `dist/GarageOS-<version>.tar.gz` and a matching `.sha256` checksum file — application code only. It refuses to produce a package that contains `.env`, `.git`, or any other local/development artifact, and verifies the result by re-extracting it and confirming every file a real install needs is actually present before calling it done.
+
+**Installing on a customer's VPS**: copy that tarball to a fresh Ubuntu/Debian server, extract it, and run:
+
+```
+sudo ./scripts/install-garageos.sh
+```
+
+This one script:
+
+- Installs nginx, PHP-FPM, PostgreSQL, and Certbot
+- Hardens PHP for production (`display_errors=Off`, `expose_php=Off`, errors go to server logs, never to a visitor)
+- Configures the firewall (UFW) to allow only SSH, HTTP, and HTTPS — PostgreSQL is never exposed publicly
+- Creates a dedicated, least-privilege PostgreSQL role and database for this customer (never the Postgres superuser)
+- Lays out a versioned release directory (`releases/<version>/`, with `current` symlinked to the active one, and `.env` living in `shared/` so it survives every future release) so a future update only ever swaps a symlink
+- Runs migrations, then `database/onboard-client.php` to create the organization, branch, admin user, roles, and starter service catalog
+- Configures nginx to serve only `public/` — `.env`, `app/`, `database/`, and `scripts/` are never web-reachable
+- Requests an HTTPS certificate via Let's Encrypt for the domain you give it
+- Verifies the install against `/health.php` before declaring success, and never prints the generated database password to the terminal
+
+Run `sudo ./scripts/install-garageos.sh` again on a different server and you get a second, completely independent installation — its own database, its own credentials, its own domain. Nothing about one customer's install ever talks to another's.
+
+## Customer access through the browser
+
+Once installed, a customer's whole experience is: open a browser, go to `https://<their-domain>`, log in. That's true from a Windows PC, a Mac, an Android phone, or an iPhone — GarageOS is a normal responsive web app, not something installed per device. Nobody needs to install PHP, PostgreSQL, or any GarageOS files on their own computer or phone to use it; the shop's own PC is a client like any other, and if it's switched off, GarageOS keeps running on the VPS exactly as it did before.
+
 ## Onboarding a new client
 
-One command creates a fully working workshop — organization, branch, admin login, the standard role set (Owner, Manager, Service Advisor, Technician, Accountant, Parts Manager) with permissions matching [docs/project-documentation.md](docs/project-documentation.md) §7, and a starter service catalog:
+`database/onboard-client.php` creates a fully working workshop inside a customer's own, already-migrated database — organization, branch, admin login, the standard role set (Owner, Manager, Service Advisor, Technician, Accountant, Parts Manager) with permissions matching [docs/project-documentation.md](docs/project-documentation.md) §7, and a starter service catalog. It's run automatically as one step of `scripts/install-garageos.sh`, so onboarding a new client is simply running the installer — no manual database work, no code changes per client.
 
-```
-php database/onboard-client.php
-```
-
-It asks for the workshop name, a short code, and the admin's details, then prints a summary. This is the whole "close the deal" setup step — no manual database work, no code changes per client. Verified against a second live organization (Highway Motors) with full data isolation from the demo workshop.
+It's safe to run directly too (`php database/onboard-client.php`) but only against a fresh database — it checks for an existing organization first and refuses to run twice against the same database, since each customer's database is meant to hold exactly one organization, never several.
 
 ## What's working right now
 
@@ -93,7 +145,9 @@ A small, deliberate set of conventions in `public/css/app.css` and `app/View/Ico
 - Editable settings / branding beyond the name shown today
 - An audit log for financial edits and permission changes — deferred to keep this hardening pass shippable; the RBAC/CSRF/rate-limiting work above was prioritized first
 - Actually sending reminder notifications (SMS/WhatsApp/email) — needs a provider decision first
-- Cloud sync, mobile/remote access — not yet started; blocked on deciding a cloud host and revisiting the `BIGSERIAL` primary key strategy (see docs §12)
+- An in-app update checker/updater (check for a new release, back up, migrate, roll back on failure) — the release/install tooling (`scripts/build-release.sh`, `scripts/install-garageos.sh`) exists; the update flow on top of it doesn't yet
+- Automated backups and a tested restore path on the production VPS — not yet built
+- A Progressive Web App / "Add to Home Screen" experience, and any offline capability — intentionally deferred; the current architecture is online-first by design, not a step toward local/cloud database sync
 
 ## Conventions to follow when extending this
 
@@ -101,3 +155,5 @@ A small, deliberate set of conventions in `public/css/app.css` and `app/View/Ico
 - Migrations are numbered, plain SQL, and never edited after being committed — add a new migration instead.
 - Pages live directly under `public/`, one file per screen, handling their own GET (render) and POST (write) — no router, no templating engine. Keep it that way; it's a deliberate choice for developer speed, not an oversight.
 - Shared UI (`app/View/sidebar.php`, `app/View/topbar.php`) is the only shared markup — resist pulling more into partials until a third page needs it.
+- Configuration comes from environment variables (`app/Support/Env.php`'s `env()`), never hard-coded — `config/database.php` is the pattern to follow for any future config value. `.env` never gets committed; `.env.example` is the safe, always-up-to-date template.
+- `app/Support/Version.php`'s `GARAGEOS_VERSION` is the one place the installed version lives — never inferred from git, since a deployed release has no `.git` directory.

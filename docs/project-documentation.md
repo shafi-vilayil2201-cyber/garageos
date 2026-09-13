@@ -1,6 +1,8 @@
 # GarageOS — Project Documentation
 
-*A workshop & garage management system built on RetailOS's local-first architecture: install it on the shop's own PC, run the business offline, sync to the cloud automatically, and hand every client a landing page that looks like nobody else's.*
+*A workshop & garage management system built on RetailOS's architectural conventions: each customer runs their own independent instance on their own cloud server, accessible from any browser on any device, and every client gets a landing page that looks like nobody else's.*
+
+> **Deployment model:** GarageOS is **not** installed on a shop's own PC and does not synchronize a local database to the cloud. Each customer provisions their own VPS (Linux + nginx + PHP-FPM + PostgreSQL) via `scripts/install-garageos.sh`, and every device — the shop's PC, a phone, a tablet — is simply a browser pointed at that customer's own HTTPS domain. There is one authoritative database per customer, no local/cloud synchronization, and no shop-PC-as-server. See [README.md](../README.md) for the current setup instructions, and §9/§14 below for the full architecture.
 
 `v0.1 — draft` · `2026-09-10` · `Built on the RetailOS core` · Author: shafivilayil2201@gmail.com
 
@@ -11,8 +13,8 @@
 Platforms like `autorox.ai` prove garages will pay for software — but they ship enterprise-grade complexity (multi-module configuration, long onboarding, dedicated training) at a small workshop that just wants to open a job card, order a part, and text the customer when the car's ready. GarageOS competes on a different axis: **time-to-value**, not feature count.
 
 - **Fast to learn** — a service advisor should be creating job cards within 10 minutes of first login, no manual required.
-- **Fast to deploy** — because it reuses RetailOS's proven core (auth, roles, org/branch model, sync), a new client is mostly configuration, not code.
-- **Reliable by construction** — local-first means the shop floor keeps working through a power cut or a dead internet line; the cloud catches up when it can.
+- **Fast to deploy** — because it reuses RetailOS's proven core (auth, roles, org/branch model), a new client is mostly configuration, not code.
+- **Reliable by construction** — a dedicated VPS per customer means one workshop's traffic, uptime, and data are never affected by another's; the browser-based client works identically from a shop PC, a phone, or a tablet, with nothing to install on any of them.
 - **Looks bespoke, runs standard** — every client gets a custom-designed landing page (§10), but the software behind the login screen is identical from client to client.
 
 > **Why this matters commercially:** The sales pitch and the engineering plan are the same document. "Custom landing page + proven core" is simultaneously the thing that closes the deal (it doesn't feel generic) and the thing that keeps margins healthy (the core never changes per client).
@@ -21,8 +23,8 @@ Platforms like `autorox.ai` prove garages will pay for software — but they shi
 
 ## 2. Design principles
 
-1. **Reuse over rebuild** — auth, sessions, RBAC, organizations/branches, and the sync scaffold are ported from RetailOS, not rewritten.
-2. **Local-first, cloud-synced** — the shop's own PC is the source of truth for its own data. The cloud is a mirror + remote window, never a single point of failure.
+1. **Reuse over rebuild** — auth, sessions, RBAC, and the organizations/branches model are ported from RetailOS, not rewritten.
+2. **Customer-owned, cloud-hosted** — each customer's own VPS and PostgreSQL database is the single, authoritative source of truth for their data. No device is a local server, and no synchronization happens between devices or between a customer's infrastructure and anyone else's — every device is simply a browser client talking to that customer's own server.
 3. **Config over code** — branding, service catalog, tax rules, and working hours are rows in a database, never a per-client code branch.
 4. **One screen, one job** — every role gets a short, task-shaped screen list. No nested settings mazes, no Autorox-style module sprawl.
 
@@ -46,7 +48,6 @@ Platforms like `autorox.ai` prove garages will pay for software — but they shi
 | **Appointment** | A booked future visit, walk-in or from the landing page. |
 | **Reminder** | An automated nudge — service due, insurance/PUC expiry, follow-up. |
 | **Inspection** | A checklist + photos capturing vehicle condition at intake and handover. |
-| **Sync Outbox** | The queue of local events waiting to reach the cloud. |
 
 ---
 
@@ -61,7 +62,7 @@ Customer + Vehicle → Job Card (received)
 → Work in progress (technician assigned)
 → Parts consumed → Stock Movement (−)
 → Quality check → Invoice → Payment
-→ Delivered / Closed → Sync Outbox
+→ Delivered / Closed
 ```
 
 **Reminder flow**
@@ -76,7 +77,7 @@ Job Card closed → next-service date computed
 
 ```
 Supplier → Purchase → Purchase Items
-→ Stock Movement (+) → Payment → Sync Outbox
+→ Stock Movement (+) → Payment
 ```
 
 ---
@@ -90,7 +91,6 @@ Supplier → Purchase → Purchase Items
 - suppliers, purchases, purchase_items
 - inventory_movements, stock_transfers
 - payments (shape reused for invoices)
-- sync outbox pattern
 
 **New for GarageOS**
 - vehicles, vehicle history
@@ -183,7 +183,7 @@ All tables carry `organization_id`, `branch_id`, `created_at`/`updated_at` the s
 | job_card_id | bigint | FK |
 | stage | varchar(10) | intake / handover |
 | checklist_item, result | varchar | e.g. "Tyre tread" → ok / worn / replace |
-| file_path, file_type | varchar | attachments: photo/video, synced to cloud storage |
+| file_path, file_type | varchar | attachments: photo/video, stored in object storage (not yet implemented — see README "What's a placeholder") |
 
 ---
 
@@ -220,25 +220,30 @@ Same RBAC engine as RetailOS (`roles` → `role_permissions` → `permissions`, 
 
 ---
 
-## 9. Local + cloud sync architecture
+## 9. Deployment architecture
 
-Identical shape to RetailOS: the branch's own PC is authoritative for its own writes. A background worker drains the sync outbox to the cloud whenever a connection exists. Nothing on the shop floor ever blocks on the internet.
+Each customer runs one independent GarageOS instance on infrastructure they own — never a shop PC, never a database shared with any other customer, and never synchronized with anything.
 
 ```
-┌─────────────────────────────┐          ┌─────────────────────────────┐
-│  CLIENT PC (on-premise)      │  syncs   │  CLOUD                       │
-│                               │  when    │                              │
-│  Local App ──writes──► Sync   │  online  │   Cloud API ──► Cloud DB     │
-│  (PHP+Postgres)   Outbox ─────┼─────────►│      ▲                       │
-│       ▲                       │◄─────────┼──────┘ pulls updates back    │
-│       │                       │          │      │                       │
-│  Technician tablets (LAN,     │          │  Mobile / remote device      │
-│  no internet needed)          │          │  (owner checking in          │
-│                               │          │   from anywhere)             │
-└─────────────────────────────┘          └─────────────────────────────┘
+Customer's own VPS (Ubuntu/Debian)
+├── nginx           HTTPS termination, reverse proxy — serves only public/
+├── PHP-FPM          runs GarageOS
+├── GarageOS          this application
+└── PostgreSQL        this customer's own database — never exposed publicly
+
+              ▲
+              │ HTTPS
+              │
+   ┌──────────┴──────────┬──────────────┬──────────────┐
+   │                      │              │              │
+Shop's Windows PC       Mac          Owner's phone   Mechanic's tablet
+(a browser client,    (a browser    (a browser       (a browser client)
+ not the server)        client)      client)
 ```
 
-LAN devices (technician tablets) never depend on internet; mobile/remote access goes through the cloud API.
+Every device is a plain browser pointed at `https://<customer-domain>` — none of them run any part of the application locally, and none of them need to be powered on for the others to keep working. If the shop's PC is switched off entirely, the owner's phone still reaches the same data, because the VPS — not the PC — is what has to stay up.
+
+An optional Cloudflare layer (DNS, proxying, HTTPS, DDoS protection) can sit in front of a customer's own domain if they choose it, but it is never required — the application works over plain HTTPS straight to the VPS, and does not depend on a Cloudflare Tunnel or any other single vendor. See `scripts/install-garageos.sh` and the README's "Production deployment" section for the actual, current install process.
 
 ---
 
@@ -253,7 +258,7 @@ This is the commercial heart of the plan. Every client gets a landing page nobod
 │                         │                    │                              │
 │   Branding · services   │                    │   Dashboard · Job cards      │
 │   Booking widget        │                    │   Inventory · Invoicing      │
-│   Testimonials          │                    │   RBAC · Sync                │
+│   Testimonials          │                    │   RBAC                       │
 │                         │                    │                              │
 │   CUSTOM                │                    │   REUSED                     │
 │   — closes the deal     │                    │   — keeps delivery fast      │
@@ -275,66 +280,64 @@ Per-client difference should live entirely in data and a small config file, neve
 | Tax rate, currency, working hours | `organizations` config columns |
 | Notification templates (SMS/WhatsApp wording) | `notification_templates` table |
 | Landing page design & copy | A separate, per-client static site/repo — not part of the core app |
-| DB credentials, license key, org slug | One local `.env` file per install |
+| DB credentials, domain, org slug | One `.env` file per VPS install |
 
-Onboarding a new client is: run one script that inserts an organization + branch + admin user + seeded service catalog, install the (unmodified) app binary/package on their PC, and point their landing page's login button at their subdomain. No branch of the core repo is ever created per client.
+Onboarding a new client is: provision their own VPS, run `scripts/install-garageos.sh` (which itself runs the onboarding script that inserts an organization + branch + admin user + seeded service catalog against that VPS's own fresh database), and point their landing page's login button at their own domain. No branch of the core repo is ever created per client, and no other customer's server or database is ever touched.
 
 ---
 
-## 12. ID & sync strategy
+## 12. ID strategy
 
-> **Architecture note — worth deciding before this scales:** RetailOS's tables use `BIGSERIAL` primary keys, which is fine as long as each organization's data lives in exactly one local database that never merges with another. The moment a record created offline needs a globally-unique ID before it reaches the cloud (multi-branch orgs, or any future peer-to-peer sync), auto-incrementing integers collide.
->
-> **Recommendation:** generate primary keys client-side as **ULIDs** (sortable, 26-char, no coordination needed) for GarageOS's new tables instead of relying on the database to assign them. Keep `BIGSERIAL` only for tables that will never leave a single node (e.g. local-only cache/log tables). This is a one-time decision — retrofitting IDs after data exists is painful, so make the call at schema-design time, not after the first client goes live.
-
-Conflict handling can stay simple for v1: each branch is authoritative for its own rows (scoped by `organization_id` + `branch_id`), so two branches never write the same record. Within a branch, last-write-wins on `updated_at` is sufficient — true concurrent-edit resolution isn't a real risk with one local server per branch.
+`BIGSERIAL` primary keys are the right choice and need no further decision: every customer has exactly one database, which is never merged with, replicated to, or reconciled against another database. The ID-collision problem that a client-generated ID scheme (e.g. ULIDs) would solve only exists if records from two different databases might ever need to occupy the same table — under this architecture, that never happens. `organization_id`/`branch_id` columns are kept on every table for continuity with the RetailOS schema and because a single customer may eventually run multiple branches from one database, but they no longer serve any cross-customer or cross-database purpose.
 
 ---
 
 ## 13. API surface
 
-Following the existing `public/api/*.php` convention already in RetailOS. Session-cookie auth for the local LAN app; a separate signed API key per branch for the cloud sync worker and the customer portal.
+Following the `public/api/*.php` convention already in this repo (see `public/api/job-cards/update-status.php`, `public/api/parts/search.php`, `public/api/vehicles/search.php`). Session-cookie auth, same as every other page — there is no separate sync worker or cross-server API key, since a single customer's GarageOS instance never talks to another server.
 
 | Endpoint | Used by | Notes |
 |---|---|---|
 | `GET /api/job-cards` | Dashboard, technician view | filter by status, technician, date |
 | `POST /api/job-cards` | Intake screen | creates job card + inspection shell |
-| `PATCH /api/job-cards/{id}/status` | Technician mobile view | status transition, RBAC-checked |
-| `GET /api/vehicles/search` | Intake screen | by plate number or customer phone |
-| `POST /api/estimates/{id}/send` | Advisor screen | dispatches WhatsApp/SMS/email |
-| `POST /api/sync/push` | Local sync worker | drains the sync outbox to the cloud |
-| `GET /api/sync/pull` | Local sync worker | pulls cloud-side changes (e.g. remote-created appointments) |
-| `GET /api/portal/job-cards/{token}` | Customer portal | token-scoped, read-only, no login required |
+| `PATCH /api/job-cards/{id}/status` | Kanban board, job card page | status transition, RBAC-checked — **implemented** as `public/api/job-cards/update-status.php` |
+| `GET /api/vehicles/search` | Intake screen | by plate number or customer phone — **implemented** |
+| `POST /api/estimates/{id}/send` | Advisor screen | dispatches WhatsApp/SMS/email — not yet built |
+| `GET /api/portal/job-cards/{token}` | Customer portal | token-scoped, read-only, no login required — not yet built |
 
 ---
 
-## 14. Client-PC deployment
+## 14. Production deployment
 
-- **Packaging** — bundle PHP + PostgreSQL + the app into a single installer (Windows/macOS) so the client never sees a terminal. A local service auto-starts the app on boot and serves it at `http://garage.local` on the shop's LAN.
-- **Updates** — the app checks a cloud version manifest on a schedule; new versions download in the background and apply on a one-click restart from `Settings → Updates`. No client ever touches a file manually.
-- **Backups** — nightly local DB dump, encrypted, uploaded to cloud storage. Restore is a single "Restore from cloud" action during install, used for both disaster recovery and moving to new hardware.
-- **Licensing** — the `organizations` row carries a license key validated against the cloud on first run and periodically after. Soft-lock only: a lapsed check doesn't stop the shop floor mid-shift, it just stops working after a grace period, so a bad internet day never blocks a live customer handover.
+- **Target** — one Ubuntu/Debian VPS per customer: nginx (HTTPS termination, serves only `public/`), PHP-FPM, PostgreSQL, all owned by the customer's own cloud account. No shop-PC installer, no Windows/macOS packaging, no local service.
+- **Install** — `scripts/install-garageos.sh`, run once on a fresh VPS. Installs and configures nginx/PHP-FPM/PostgreSQL/Certbot, hardens PHP for production (`display_errors=Off`, `expose_php=Off`), configures the firewall (UFW: only SSH/HTTP/HTTPS reachable, PostgreSQL never public), creates a dedicated non-superuser database role, runs migrations and onboarding, and requests an HTTPS certificate for the customer's own domain. **Implemented and locally verified; not yet run on a real VPS** — see the README for current status.
+- **Releases** — `scripts/build-release.sh` produces a checksummed, verified tarball (application code only — no `.env`, no `.git`, no dev artifacts) from the GarageOS codebase. The installer lays out a `releases/<version>/` + `current` symlink structure so a future update only ever swaps a symlink rather than overwriting a live install.
+- **Updates** — not yet built. The release/install foundation above is the prerequisite for it; the actual update-checker/admin-UI/backup-before-migrate/rollback flow is still on the roadmap (see README "What's a placeholder").
+- **Backups** — not yet built. Every customer's data lives in one PostgreSQL database on their own VPS; a nightly `pg_dump` with off-box storage and a tested restore path is a near-term priority, not yet implemented.
+- **Licensing** — out of scope. There is no license-key/cloud-validation mechanism, and none is currently planned — each customer simply owns and runs their own instance.
 
 ---
 
 ## 15. Reliability checklist
 
 - [ ] Every screen the service advisor and technician touch must work with zero internet.
-- [ ] Sync is idempotent — replaying an outbox event twice must never double-charge a payment or double-deduct stock.
 - [ ] Financial fields (prices, totals, payments) are validated server-side, never trusted from the client alone.
-- [ ] The sync worker logs every failed push with enough context to retry or manually reconcile — silent sync failures are the #1 trust-killer for this kind of product.
-- [ ] Daily automated backup, tested restore path documented and rehearsed before the first client goes live.
+- [ ] Daily automated backup, tested restore path documented and rehearsed before the first client goes live — not yet built (see §14).
+- [ ] Migrations are safe to run against a database with real data — already true by construction (`database/migrate.php` tracks applied migrations and only ever runs new ones), but worth re-confirming with a real upgrade scenario once updates are built.
 
 ---
 
 ## 16. Security checklist
 
-- [ ] Passwords hashed with `password_hash()` (bcrypt) — already the RetailOS pattern, keep it.
-- [ ] Session cookie: `httponly`, `samesite=Lax`, and `secure=true` once the local app is served over HTTPS (self-signed cert for LAN is enough).
-- [ ] RBAC enforced at the route/handler level, not just hidden in the UI — a technician's API calls must be rejected server-side, not just hidden buttons.
-- [ ] Audit log for financial edits (invoice changes, discounts, refunds) and role/permission changes.
-- [ ] Per-branch data isolation enforced by `organization_id`/`branch_id` scoping on every query, never trusted from client input.
-- [ ] Login rate-limiting to blunt credential-stuffing against the local app's LAN-exposed login page.
+- [x] Passwords hashed with `password_hash()` (bcrypt).
+- [x] Session cookie: `httponly`, `samesite=Lax`, and `secure` follows the real request scheme (correctly detects HTTPS behind nginx via `X-Forwarded-Proto`) — real HTTPS via Let's Encrypt on the customer's own domain, not a self-signed LAN certificate.
+- [x] RBAC enforced at the route/handler level, not just hidden in the UI — verified live: a Technician's direct API/page requests are rejected server-side (403), not just hidden buttons.
+- [x] CSRF token required on every POST.
+- [x] Login rate-limiting (5 failed attempts / 15 minutes per email).
+- [ ] Firewall (UFW): only SSH/HTTP/HTTPS reachable; PostgreSQL never exposed publicly — written into `scripts/install-garageos.sh`, not yet verified on a real VPS.
+- [x] PHP hardened for production: `display_errors=Off`, `expose_php=Off`, errors go to server logs, never to a visitor — installer writes this config; the underlying app-level behavior (generic error, real exception only in the server log) is verified locally against real PHP/Postgres.
+- [ ] Audit log for financial edits (invoice changes, discounts, refunds) and role/permission changes — not yet built.
+- [ ] Per-organization data isolation — enforced by `organization_id`/`branch_id` scoping today (multi-org-per-database model); the production model instead isolates customers at the database level (one database per customer), which is the stronger guarantee and needs verifying end-to-end on two real, separate VPS installs.
 
 ---
 
@@ -346,8 +349,7 @@ The whole point of the shared-core strategy is that this list gets shorter every
 |---|---|---|
 | Demo with seeded sample data (no client data needed) | Sales | 30 min |
 | Collect branding, service list & pricing, logo, working hours | Sales | 1 form, 1 call |
-| Run onboarding script → org, branch, admin user, seeded catalog | Ops | < 10 min |
-| Install app on client PC (or provision a cloud-only trial) | Ops | < 1 hour |
+| Provision the client's own VPS and run `scripts/install-garageos.sh` (creates the database, runs migrations, and onboards the org/branch/admin/catalog as part of the same script) | Ops | < 1 hour |
 | Build the client's custom landing page from the brand kit | Design | 2–4 days |
 | Staff training walkthrough (job card → invoice → payment) | Ops | 1 hour |
 | **Go live** | — | **~1 week total** |
@@ -358,11 +360,11 @@ The whole point of the shared-core strategy is that this list gets shorter every
 
 | Phase | Scope | Estimate |
 |---|---|---|
-| 0 — Fork the core | Port auth, RBAC, org/branch, sessions, sync scaffold from RetailOS | 2–3 days |
+| 0 — Fork the core | Port auth, RBAC, org/branch, sessions from RetailOS | 2–3 days |
 | 1 — MVP | Customers, vehicles, job cards, service catalog, invoices/payments, dashboard | 2–3 weeks |
 | 2 — Operations | Parts/inventory (mostly reused), purchases, appointments, reminders | 1–2 weeks |
-| 3 — Sync & mobile | Cloud API, sync worker, technician mobile view | 1–2 weeks |
-| 4 — Delivery tooling | Landing page template system, onboarding script, license/update mechanism | 1–2 weeks |
+| 3 — Production deployment | VPS installer, release/build tooling, firewall + PHP hardening, real VPS validation | in progress — see README |
+| 4 — Delivery tooling | Landing page template system, backup/restore, update mechanism | 1–2 weeks |
 | 5 — Growth features | Customer portal, WhatsApp/SMS notifications, reports | ongoing |
 
 ---
@@ -371,20 +373,24 @@ The whole point of the shared-core strategy is that this list gets shorter every
 
 ```
 garageos/
-├── app/                  domain classes (Auth, JobCards, Invoicing, Sync…)
-├── config/               database.php, per-install .env
+├── app/                  domain classes (Auth, JobCards, Invoicing…), plus Support/ (Env, Version)
+├── config/               database.php — reads its connection details from .env
 ├── database/
 │   ├── migrations/       numbered raw SQL, same convention as RetailOS
-│   └── seeders/          onboarding seed scripts (per-client catalog)
-├── public/               document root — one file per page
+│   ├── seeders/          local-dev seed scripts (demo data only)
+│   └── onboard-client.php   creates the org/branch/admin/catalog inside one customer's own database
+├── public/               document root — the only web-exposed directory
 │   ├── dashboard.php
 │   ├── job-cards.php
-│   ├── api/
-│   │   ├── job-cards/
-│   │   └── sync/
-│   └── css/ js/
-├── sync/                 cloud sync worker (cron or long-running process)
-├── docs/                 this document + business-model.md, database-design.md
+│   ├── health.php        production health check
+│   └── api/
+│       ├── job-cards/
+│       ├── parts/
+│       └── vehicles/
+├── scripts/
+│   ├── build-release.sh     packages a clean, checksummed release artifact
+│   └── install-garageos.sh  the whole VPS install: nginx, PHP-FPM, PostgreSQL, firewall, HTTPS
+├── docs/                 this document
 └── clients/              one folder per client's landing page (separate, static)
     ├── acme-motors/
     └── city-garage/
@@ -395,10 +401,9 @@ garageos/
 ## 20. Open decisions
 
 - **Product name** — "GarageOS" used throughout this document as a placeholder, parallel to RetailOS.
-- **Cloud hosting** — where the Cloud API + Cloud DB live (matters for the sync worker's design and cost per client).
 - **Notification provider** — WhatsApp Business API vs. a cheaper SMS gateway for reminders/estimates.
-- **Installer tooling** — how PHP + PostgreSQL get bundled for a one-click Windows/macOS install.
-- **Shared core vs. separate repo** — whether GarageOS and RetailOS should literally share an `app/` layer (auth, RBAC, sync) via a common package, or stay two repos that are kept in sync by convention.
+- **VPS provider per customer** — the installer targets any Ubuntu/Debian VPS; Oracle Cloud's Always Free ARM tier is the current pilot/test target, but nothing in the application or installer is tied to one provider.
+- **Shared core vs. separate repo** — whether GarageOS and RetailOS should literally share an `app/` layer (auth, RBAC) via a common package, or stay two repos that follow the same conventions independently.
 
 ---
 

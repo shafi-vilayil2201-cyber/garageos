@@ -1,10 +1,17 @@
 <?php
 
-$host = '127.0.0.1';
-$port = '5432';
-$dbname = 'garageos';
-$user = 'garageos_user';
-$password = 'garageos_dev_2026';
+require_once __DIR__ . '/../app/Support/Env.php';
+
+load_env(__DIR__ . '/../.env');
+
+// Defaults match the long-standing local dev setup (see README) so a
+// checkout with no .env still runs — a real install always provides its
+// own .env with its own generated password.
+$host = env('DB_HOST', '127.0.0.1');
+$port = env('DB_PORT', '5432');
+$dbname = env('DB_DATABASE', 'garageos');
+$user = env('DB_USERNAME', 'garageos_user');
+$password = env('DB_PASSWORD', 'garageos_dev_2026');
 
 $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
 
@@ -19,5 +26,7 @@ try {
     return $pdo;
 
 } catch (PDOException $e) {
-    die("Database connection failed: " . $e->getMessage());
+    error_log("Database connection failed: " . $e->getMessage());
+    http_response_code(500);
+    die("Something went wrong. Please try again shortly.");
 }
