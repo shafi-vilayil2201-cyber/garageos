@@ -53,8 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Generate upcoming insurance/PUC expiry reminders from the vehicle
 // records themselves. Idempotent — the unique constraint on
 // (vehicle_id, due_type, due_date) means running this twice is harmless.
-// Until cloud sync introduces a background worker, this runs inline
-// whenever the page loads.
+// Each installation is a single self-contained instance with no
+// background worker, so this runs inline whenever the page loads.
 $expiryTypes = [
     'insurance_expiry' => 'insurance_expiry',
     'puc_expiry' => 'puc_expiry'
@@ -84,6 +84,7 @@ $statement = $pdo->prepare("
     INNER JOIN customers c ON c.id = r.customer_id
     WHERE r.organization_id = :organization_id
       AND r.status = 'pending'
+      AND r.due_date <= CURRENT_DATE + INTERVAL '30 days'
     ORDER BY r.due_date
 ");
 $statement->execute(['organization_id' => $organizationId]);
