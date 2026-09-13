@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $statement = $pdo->prepare("
-            SELECT s.name, jci.price - jci.discount AS total, s.tax_rate
+            SELECT s.name, jci.price - jci.discount AS total, s.tax_rate, s.sac_code
             FROM job_card_items jci
             INNER JOIN services s ON s.id = jci.service_id
             WHERE jci.job_card_id = :job_card_id
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $serviceLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
         $statement = $pdo->prepare("
-            SELECT p.name, jcp.quantity, jcp.unit_price, p.tax_rate
+            SELECT p.name, jcp.quantity, jcp.unit_price, p.tax_rate, p.hsn_code
             FROM job_card_parts jcp
             INNER JOIN parts p ON p.id = jcp.part_id
             WHERE jcp.job_card_id = :job_card_id
@@ -230,6 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'quantity' => 1,
                         'unit_price' => $lineTotal,
                         'tax_rate' => $line['tax_rate'],
+                        'hsn_sac_code' => $line['sac_code'],
                         'total' => $lineTotal + $lineTax
                     ];
                 }
@@ -246,6 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'quantity' => $line['quantity'],
                         'unit_price' => $line['unit_price'],
                         'tax_rate' => $line['tax_rate'],
+                        'hsn_sac_code' => $line['hsn_code'],
                         'total' => $lineTotal + $lineTax
                     ];
                 }
@@ -278,8 +280,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $invoiceId = $statement->fetchColumn();
 
                 $statement = $pdo->prepare("
-                    INSERT INTO invoice_items (invoice_id, item_type, description, quantity, unit_price, tax_rate, total)
-                    VALUES (:invoice_id, :item_type, :description, :quantity, :unit_price, :tax_rate, :total)
+                    INSERT INTO invoice_items (invoice_id, item_type, description, quantity, unit_price, tax_rate, hsn_sac_code, total)
+                    VALUES (:invoice_id, :item_type, :description, :quantity, :unit_price, :tax_rate, :hsn_sac_code, :total)
                 ");
 
                 foreach ($lineItems as $item) {
@@ -290,6 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'quantity' => $item['quantity'],
                         'unit_price' => $item['unit_price'],
                         'tax_rate' => $item['tax_rate'],
+                        'hsn_sac_code' => $item['hsn_sac_code'] ?: null,
                         'total' => $item['total']
                     ]);
                 }

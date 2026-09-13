@@ -21,40 +21,75 @@ $organizationId = $user['organization_id'];
 $canManageSuppliers = user_can($user, 'suppliers.manage');
 
 $error = null;
+$errorAction = null;
+$editingSupplierId = (int) ($_GET['edit'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
     require_permission($user, 'suppliers.manage');
 
+    $action = $_POST['action'] ?? 'create';
     $name = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $address = trim($_POST['address'] ?? '');
 
-    if ($name === '') {
-        $error = 'Supplier name is required.';
+    if ($action === 'update') {
+
+        $editingSupplierId = (int) ($_POST['supplier_id'] ?? 0);
+
+        if ($name === '') {
+            $error = 'Supplier name is required.';
+            $errorAction = 'update';
+        } else {
+            $statement = $pdo->prepare("
+                UPDATE suppliers
+                SET name = :name, phone = :phone, email = :email, address = :address, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND organization_id = :organization_id
+            ");
+            $statement->execute([
+                'name' => $name,
+                'phone' => $phone ?: null,
+                'email' => $email ?: null,
+                'address' => $address ?: null,
+                'id' => $editingSupplierId,
+                'organization_id' => $organizationId
+            ]);
+
+            header('Location: /suppliers.php');
+            exit;
+        }
+
     } else {
 
-        $statement = $pdo->prepare("
-            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 5) AS INT)), 0) + 1
-            FROM suppliers WHERE organization_id = :organization_id
-        ");
-        $statement->execute(['organization_id' => $organizationId]);
-        $nextNumber = (int) $statement->fetchColumn();
-        $code = 'SUP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        if ($name === '') {
+            $error = 'Supplier name is required.';
+            $errorAction = 'create';
+        } else {
 
-        $statement = $pdo->prepare("
-            INSERT INTO suppliers (organization_id, name, code, phone)
-            VALUES (:organization_id, :name, :code, :phone)
-        ");
-        $statement->execute([
-            'organization_id' => $organizationId,
-            'name' => $name,
-            'code' => $code,
-            'phone' => $phone ?: null
-        ]);
+            $statement = $pdo->prepare("
+                SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 5) AS INT)), 0) + 1
+                FROM suppliers WHERE organization_id = :organization_id
+            ");
+            $statement->execute(['organization_id' => $organizationId]);
+            $nextNumber = (int) $statement->fetchColumn();
+            $code = 'SUP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
-        header('Location: /suppliers.php');
-        exit;
+            $statement = $pdo->prepare("
+                INSERT INTO suppliers (organization_id, name, code, phone)
+                VALUES (:organization_id, :name, :code, :phone)
+            ");
+            $statement->execute([
+                'organization_id' => $organizationId,
+                'name' => $name,
+                'code' => $code,
+                'phone' => $phone ?: null
+            ]);
+
+            header('Location: /suppliers.php');
+            exit;
+        }
     }
 }
 
@@ -64,7 +99,7 @@ $totalSuppliers = (int) $statement->fetchColumn();
 $page = paginate_page($totalSuppliers);
 
 $statement = $pdo->prepare("
-    SELECT name, code, phone, email
+    SELECT id, name, code, phone, email
     FROM suppliers
     WHERE organization_id = :organization_id
     ORDER BY created_at DESC
@@ -75,6 +110,23 @@ $statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
 $statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
 $statement->execute();
 $suppliers = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$editingSupplier = null;
+
+if ($editingSupplierId) {
+    $statement = $pdo->prepare("
+        SELECT id, name, phone, email, address
+        FROM suppliers
+        WHERE id = :id AND organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $editingSupplierId, 'organization_id' => $organizationId]);
+    $editingSupplier = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$editingSupplier) {
+        header('Location: /suppliers.php');
+        exit;
+    }
+}
 
 $activeNav = 'suppliers';
 $topbarTitle = 'Suppliers';
@@ -129,13 +181,18 @@ $topbarTitle = 'Suppliers';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Name</th><th>Phone</th></tr>
+                                <tr><th>Name</th><th>Phone</th><th></th></tr>
                                 <?php foreach ($suppliers as $supplier): ?>
                                     <tr>
                                         <td><strong><?= htmlspecialchars($supplier['name']) ?></strong>
                                             <div class="result-meta"><?= htmlspecialchars($supplier['code']) ?></div>
                                         </td>
                                         <td><?= htmlspecialchars($supplier['phone'] ?? '—') ?></td>
+                                        <td>
+                                            <?php if ($canManageSuppliers): ?>
+                                                <a href="?edit=<?= (int) $supplier['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
@@ -153,7 +210,7 @@ $topbarTitle = 'Suppliers';
 
 <?php if ($canManageSuppliers): ?>
 
-    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="supplier-modal">
+    <div class="modal-backdrop<?= $errorAction === 'create' ? ' open' : '' ?>" id="supplier-modal">
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
@@ -164,12 +221,13 @@ $topbarTitle = 'Suppliers';
             </div>
             <div class="modal-body">
 
-                <?php if ($error): ?>
+                <?php if ($errorAction === 'create' && $error): ?>
                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
                 <form method="POST" action="">
                     <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="create">
                     <div class="form-grid single">
                         <div class="form-field">
                             <label>Name</label>
@@ -184,6 +242,53 @@ $topbarTitle = 'Suppliers';
                         <button type="submit" class="button"><?= icon('check', 16) ?> Save supplier</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop<?= $editingSupplier ? ' open' : '' ?>" id="edit-supplier-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('warehouse', 16) ?></span>
+                    Edit Supplier
+                </div>
+                <button type="button" class="modal-close" data-close-modal="edit-supplier-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($errorAction === 'update' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($editingSupplier): ?>
+                    <form method="POST" action="">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="update">
+                        <input type="hidden" name="supplier_id" value="<?= (int) $editingSupplier['id'] ?>">
+                        <div class="form-grid single">
+                            <div class="form-field">
+                                <label>Name</label>
+                                <input type="text" name="name" value="<?= htmlspecialchars($editingSupplier['name']) ?>" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Phone (optional)</label>
+                                <input type="tel" name="phone" value="<?= htmlspecialchars($editingSupplier['phone'] ?? '') ?>">
+                            </div>
+                            <div class="form-field">
+                                <label>Email (optional)</label>
+                                <input type="email" name="email" value="<?= htmlspecialchars($editingSupplier['email'] ?? '') ?>">
+                            </div>
+                            <div class="form-field">
+                                <label>Address (optional)</label>
+                                <textarea name="address"><?= htmlspecialchars($editingSupplier['address'] ?? '') ?></textarea>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>

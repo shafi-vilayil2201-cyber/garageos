@@ -21,46 +21,81 @@ $organizationId = $user['organization_id'];
 $canManageCustomers = user_can($user, 'customers.manage');
 
 $error = null;
+$errorAction = null;
+$editingCustomerId = (int) ($_GET['edit'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
     require_permission($user, 'customers.manage');
 
+    $action = $_POST['action'] ?? 'create';
     $name = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $address = trim($_POST['address'] ?? '');
+    $gstin = strtoupper(trim($_POST['gstin'] ?? ''));
 
-    if ($name === '' || $phone === '') {
-        $error = 'Name and phone are required.';
+    if ($action === 'update') {
+
+        $editingCustomerId = (int) ($_POST['customer_id'] ?? 0);
+
+        if ($name === '' || $phone === '') {
+            $error = 'Name and phone are required.';
+            $errorAction = 'update';
+        } else {
+            $statement = $pdo->prepare("
+                UPDATE customers
+                SET name = :name, phone = :phone, email = :email, address = :address, gstin = :gstin, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND organization_id = :organization_id
+            ");
+            $statement->execute([
+                'name' => $name,
+                'phone' => $phone,
+                'email' => $email ?: null,
+                'address' => $address ?: null,
+                'gstin' => $gstin ?: null,
+                'id' => $editingCustomerId,
+                'organization_id' => $organizationId
+            ]);
+
+            header('Location: /customers.php');
+            exit;
+        }
+
     } else {
 
-        $statement = $pdo->prepare("
-            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 6) AS INT)), 0) + 1
-            FROM customers
-            WHERE organization_id = :organization_id
-        ");
-        $statement->execute(['organization_id' => $organizationId]);
-        $nextNumber = (int) $statement->fetchColumn();
-        $code = 'CUST-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        if ($name === '' || $phone === '') {
+            $error = 'Name and phone are required.';
+            $errorAction = 'create';
+        } else {
 
-        $statement = $pdo->prepare("
-            INSERT INTO customers (organization_id, name, code, phone, email, address)
-            VALUES (:organization_id, :name, :code, :phone, :email, :address)
-        ");
+            $statement = $pdo->prepare("
+                SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 6) AS INT)), 0) + 1
+                FROM customers
+                WHERE organization_id = :organization_id
+            ");
+            $statement->execute(['organization_id' => $organizationId]);
+            $nextNumber = (int) $statement->fetchColumn();
+            $code = 'CUST-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
-        $statement->execute([
-            'organization_id' => $organizationId,
-            'name' => $name,
-            'code' => $code,
-            'phone' => $phone,
-            'email' => $email ?: null,
-            'address' => $address ?: null
-        ]);
+            $statement = $pdo->prepare("
+                INSERT INTO customers (organization_id, name, code, phone, email, address)
+                VALUES (:organization_id, :name, :code, :phone, :email, :address)
+            ");
 
-        header('Location: /customers.php');
-        exit;
+            $statement->execute([
+                'organization_id' => $organizationId,
+                'name' => $name,
+                'code' => $code,
+                'phone' => $phone,
+                'email' => $email ?: null,
+                'address' => $address ?: null
+            ]);
+
+            header('Location: /customers.php');
+            exit;
+        }
     }
 }
 
@@ -87,6 +122,23 @@ $statement->bindValue('limit', PAGINATION_PER_PAGE, PDO::PARAM_INT);
 $statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
 $statement->execute();
 $customers = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$editingCustomer = null;
+
+if ($editingCustomerId) {
+    $statement = $pdo->prepare("
+        SELECT id, name, phone, email, address, gstin
+        FROM customers
+        WHERE id = :id AND organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $editingCustomerId, 'organization_id' => $organizationId]);
+    $editingCustomer = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$editingCustomer) {
+        header('Location: /customers.php');
+        exit;
+    }
+}
 
 $activeNav = 'customers';
 $topbarTitle = 'Customers';
@@ -146,6 +198,7 @@ $topbarTitle = 'Customers';
                                     <th>Phone</th>
                                     <th>Vehicles</th>
                                     <th></th>
+                                    <th></th>
                                 </tr>
                                 <?php foreach ($customers as $customer): ?>
                                     <tr>
@@ -159,6 +212,11 @@ $topbarTitle = 'Customers';
                                             <a href="/vehicles.php?customer_id=<?= (int) $customer['id'] ?>" class="link-action">
                                                 <?= icon('plus', 14) ?> Add vehicle
                                             </a>
+                                        </td>
+                                        <td>
+                                            <?php if ($canManageCustomers): ?>
+                                                <a href="?edit=<?= (int) $customer['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -177,7 +235,7 @@ $topbarTitle = 'Customers';
 
 <?php if ($canManageCustomers): ?>
 
-    <div class="modal-backdrop<?= $error ? ' open' : '' ?>" id="customer-modal">
+    <div class="modal-backdrop<?= $errorAction === 'create' ? ' open' : '' ?>" id="customer-modal">
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
@@ -188,13 +246,14 @@ $topbarTitle = 'Customers';
             </div>
             <div class="modal-body">
 
-                <?php if ($error): ?>
+                <?php if ($errorAction === 'create' && $error): ?>
                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
                 <form method="POST" action="">
 
                     <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="create">
 
                     <div class="form-grid single">
 
@@ -225,6 +284,68 @@ $topbarTitle = 'Customers';
                     </div>
 
                 </form>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop<?= $editingCustomer ? ' open' : '' ?>" id="edit-customer-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('person', 16) ?></span>
+                    Edit Customer
+                </div>
+                <button type="button" class="modal-close" data-close-modal="edit-customer-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($errorAction === 'update' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($editingCustomer): ?>
+                    <form method="POST" action="">
+
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="update">
+                        <input type="hidden" name="customer_id" value="<?= (int) $editingCustomer['id'] ?>">
+
+                        <div class="form-grid single">
+
+                            <div class="form-field">
+                                <label>Full name</label>
+                                <input type="text" name="name" value="<?= htmlspecialchars($editingCustomer['name']) ?>" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Phone</label>
+                                <input type="tel" name="phone" value="<?= htmlspecialchars($editingCustomer['phone']) ?>" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Email (optional)</label>
+                                <input type="email" name="email" value="<?= htmlspecialchars($editingCustomer['email'] ?? '') ?>">
+                            </div>
+
+                            <div class="form-field">
+                                <label>Address (optional)</label>
+                                <textarea name="address"><?= htmlspecialchars($editingCustomer['address'] ?? '') ?></textarea>
+                            </div>
+
+                            <div class="form-field">
+                                <label>GSTIN (optional)</label>
+                                <input type="text" name="gstin" placeholder="For B2B invoices" value="<?= htmlspecialchars($editingCustomer['gstin'] ?? '') ?>">
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
+                        </div>
+
+                    </form>
+                <?php endif; ?>
 
             </div>
         </div>

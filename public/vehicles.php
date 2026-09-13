@@ -21,13 +21,16 @@ $organizationId = $user['organization_id'];
 $canManageVehicles = user_can($user, 'vehicles.manage');
 
 $error = null;
+$errorAction = null;
 $preselectedCustomerId = isset($_GET['customer_id']) ? (int) $_GET['customer_id'] : null;
+$editingVehicleId = (int) ($_GET['edit'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
     require_permission($user, 'vehicles.manage');
 
+    $action = $_POST['action'] ?? 'create';
     $customerId = (int) ($_POST['customer_id'] ?? 0);
     $registrationNo = strtoupper(trim($_POST['registration_no'] ?? ''));
     $make = trim($_POST['make'] ?? '');
@@ -35,28 +38,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $year = trim($_POST['year'] ?? '');
     $fuelType = $_POST['fuel_type'] ?? 'petrol';
 
-    if (!$customerId || $registrationNo === '' || $make === '' || $model === '') {
-        $error = 'Customer, registration number, make and model are required.';
-        $preselectedCustomerId = $customerId;
+    if ($action === 'update') {
+
+        $editingVehicleId = (int) ($_POST['vehicle_id'] ?? 0);
+
+        if (!$customerId || $registrationNo === '' || $make === '' || $model === '') {
+            $error = 'Customer, registration number, make and model are required.';
+            $errorAction = 'update';
+        } else {
+            $statement = $pdo->prepare("
+                UPDATE vehicles
+                SET customer_id = :customer_id, registration_no = :registration_no, make = :make,
+                    model = :model, year = :year, fuel_type = :fuel_type, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND organization_id = :organization_id
+            ");
+            $statement->execute([
+                'customer_id' => $customerId,
+                'registration_no' => $registrationNo,
+                'make' => $make,
+                'model' => $model,
+                'year' => $year ?: null,
+                'fuel_type' => $fuelType,
+                'id' => $editingVehicleId,
+                'organization_id' => $organizationId
+            ]);
+
+            header('Location: /vehicles.php');
+            exit;
+        }
+
     } else {
 
-        $statement = $pdo->prepare("
-            INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
-            VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
-        ");
+        if (!$customerId || $registrationNo === '' || $make === '' || $model === '') {
+            $error = 'Customer, registration number, make and model are required.';
+            $errorAction = 'create';
+            $preselectedCustomerId = $customerId;
+        } else {
 
-        $statement->execute([
-            'organization_id' => $organizationId,
-            'customer_id' => $customerId,
-            'registration_no' => $registrationNo,
-            'make' => $make,
-            'model' => $model,
-            'year' => $year ?: null,
-            'fuel_type' => $fuelType
-        ]);
+            $statement = $pdo->prepare("
+                INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
+                VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
+            ");
 
-        header('Location: /vehicles.php');
-        exit;
+            $statement->execute([
+                'organization_id' => $organizationId,
+                'customer_id' => $customerId,
+                'registration_no' => $registrationNo,
+                'make' => $make,
+                'model' => $model,
+                'year' => $year ?: null,
+                'fuel_type' => $fuelType
+            ]);
+
+            header('Location: /vehicles.php');
+            exit;
+        }
     }
 }
 
@@ -94,9 +130,26 @@ $statement->bindValue('offset', paginate_offset($page), PDO::PARAM_INT);
 $statement->execute();
 $vehicles = $statement->fetchAll(PDO::FETCH_ASSOC);
 
+$editingVehicle = null;
+
+if ($editingVehicleId) {
+    $statement = $pdo->prepare("
+        SELECT id, customer_id, registration_no, make, model, year, fuel_type
+        FROM vehicles
+        WHERE id = :id AND organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $editingVehicleId, 'organization_id' => $organizationId]);
+    $editingVehicle = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$editingVehicle) {
+        header('Location: /vehicles.php');
+        exit;
+    }
+}
+
 // Open straight to the form if we arrived from "+ Add vehicle" on a
 // customer's row, or if a submission just failed and needs fixing.
-$openModalOnLoad = $error || $preselectedCustomerId;
+$openModalOnLoad = $errorAction === 'create' || $preselectedCustomerId;
 
 $activeNav = 'vehicles';
 $topbarTitle = 'Vehicles';
@@ -156,6 +209,7 @@ $topbarTitle = 'Vehicles';
                                     <th>Vehicle</th>
                                     <th>Owner</th>
                                     <th>Fuel</th>
+                                    <th></th>
                                 </tr>
                                 <?php foreach ($vehicles as $vehicle): ?>
                                     <tr>
@@ -168,6 +222,11 @@ $topbarTitle = 'Vehicles';
                                         </td>
                                         <td><?= htmlspecialchars($vehicle['customer_name']) ?></td>
                                         <td style="text-transform:capitalize;"><?= htmlspecialchars($vehicle['fuel_type']) ?></td>
+                                        <td>
+                                            <?php if ($canManageVehicles): ?>
+                                                <a href="?edit=<?= (int) $vehicle['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
@@ -196,7 +255,7 @@ $topbarTitle = 'Vehicles';
             </div>
             <div class="modal-body">
 
-                <?php if ($error): ?>
+                <?php if ($errorAction === 'create' && $error): ?>
                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
@@ -206,6 +265,7 @@ $topbarTitle = 'Vehicles';
                     <form method="POST" action="">
 
                         <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="create">
 
                         <div class="form-grid single">
 
@@ -256,6 +316,83 @@ $topbarTitle = 'Vehicles';
 
                         <div class="form-actions">
                             <button type="submit" class="button"><?= icon('check', 16) ?> Save vehicle</button>
+                        </div>
+
+                    </form>
+                <?php endif; ?>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop<?= $editingVehicle ? ' open' : '' ?>" id="edit-vehicle-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('car', 16) ?></span>
+                    Edit Vehicle
+                </div>
+                <button type="button" class="modal-close" data-close-modal="edit-vehicle-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($errorAction === 'update' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($editingVehicle): ?>
+                    <form method="POST" action="">
+
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="update">
+                        <input type="hidden" name="vehicle_id" value="<?= (int) $editingVehicle['id'] ?>">
+
+                        <div class="form-grid single">
+
+                            <div class="form-field">
+                                <label>Owner</label>
+                                <select name="customer_id" required>
+                                    <?php foreach ($customers as $customer): ?>
+                                        <option value="<?= (int) $customer['id'] ?>" <?= (int) $editingVehicle['customer_id'] === (int) $customer['id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($customer['name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Registration number</label>
+                                <input type="text" name="registration_no" value="<?= htmlspecialchars($editingVehicle['registration_no']) ?>" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Make</label>
+                                <input type="text" name="make" value="<?= htmlspecialchars($editingVehicle['make']) ?>" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Model</label>
+                                <input type="text" name="model" value="<?= htmlspecialchars($editingVehicle['model']) ?>" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Year</label>
+                                <input type="number" name="year" min="1980" max="2100" value="<?= htmlspecialchars($editingVehicle['year'] ?? '') ?>">
+                            </div>
+
+                            <div class="form-field">
+                                <label>Fuel type</label>
+                                <select name="fuel_type">
+                                    <?php foreach (['petrol' => 'Petrol', 'diesel' => 'Diesel', 'ev' => 'EV', 'hybrid' => 'Hybrid', 'cng' => 'CNG'] as $value => $label): ?>
+                                        <option value="<?= $value ?>" <?= $editingVehicle['fuel_type'] === $value ? 'selected' : '' ?>><?= $label ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
                         </div>
 
                     </form>

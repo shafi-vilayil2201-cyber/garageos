@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Security/Csrf.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -15,8 +16,40 @@ if (!$user) {
 
 require_permission($user, 'settings.manage');
 
+$organizationId = $user['organization_id'];
+$error = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    csrf_verify();
+    require_permission($user, 'settings.manage');
+
+    $name = trim($_POST['name'] ?? '');
+    $currency = trim($_POST['currency'] ?? '');
+    $taxNumber = trim($_POST['tax_number'] ?? '');
+
+    if ($name === '' || $currency === '') {
+        $error = 'Name and currency are required.';
+    } else {
+        $statement = $pdo->prepare("
+            UPDATE organizations
+            SET name = :name, currency = :currency, tax_number = :tax_number, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+        ");
+        $statement->execute([
+            'name' => $name,
+            'currency' => $currency,
+            'tax_number' => $taxNumber ?: null,
+            'id' => $organizationId
+        ]);
+
+        header('Location: /settings.php');
+        exit;
+    }
+}
+
 $statement = $pdo->prepare("SELECT * FROM organizations WHERE id = :id");
-$statement->execute(['id' => $user['organization_id']]);
+$statement->execute(['id' => $organizationId]);
 $organization = $statement->fetch(PDO::FETCH_ASSOC);
 
 $activeNav = 'settings';
@@ -60,23 +93,49 @@ $topbarTitle = 'Settings';
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="form-grid single">
-                        <div class="form-field">
-                            <label>Name</label>
-                            <div><?= htmlspecialchars($organization['name']) ?></div>
+
+                    <?php if ($error): ?>
+                        <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                    <?php endif; ?>
+
+                    <form method="POST" action="">
+                        <?= csrf_field() ?>
+                        <div class="form-grid single">
+                            <div class="form-field">
+                                <label>Name</label>
+                                <input type="text" name="name" value="<?= htmlspecialchars($organization['name']) ?>" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Currency</label>
+                                <input type="text" name="currency" value="<?= htmlspecialchars($organization['currency']) ?>" maxlength="10" required>
+                            </div>
+                            <div class="form-field">
+                                <label><?= htmlspecialchars($organization['tax_label']) ?> number (GSTIN)</label>
+                                <input type="text" name="tax_number" value="<?= htmlspecialchars($organization['tax_number'] ?? '') ?>" placeholder="e.g. 32AAAAA0000A1Z5" maxlength="50">
+                                <p class="result-meta" style="margin-top:6px;">Shown on every invoice you generate — required for a valid GST tax invoice.</p>
+                            </div>
                         </div>
-                        <div class="form-field">
-                            <label>Currency</label>
-                            <div><?= htmlspecialchars($organization['currency']) ?></div>
+                        <div class="form-actions" style="margin-top:14px;">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
                         </div>
-                        <div class="form-field">
-                            <label><?= htmlspecialchars($organization['tax_label']) ?> number</label>
-                            <div><?= htmlspecialchars($organization['tax_number'] ?? 'Not set') ?></div>
-                        </div>
-                    </div>
+                    </form>
+
                     <p class="page-description" style="margin-top:16px;">
-                        Editable branding, service catalog management, and notification templates are on the roadmap.
+                        Editable branding and notification templates are on the roadmap.
                     </p>
+                </div>
+            </div>
+
+            <div class="card" style="max-width: 480px; margin-top:20px;">
+                <div class="card-header">
+                    <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('settings', 15) ?></span>
+                        Service catalog
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="page-description">Add, price, and edit the services you offer.</p>
+                    <a href="/services.php" class="button secondary" style="margin-top:10px;"><?= icon('settings', 16) ?> Manage services</a>
                 </div>
             </div>
 

@@ -20,9 +20,10 @@ $organizationId = $user['organization_id'];
 $invoiceId = (int) ($_GET['id'] ?? 0);
 
 $statement = $pdo->prepare("
-    SELECT i.*, c.name AS customer_name, c.phone AS customer_phone,
+    SELECT i.*, c.name AS customer_name, c.phone AS customer_phone, c.gstin AS customer_gstin,
            jc.job_no, v.registration_no, v.make, v.model,
-           o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address
+           o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address,
+           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number
     FROM invoices i
     INNER JOIN customers c ON c.id = i.customer_id
     INNER JOIN job_cards jc ON jc.id = i.job_card_id
@@ -163,24 +164,32 @@ $topbarTitle = $invoice['invoice_no'];
             <div class="content-grid" style="grid-template-columns: 1fr 340px;">
 
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="flex-direction:column; align-items:flex-start; gap:4px;">
                         <div class="card-header-title">
                             <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                            <?= htmlspecialchars($invoice['organization_name']) ?>
+                            Tax Invoice — <?= htmlspecialchars($invoice['organization_name']) ?>
                         </div>
-                        <span style="font-weight:400; color:var(--muted); font-size:13px;">
+                        <div style="font-weight:400; color:var(--muted); font-size:12.5px;">
+                            <?php if ($invoice['organization_tax_number']): ?>
+                                <?= htmlspecialchars($invoice['organization_tax_label']) ?>IN: <?= htmlspecialchars($invoice['organization_tax_number']) ?> ·
+                            <?php endif; ?>
                             Billed to <?= htmlspecialchars($invoice['customer_name']) ?>
-                        </span>
+                            <?php if ($invoice['customer_gstin']): ?>
+                                (GSTIN: <?= htmlspecialchars($invoice['customer_gstin']) ?>)
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <div class="card-body" style="padding:0;">
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr>
+                                <tr><th>Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit price</th><th>GST</th><th>Total</th></tr>
                                 <?php foreach ($items as $item): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($item['description']) ?></td>
+                                        <td><?= htmlspecialchars($item['hsn_sac_code'] ?? '—') ?></td>
                                         <td class="num"><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
                                         <td class="num">₹<?= number_format($item['unit_price'], 2) ?></td>
+                                        <td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td>
                                         <td class="num">₹<?= number_format($item['total'], 2) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -191,11 +200,17 @@ $topbarTitle = $invoice['invoice_no'];
                                 <span>Subtotal</span><strong class="num">₹<?= number_format($invoice['subtotal'], 2) ?></strong>
                             </div>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>Tax</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
+                                <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                            </div>
+                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
                             </div>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); margin-top:6px; font-size:18px;">
                                 <span>Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
                             </div>
+                            <p class="result-meta" style="margin-top:10px;">
+                                GST shown as CGST + SGST (intra-state sale). For an inter-state customer, this should be shown as IGST instead — not yet handled automatically.
+                            </p>
                         </div>
                     </div>
                 </div>
