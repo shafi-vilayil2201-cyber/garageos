@@ -90,7 +90,21 @@ document.addEventListener('DOMContentLoaded', () =>
         }
     });
 
-    if (collapseToggle && app)
+    // The tablet icon-rail collapse concept doesn't apply on a phone —
+    // it uses the off-canvas drawer instead. .force-mobile is set (see
+    // sidebar.php) whenever the true device width is a phone's, even if
+    // the layout viewport is spoofed wide (iOS Safari's per-site
+    // "Request Desktop Website" toggle) and would otherwise still match
+    // the tablet @media tier. Stripping/skipping a stale collapsed
+    // preference here avoids the drawer opening as an icon-only rail.
+    const isForceMobile = document.documentElement.classList.contains('force-mobile');
+
+    if (isForceMobile && app)
+    {
+        app.classList.remove('sidebar-collapsed');
+    }
+
+    if (collapseToggle && app && !isForceMobile)
     {
         // Persisted across page loads — this is a multi-page app, not an
         // SPA, so in-memory JS state alone wouldn't survive navigation.

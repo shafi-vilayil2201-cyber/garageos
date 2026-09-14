@@ -1435,3 +1435,48 @@ table.data-table {
         height: 44px;
     }
 }
+
+/* Fallback for the sidebar/nav tier when the layout viewport can't be
+   trusted — notably iOS Safari's per-site "Request Desktop Website"
+   toggle, which spoofs a desktop-width viewport so @media (max-width)
+   never matches even on a phone (see sidebar.php, which adds
+   .force-mobile to <html> using the true screen.width instead). Mirrors
+   only the sidebar/topbar rules from the mobile tier above — the rest
+   of that tier's cosmetic tweaks (page padding, modal width, etc.) just
+   render at desktop proportions and get visually scaled down by the
+   OS under Desktop Site mode, which isn't the reported issue. */
+html.force-mobile .hamburger-button {
+    display: flex;
+}
+
+html.force-mobile .sidebar-collapse-toggle {
+    display: none;
+}
+
+html.force-mobile .main {
+    margin-left: 0;
+    width: 100%;
+}
+
+html.force-mobile .sidebar {
+    z-index: 110;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+}
+
+html.force-mobile .app.mobile-nav-open .sidebar {
+    transform: translateX(0);
+}
+
+html.force-mobile .nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 18, 15, 0.55);
+    z-index: 105;
+}
+
+html.force-mobile .app.mobile-nav-open .nav-backdrop {
+    display: block;
+}

@@ -29,6 +29,26 @@ $showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage
 $showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manage');
 
 ?>
+<script>
+// iOS Safari has a per-site "Request Desktop Website" toggle (separate
+// from Chrome's own per-site setting) that makes it ignore the
+// viewport meta tag and report a spoofed, desktop-sized layout
+// viewport — so a phone can match the tablet @media tier instead of
+// mobile. screen.width is the true physical device width and isn't
+// affected by that spoofing. Runs synchronously, before the sidebar
+// markup below is parsed, so the correct tier applies from first
+// paint instead of flashing the wrong one.
+(function () {
+    try {
+        if (window.screen && window.screen.width <= 767) {
+            document.documentElement.classList.add('force-mobile');
+        }
+    } catch (error) {
+        // Not worth failing over — worst case, the normal @media tiers apply.
+    }
+})();
+</script>
+
 <div class="nav-backdrop" id="nav-backdrop"></div>
 
 <aside class="sidebar">
