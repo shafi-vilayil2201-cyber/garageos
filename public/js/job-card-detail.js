@@ -1,7 +1,9 @@
 const partSearchInput = document.getElementById('part-search');
-const partSearchButton = document.getElementById('part-search-button');
 const partResults = document.getElementById('part-results');
 const addPartForm = document.getElementById('add-part-form');
+
+let partSearchAbortController = null;
+let partSearchDebounceTimer = null;
 
 
 async function searchParts()
@@ -16,16 +18,27 @@ async function searchParts()
         return;
     }
 
-    partResults.innerHTML = `
-        <div class="empty-state">
-            Searching...
-        </div>
-    `;
+    if (partSearchAbortController)
+    {
+        partSearchAbortController.abort();
+    }
+
+    partSearchAbortController = new AbortController();
+
+    if (!partResults.children.length)
+    {
+        partResults.innerHTML = `
+            <div class="empty-state">
+                Searching...
+            </div>
+        `;
+    }
 
     try
     {
         const response = await fetch(
-            `/api/parts/search.php?q=${encodeURIComponent(query)}`
+            `/api/parts/search.php?q=${encodeURIComponent(query)}`,
+            { signal: partSearchAbortController.signal }
         );
 
         const data = await response.json();
@@ -73,6 +86,11 @@ async function searchParts()
 
     } catch (error)
     {
+        if (error.name === 'AbortError')
+        {
+            return;
+        }
+
         console.error(error);
 
         partResults.innerHTML = `
@@ -111,16 +129,19 @@ function escapeHtml(value)
 }
 
 
-if (partSearchButton)
+if (partSearchInput)
 {
-    partSearchButton.addEventListener('click', searchParts);
+    partSearchInput.addEventListener('input', () =>
+    {
+        clearTimeout(partSearchDebounceTimer);
+        partSearchDebounceTimer = setTimeout(searchParts, 300);
+    });
 
     partSearchInput.addEventListener('keydown', event =>
     {
         if (event.key === 'Enter')
         {
             event.preventDefault();
-            searchParts();
         }
     });
 }

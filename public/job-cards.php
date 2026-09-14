@@ -131,6 +131,9 @@ $topbarTitle = 'Job Cards';
                     </div>
                 </div>
             <?php else: ?>
+                <div class="search-row">
+                    <input type="search" id="job-card-filter" placeholder="Search by job #, registration, or customer..." autocomplete="off">
+                </div>
                 <div class="kanban" id="kanban-board">
                     <?php foreach ($columns as $statusKey => $statusLabel): ?>
                         <div class="kanban-column col-<?= $statusKey ?>" data-status="<?= $statusKey ?>">
@@ -196,6 +199,26 @@ $topbarTitle = 'Job Cards';
     <script src="/js/modal.js"></script>
     <script src="/js/vehicle-intake.js"></script>
     <script>initVehicleIntake('jobcard');</script>
+
+<?php endif; ?>
+
+<?php if (!empty($jobCards)): ?>
+
+    <script>
+        // Every card's text (job #, registration, make/model, customer) is
+        // already rendered on the page, so filtering is pure client-side
+        // text matching — no server round trip needed.
+        document.getElementById('job-card-filter').addEventListener('input', event =>
+        {
+            const query = event.target.value.trim().toLowerCase();
+
+            document.querySelectorAll('.kanban-card-link').forEach(card =>
+            {
+                const matches = !query || card.textContent.toLowerCase().includes(query);
+                card.hidden = !matches;
+            });
+        });
+    </script>
 
 <?php endif; ?>
 

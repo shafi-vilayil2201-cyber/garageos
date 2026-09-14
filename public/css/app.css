@@ -450,6 +450,10 @@ textarea:focus-visible,
     color: var(--primary-dark);
 }
 
+.muted {
+    color: var(--muted);
+}
+
 .link-action {
     display: inline-flex;
     align-items: center;
@@ -798,6 +802,10 @@ table.data-table {
 
 .kanban-card-link {
     display: block;
+}
+
+.kanban-card-link[hidden] {
+    display: none;
 }
 
 .kanban-card-link[draggable="true"] {

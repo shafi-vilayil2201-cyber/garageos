@@ -650,7 +650,6 @@ $topbarTitle = $jobCard['job_no'];
                 <?php endif; ?>
                 <div class="search-row" style="margin-bottom:10px;">
                     <input type="search" id="part-search" placeholder="Search part by name or SKU..." autocomplete="off">
-                    <button type="button" class="button secondary" id="part-search-button"><?= icon('search', 16) ?> Search</button>
                 </div>
                 <div id="part-results"></div>
 

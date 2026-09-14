@@ -194,6 +194,9 @@ $topbarTitle = 'Vehicles';
                         <span class="icon-badge"><?= icon('car', 15) ?></span>
                         All vehicles
                     </div>
+                    <?php if (!empty($vehicles)): ?>
+                        <input type="search" id="vehicle-filter" placeholder="Search by registration, make, or owner..." autocomplete="off" style="max-width:280px;">
+                    <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($vehicles)): ?>
@@ -204,13 +207,16 @@ $topbarTitle = 'Vehicles';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr>
-                                    <th>Registration</th>
-                                    <th>Vehicle</th>
-                                    <th>Owner</th>
-                                    <th>Fuel</th>
-                                    <th></th>
-                                </tr>
+                                <thead>
+                                    <tr>
+                                        <th>Registration</th>
+                                        <th>Vehicle</th>
+                                        <th>Owner</th>
+                                        <th>Fuel</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vehicles-tbody">
                                 <?php foreach ($vehicles as $vehicle): ?>
                                     <tr>
                                         <td><strong><?= htmlspecialchars($vehicle['registration_no']) ?></strong></td>
@@ -229,9 +235,10 @@ $topbarTitle = 'Vehicles';
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
+                                </tbody>
                             </table>
                         </div>
-                        <?= render_pagination($page, $totalVehicles) ?>
+                        <div id="vehicles-pagination"><?= render_pagination($page, $totalVehicles) ?></div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -403,6 +410,40 @@ $topbarTitle = 'Vehicles';
     </div>
 
     <script src="/js/modal.js"></script>
+
+<?php endif; ?>
+
+<?php if (!empty($vehicles)): ?>
+
+    <script src="/js/live-table-search.js"></script>
+    <script>
+        const canManageVehicles = <?= json_encode($canManageVehicles) ?>;
+        const editIcon = <?= json_encode(icon('settings', 14)) ?>;
+
+        initLiveTableSearch({
+            inputId: 'vehicle-filter',
+            tbodyId: 'vehicles-tbody',
+            paginationId: 'vehicles-pagination',
+            endpoint: '/api/vehicles/search.php',
+            resultsKey: 'vehicles',
+            colspan: 5,
+            emptyMessage: 'No vehicles found.',
+            renderRow: (vehicle, escapeHtml) => `
+                <tr>
+                    <td><strong>${escapeHtml(vehicle.registration_no)}</strong></td>
+                    <td>
+                        ${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model)}
+                        ${vehicle.year ? `<div class="result-meta">${escapeHtml(vehicle.year)}</div>` : ''}
+                    </td>
+                    <td>${escapeHtml(vehicle.customer_name)}</td>
+                    <td style="text-transform:capitalize;">${escapeHtml(vehicle.fuel_type)}</td>
+                    <td>
+                        ${canManageVehicles ? `<a href="?edit=${vehicle.id}" class="link-action">${editIcon} Edit</a>` : ''}
+                    </td>
+                </tr>
+            `
+        });
+    </script>
 
 <?php endif; ?>
 

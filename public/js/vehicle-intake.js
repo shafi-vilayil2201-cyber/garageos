@@ -3,7 +3,6 @@ function initVehicleIntake(prefix)
     const el = id => document.getElementById(`${prefix}-${id}`);
 
     const searchInput = el('vehicle-search');
-    const searchButton = el('vehicle-search-button');
     const resultsContainer = el('vehicle-results');
     const notFound = el('vehicle-not-found');
     const addNewButton = el('add-new-button');
@@ -45,6 +44,9 @@ function initVehicleIntake(prefix)
     }
 
 
+    let searchAbortController = null;
+    let debounceTimer = null;
+
     async function searchVehicles()
     {
         const query = searchInput.value.trim();
@@ -57,16 +59,27 @@ function initVehicleIntake(prefix)
             return;
         }
 
-        resultsContainer.innerHTML = `
-            <div class="empty-state">
-                Searching...
-            </div>
-        `;
+        if (searchAbortController)
+        {
+            searchAbortController.abort();
+        }
+
+        searchAbortController = new AbortController();
+
+        if (!resultsContainer.children.length)
+        {
+            resultsContainer.innerHTML = `
+                <div class="empty-state">
+                    Searching...
+                </div>
+            `;
+        }
 
         try
         {
             const response = await fetch(
-                `/api/vehicles/search.php?q=${encodeURIComponent(query)}`
+                `/api/vehicles/search.php?q=${encodeURIComponent(query)}`,
+                { signal: searchAbortController.signal }
             );
 
             const data = await response.json();
@@ -113,6 +126,11 @@ function initVehicleIntake(prefix)
 
         } catch (error)
         {
+            if (error.name === 'AbortError')
+            {
+                return;
+            }
+
             console.error(error);
 
             resultsContainer.innerHTML = `
@@ -181,14 +199,17 @@ function initVehicleIntake(prefix)
     }
 
 
-    searchButton.addEventListener('click', searchVehicles);
+    searchInput.addEventListener('input', () =>
+    {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(searchVehicles, 300);
+    });
 
     searchInput.addEventListener('keydown', event =>
     {
         if (event.key === 'Enter')
         {
             event.preventDefault();
-            searchVehicles();
         }
     });
 

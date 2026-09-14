@@ -183,6 +183,9 @@ $topbarTitle = 'Customers';
                         <span class="icon-badge"><?= icon('person', 15) ?></span>
                         All customers
                     </div>
+                    <?php if (!empty($customers)): ?>
+                        <input type="search" id="customer-filter" placeholder="Search by name or phone..." autocomplete="off" style="max-width:260px;">
+                    <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($customers)): ?>
@@ -193,13 +196,16 @@ $topbarTitle = 'Customers';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Phone</th>
-                                    <th>Vehicles</th>
-                                    <th></th>
-                                    <th></th>
-                                </tr>
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Vehicles</th>
+                                        <th></th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customers-tbody">
                                 <?php foreach ($customers as $customer): ?>
                                     <tr>
                                         <td>
@@ -220,9 +226,10 @@ $topbarTitle = 'Customers';
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
+                                </tbody>
                             </table>
                         </div>
-                        <?= render_pagination($page, $totalCustomers) ?>
+                        <div id="customers-pagination"><?= render_pagination($page, $totalCustomers) ?></div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -352,6 +359,43 @@ $topbarTitle = 'Customers';
     </div>
 
     <script src="/js/modal.js"></script>
+
+<?php endif; ?>
+
+<?php if (!empty($customers)): ?>
+
+    <script src="/js/live-table-search.js"></script>
+    <script>
+        const canManageCustomers = <?= json_encode($canManageCustomers) ?>;
+        const plusIcon = <?= json_encode(icon('plus', 14)) ?>;
+        const editIcon = <?= json_encode(icon('settings', 14)) ?>;
+
+        initLiveTableSearch({
+            inputId: 'customer-filter',
+            tbodyId: 'customers-tbody',
+            paginationId: 'customers-pagination',
+            endpoint: '/api/customers/search.php',
+            resultsKey: 'customers',
+            colspan: 5,
+            emptyMessage: 'No customers found.',
+            renderRow: (customer, escapeHtml) => `
+                <tr>
+                    <td>
+                        <strong>${escapeHtml(customer.name)}</strong>
+                        <div class="result-meta">${escapeHtml(customer.code)}</div>
+                    </td>
+                    <td>${escapeHtml(customer.phone)}</td>
+                    <td class="num">${Number(customer.vehicle_count)}</td>
+                    <td>
+                        <a href="/vehicles.php?customer_id=${customer.id}" class="link-action">${plusIcon} Add vehicle</a>
+                    </td>
+                    <td>
+                        ${canManageCustomers ? `<a href="?edit=${customer.id}" class="link-action">${editIcon} Edit</a>` : ''}
+                    </td>
+                </tr>
+            `
+        });
+    </script>
 
 <?php endif; ?>
 

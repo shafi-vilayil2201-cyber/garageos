@@ -24,7 +24,7 @@ $query = trim($_GET['q'] ?? '');
 
 if ($query === '') {
     echo json_encode([
-        'vehicles' => []
+        'customers' => []
     ]);
 
     exit;
@@ -32,26 +32,21 @@ if ($query === '') {
 
 $statement = $pdo->prepare("
     SELECT
-        v.id,
-        v.registration_no,
-        v.make,
-        v.model,
-        v.year,
-        v.fuel_type,
-        c.id AS customer_id,
-        c.name AS customer_name,
-        c.phone AS customer_phone
-    FROM vehicles v
-    INNER JOIN customers c ON c.id = v.customer_id
-    WHERE v.organization_id = :organization_id
+        c.id,
+        c.name,
+        c.code,
+        c.phone,
+        (SELECT COUNT(*) FROM vehicles v WHERE v.customer_id = c.id) AS vehicle_count
+    FROM customers c
+    WHERE c.organization_id = :organization_id
       AND (
-          v.registration_no ILIKE :query
+          c.name ILIKE :query
           OR c.phone ILIKE :query
-          OR c.name ILIKE :query
+          OR c.code ILIKE :query
       )
     ORDER BY
-        CASE WHEN v.registration_no ILIKE :prefix OR c.name ILIKE :prefix THEN 0 ELSE 1 END,
-        v.registration_no
+        CASE WHEN c.name ILIKE :prefix OR c.phone ILIKE :prefix THEN 0 ELSE 1 END,
+        c.name
     LIMIT 20
 ");
 
@@ -64,8 +59,8 @@ $statement->execute([
     'prefix' => $prefixQuery
 ]);
 
-$vehicles = $statement->fetchAll(PDO::FETCH_ASSOC);
+$customers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 echo json_encode([
-    'vehicles' => $vehicles
+    'customers' => $customers
 ]);

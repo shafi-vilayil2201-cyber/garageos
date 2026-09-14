@@ -231,6 +231,9 @@ $topbarTitle = 'Parts';
                         <span class="icon-badge"><?= icon('box', 15) ?></span>
                         Inventory
                     </div>
+                    <?php if (!empty($parts)): ?>
+                        <input type="search" id="part-filter" placeholder="Search by name or SKU..." autocomplete="off" style="max-width:260px;">
+                    <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($parts)): ?>
@@ -241,7 +244,10 @@ $topbarTitle = 'Parts';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Part</th><th>SKU</th><th>Price</th><th>Tax</th><th>Stock</th><th></th></tr>
+                                <thead>
+                                    <tr><th>Part</th><th>SKU</th><th>Price</th><th>Tax</th><th>Stock</th><th></th></tr>
+                                </thead>
+                                <tbody id="parts-tbody">
                                 <?php foreach ($parts as $part): ?>
                                     <?php $low = $part['stock_quantity'] <= $part['reorder_level']; ?>
                                     <tr>

@@ -36,6 +36,9 @@ $statement = $pdo->prepare("
         p.name,
         p.sku,
         p.selling_price,
+        p.reorder_level,
+        p.tax_rate,
+        p.hsn_code,
         COALESCE(i.quantity, 0) AS stock_quantity
     FROM parts p
     LEFT JOIN inventory i
@@ -47,16 +50,20 @@ $statement = $pdo->prepare("
           p.name ILIKE :query
           OR p.sku ILIKE :query
       )
-    ORDER BY p.name
+    ORDER BY
+        CASE WHEN p.name ILIKE :prefix OR p.sku ILIKE :prefix THEN 0 ELSE 1 END,
+        p.name
     LIMIT 20
 ");
 
 $searchQuery = '%' . $query . '%';
+$prefixQuery = $query . '%';
 
 $statement->execute([
     'organization_id' => $user['organization_id'],
     'branch_id' => $user['branch_id'],
-    'query' => $searchQuery
+    'query' => $searchQuery,
+    'prefix' => $prefixQuery
 ]);
 
 $parts = $statement->fetchAll(PDO::FETCH_ASSOC);

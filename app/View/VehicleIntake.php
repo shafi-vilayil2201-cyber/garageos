@@ -29,7 +29,6 @@ function vehicle_intake_form(
             placeholder="Registration no. or customer phone..."
             autocomplete="off"
         >
-        <button type="button" class="button" id="<?= $prefix ?>-vehicle-search-button"><?= icon('search', 16) ?> Search</button>
     </div>
 
     <div class="intake-add-new-row">
