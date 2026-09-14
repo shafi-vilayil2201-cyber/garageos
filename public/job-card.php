@@ -454,6 +454,8 @@ $topbarTitle = $jobCard['job_no'];
 
         <section class="page">
 
+            <a href="/job-cards.php" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to Job Cards</a>
+
             <div class="page-header">
                 <div>
                     <h1 class="page-title">
@@ -490,7 +492,7 @@ $topbarTitle = $jobCard['job_no'];
                 <div class="form-error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 340px;">
+            <div class="content-grid content-grid-aside">
 
                 <div class="stack">
 

@@ -183,24 +183,89 @@ textarea:focus-visible,
     color: var(--primary);
 }
 
+/* Tablet-only manual collapse toggle — hidden everywhere else; shown
+   by the tablet media query below. */
+.sidebar-collapse-toggle {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: 4px 0 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--sidebar-active);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sidebar-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.sidebar-collapse-toggle:hover {
+    background: var(--sidebar-active);
+    color: #ffffff;
+}
+
+/* Mobile-only off-canvas drawer scrim — hidden everywhere else; shown
+   by the mobile media query below. */
+.nav-backdrop {
+    display: none;
+}
+
 /* Main area */
 
 .main {
     margin-left: 240px;
     width: calc(100% - 240px);
     min-height: 100vh;
+    /* .app is a flex container — without this, wide content (a table,
+       a grid track) can force .main itself wider than the viewport,
+       causing the whole page to scroll horizontally instead of just
+       the overflowing element. */
+    min-width: 0;
 }
 
 /* Top bar */
 
 .topbar {
-    height: 72px;
+    height: 58px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 32px;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+/* Mobile-only nav toggle — hidden everywhere else; shown by the
+   mobile media query below. */
+.hamburger-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.hamburger-button:hover {
+    background: var(--surface-sunken);
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
 }
 
 .topbar-title {
@@ -411,6 +476,26 @@ textarea:focus-visible,
     margin-top: 20px;
 }
 
+/* Grid items default to min-width:auto (content-sized) — without this,
+   a wide table inside a card can force the whole grid track wider than
+   the viewport, bypassing the table's own .table-wrap scroll entirely. */
+.content-grid > *,
+.stats > * {
+    min-width: 0;
+}
+
+/* Invoice and job-card pages: a narrower, fixed-width right column
+   (balance due / status / running total) rather than the usual 2fr:1fr
+   split. */
+.content-grid-aside {
+    grid-template-columns: 1fr 340px;
+}
+
+/* Reports page: a slightly wider left column than the 2fr:1fr default. */
+.content-grid-reports {
+    grid-template-columns: 1.4fr 1fr;
+}
+
 .card-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
@@ -454,6 +539,12 @@ textarea:focus-visible,
     color: var(--muted);
 }
 
+/* The live-search box shown in a card-header, next to its title */
+.header-search {
+    max-width: 260px;
+    width: 100%;
+}
+
 .link-action {
     display: inline-flex;
     align-items: center;
@@ -461,6 +552,7 @@ textarea:focus-visible,
     font-size: 13px;
     font-weight: 600;
     color: var(--primary-dark);
+    white-space: nowrap;
 }
 
 .link-action:hover {
@@ -694,6 +786,19 @@ table.data-table {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* Date/month picker in a card-header (Attendance, Payroll) — the native
+   input stays functional but hidden on mobile in favor of a compact
+   icon button, since the full input plus a Generate/label button
+   together don't fit a narrow header without wrapping badly. */
+.header-date-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.header-date-trigger {
+    display: none;
 }
 
 /* Search / results (job card intake, parts lookup) */
@@ -1138,7 +1243,10 @@ table.data-table {
     overflow-y: auto;
 }
 
-/* Responsive */
+/* Responsive
+   Three tiers: desktop (>=1024px, untouched baseline), tablet
+   (768-1023px, same layout as desktop but with an optional manual
+   sidebar collapse), mobile (<=767px, off-canvas nav drawer). */
 
 @media (max-width: 1100px) {
     .kanban {
@@ -1152,7 +1260,9 @@ table.data-table {
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .content-grid {
+    .content-grid,
+    .content-grid-aside,
+    .content-grid-reports {
         grid-template-columns: 1fr;
     }
 
@@ -1161,42 +1271,167 @@ table.data-table {
     }
 }
 
-@media (max-width: 700px) {
-    .sidebar {
+/* Tablet: sidebar stays exactly like desktop by default — only the
+   collapse toggle and the .sidebar-collapsed effect exist in this
+   range, so resizing past it (either direction) always lands back on
+   a clean, correct state with no manual class to fight. */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .sidebar-collapse-toggle {
+        display: flex;
+    }
+
+    .app.sidebar-collapsed .sidebar {
         width: 72px;
         padding: 20px 8px;
     }
 
-    .brand-name,
-    .brand-subtitle,
-    .nav-label,
-    .nav-item span:last-child,
-    .sidebar-footer {
+    .app.sidebar-collapsed .brand-name,
+    .app.sidebar-collapsed .brand-subtitle,
+    .app.sidebar-collapsed .nav-label,
+    .app.sidebar-collapsed .nav-item span:last-child,
+    .app.sidebar-collapsed .sidebar-footer,
+    .app.sidebar-collapsed .sidebar-collapse-toggle span {
         display: none;
     }
 
-    .brand {
+    .app.sidebar-collapsed .brand {
         padding-left: 10px;
     }
 
-    .main {
+    .app.sidebar-collapsed .main {
         margin-left: 72px;
         width: calc(100% - 72px);
     }
+}
+
+/* Mobile: the sidebar becomes a hidden off-canvas drawer (full width,
+   labeled — it only appears on demand, so it can afford the space
+   the tablet rail can't) opened by the topbar hamburger button. */
+@media (max-width: 767px) {
+    .hamburger-button {
+        display: flex;
+    }
+
+    .sidebar-collapse-toggle {
+        display: none;
+    }
+
+    .main {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .sidebar {
+        z-index: 110;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .app.mobile-nav-open .sidebar {
+        transform: translateX(0);
+    }
+
+    .nav-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 18, 15, 0.55);
+        z-index: 105;
+    }
+
+    .app.mobile-nav-open .nav-backdrop {
+        display: block;
+    }
+
+    /* A drawer that only appears on demand can afford roomier tap
+       targets than the always-visible desktop/tablet rail. */
+    .nav-item {
+        padding: 12px;
+        font-size: 15px;
+    }
 
     .topbar {
-        padding: 0 20px;
+        padding: 0 16px;
+    }
+
+    .topbar-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .user-menu {
+        gap: 8px;
+    }
+
+    .user-menu-name {
+        display: none;
+    }
+
+    .logout-link span {
+        display: none;
     }
 
     .page {
-        padding: 20px;
+        padding: 16px;
     }
 
-    .stats {
-        grid-template-columns: 1fr;
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
     }
 
+    .page-header .button {
+        width: 100%;
+    }
+
+    .stats,
     .kanban {
         grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions .button {
+        width: 100%;
+    }
+
+    .header-search {
+        max-width: none !important;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .header-date-trigger {
+        display: inline-flex;
+    }
+
+    .header-date-wrap input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .modal-backdrop {
+        padding: 0;
+    }
+
+    .modal {
+        max-width: none;
+        min-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+
+    .data-table select,
+    .data-table input[type="number"] {
+        height: 44px;
     }
 }

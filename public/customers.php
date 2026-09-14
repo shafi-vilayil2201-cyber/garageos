@@ -184,7 +184,7 @@ $topbarTitle = 'Customers';
                         All customers
                     </div>
                     <?php if (!empty($customers)): ?>
-                        <input type="search" id="customer-filter" placeholder="Search by name or phone..." autocomplete="off" style="max-width:260px;">
+                        <input type="search" id="customer-filter" class="header-search" placeholder="Search by name or phone..." autocomplete="off">
                     <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">

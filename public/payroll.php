@@ -175,7 +175,10 @@ $topbarTitle = 'Payroll';
                     </div>
                     <div style="display:flex; gap:10px; align-items:center;">
                         <form method="GET" action="">
-                            <input type="month" name="month" value="<?= htmlspecialchars($periodMonth) ?>" onchange="this.form.submit()">
+                            <div class="header-date-wrap">
+                                <button type="button" class="button secondary header-date-trigger" aria-label="Choose month" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?></button>
+                                <input type="month" name="month" value="<?= htmlspecialchars($periodMonth) ?>" onchange="this.form.submit()">
+                            </div>
                         </form>
                         <form method="POST" action="">
                             <?= csrf_field() ?>

@@ -29,12 +29,19 @@ $showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage
 $showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manage');
 
 ?>
+<div class="nav-backdrop" id="nav-backdrop"></div>
+
 <aside class="sidebar">
 
     <div class="brand">
         <div class="brand-name"><?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?></div>
         <div class="brand-subtitle">Workshop management</div>
     </div>
+
+    <button type="button" class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-label="Collapse sidebar">
+        <?= icon('chevron-left', 16) ?>
+        <span>Collapse</span>
+    </button>
 
     <nav>
 
@@ -135,3 +142,5 @@ $showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manag
     </div>
 
 </aside>
+
+<script src="/js/responsive-nav.js"></script>

@@ -118,7 +118,7 @@ $topbarTitle = 'Reports';
                 </div>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1.4fr 1fr;">
+            <div class="content-grid content-grid-reports">
 
                 <div class="card">
                     <div class="card-header">

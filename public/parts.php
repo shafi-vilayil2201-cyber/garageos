@@ -333,7 +333,7 @@ $topbarTitle = 'Parts';
                         Inventory
                     </div>
                     <?php if (!empty($parts)): ?>
-                        <input type="search" id="part-filter" placeholder="Search by name or SKU..." autocomplete="off" style="max-width:260px;">
+                        <input type="search" id="part-filter" class="header-search" placeholder="Search by name or SKU..." autocomplete="off">
                     <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">
@@ -370,8 +370,10 @@ $topbarTitle = 'Parts';
                                         </td>
                                         <td>
                                             <?php if ($canManageParts): ?>
-                                                <a href="?adjust=<?= (int) $part['id'] ?>" class="link-action" style="margin-right:14px;"><?= icon('box', 14) ?> Adjust stock</a>
-                                                <a href="?edit=<?= (int) $part['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
+                                                <div class="row-actions">
+                                                    <a href="?adjust=<?= (int) $part['id'] ?>" class="link-action"><?= icon('box', 14) ?> Adjust stock</a>
+                                                    <a href="?edit=<?= (int) $part['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
+                                                </div>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -609,7 +611,7 @@ $topbarTitle = 'Parts';
                             </span>
                         </td>
                         <td>
-                            ${canManageParts ? `<a href="?adjust=${part.id}" class="link-action" style="margin-right:14px;">${adjustIcon} Adjust stock</a><a href="?edit=${part.id}" class="link-action">${editIcon} Edit</a>` : ''}
+                            ${canManageParts ? `<div class="row-actions"><a href="?adjust=${part.id}" class="link-action">${adjustIcon} Adjust stock</a><a href="?edit=${part.id}" class="link-action">${editIcon} Edit</a></div>` : ''}
                         </td>
                     </tr>
                 `;

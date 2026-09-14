@@ -195,7 +195,7 @@ $topbarTitle = 'Vehicles';
                         All vehicles
                     </div>
                     <?php if (!empty($vehicles)): ?>
-                        <input type="search" id="vehicle-filter" placeholder="Search by registration, make, or owner..." autocomplete="off" style="max-width:280px;">
+                        <input type="search" id="vehicle-filter" class="header-search" placeholder="Search by registration, make, or owner..." autocomplete="off">
                     <?php endif; ?>
                 </div>
                 <div class="card-body" style="padding:0;">

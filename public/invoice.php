@@ -243,7 +243,7 @@ $topbarTitle = $invoice['invoice_no'];
                 <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
             </div>
 
-            <div class="content-grid" style="grid-template-columns: 1fr 340px;">
+            <div class="content-grid content-grid-aside">
 
                 <div class="card">
                     <div class="card-header" style="flex-direction:column; align-items:flex-start; gap:4px;">
