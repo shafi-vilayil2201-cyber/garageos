@@ -23,7 +23,8 @@ $statement = $pdo->prepare("
     SELECT i.*, c.name AS customer_name, c.phone AS customer_phone, c.gstin AS customer_gstin,
            jc.job_no, v.registration_no, v.make, v.model,
            o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address,
-           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number
+           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number,
+           o.default_tax_rate AS organization_default_tax_rate
     FROM invoices i
     INNER JOIN customers c ON c.id = i.customer_id
     INNER JOIN job_cards jc ON jc.id = i.job_card_id
@@ -40,61 +41,142 @@ if (!$invoice) {
 }
 
 $error = null;
+$errorAction = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
     require_permission($user, 'invoices.manage');
 
-    $method = $_POST['method'] ?? '';
-    $amount = (float) ($_POST['amount'] ?? 0);
-    $referenceNo = trim($_POST['reference_no'] ?? '');
+    $action = $_POST['action'] ?? 'record_payment';
+    $errorAction = $action;
 
-    $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
+    if ($action === 'update_gst') {
 
-    if ($amount <= 0 || $amount > $balanceDue + 0.01) {
-        $error = 'Enter a valid amount up to the balance due (₹' . number_format($balanceDue, 2) . ').';
+        // Only allowed before any payment exists — an invoice's GST must
+        // never change retroactively once money has actually been
+        // collected against it (same principle as invoice_items already
+        // snapshotting their rate at generation time, see
+        // database/migrations/030_add_gst_fields.sql).
+        $gstRate = $_POST['gst_rate'] ?? '';
+
+        // Only two choices ever make sense here: the organization's own
+        // GST rate (set once by the Owner in Settings), or zero for an
+        // exempt case — not the full slab list. This also means a GST
+        // slab change next year only ever needs updating in one place.
+        $validRates = array_unique([0.0, (float) $invoice['organization_default_tax_rate']]);
+
+        if ((float) $invoice['amount_paid'] > 0.009) {
+            $error = 'GST can no longer be adjusted — a payment has already been recorded against this invoice.';
+        } elseif ($gstRate === '' || !in_array((float) $gstRate, $validRates, true)) {
+            $error = 'Choose a valid GST rate.';
+        } else {
+
+            $gstRate = (float) $gstRate;
+
+            $pdo->beginTransaction();
+
+            try {
+                $statement = $pdo->prepare("SELECT id, quantity, unit_price FROM invoice_items WHERE invoice_id = :invoice_id");
+                $statement->execute(['invoice_id' => $invoiceId]);
+                $lineItems = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+                $updateItem = $pdo->prepare("
+                    UPDATE invoice_items SET tax_rate = :tax_rate, total = :total WHERE id = :id
+                ");
+
+                $subtotal = 0;
+                $taxAmount = 0;
+
+                foreach ($lineItems as $line) {
+                    $preTax = (float) $line['quantity'] * (float) $line['unit_price'];
+                    $lineTax = $preTax * ($gstRate / 100);
+
+                    $updateItem->execute([
+                        'tax_rate' => $gstRate,
+                        'total' => $preTax + $lineTax,
+                        'id' => $line['id']
+                    ]);
+
+                    $subtotal += $preTax;
+                    $taxAmount += $lineTax;
+                }
+
+                $statement = $pdo->prepare("
+                    UPDATE invoices
+                    SET subtotal = :subtotal, tax_amount = :tax_amount, total = :total, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                ");
+                $statement->execute([
+                    'subtotal' => $subtotal,
+                    'tax_amount' => $taxAmount,
+                    'total' => $subtotal + $taxAmount,
+                    'id' => $invoiceId
+                ]);
+
+                $pdo->commit();
+
+                header('Location: /invoice.php?id=' . $invoiceId);
+                exit;
+
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = $e->getMessage();
+            }
+        }
+
     } else {
 
-        $pdo->beginTransaction();
+        $method = $_POST['method'] ?? '';
+        $amount = (float) ($_POST['amount'] ?? 0);
+        $referenceNo = trim($_POST['reference_no'] ?? '');
 
-        try {
-            $statement = $pdo->prepare("
-                INSERT INTO payments (organization_id, branch_id, invoice_id, method, amount, reference_no, received_by)
-                VALUES (:organization_id, :branch_id, :invoice_id, :method, :amount, :reference_no, :received_by)
-            ");
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'branch_id' => $invoice['branch_id'],
-                'invoice_id' => $invoiceId,
-                'method' => $method,
-                'amount' => $amount,
-                'reference_no' => $referenceNo ?: null,
-                'received_by' => $user['id']
-            ]);
+        $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
 
-            $newAmountPaid = (float) $invoice['amount_paid'] + $amount;
-            $newStatus = $newAmountPaid >= (float) $invoice['total'] - 0.01 ? 'paid' : 'partial';
+        if ($amount <= 0 || $amount > $balanceDue + 0.01) {
+            $error = 'Enter a valid amount up to the balance due (₹' . number_format($balanceDue, 2) . ').';
+        } else {
 
-            $statement = $pdo->prepare("
-                UPDATE invoices
-                SET amount_paid = :amount_paid, status = :status, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
-            ");
-            $statement->execute([
-                'amount_paid' => $newAmountPaid,
-                'status' => $newStatus,
-                'id' => $invoiceId
-            ]);
+            $pdo->beginTransaction();
 
-            $pdo->commit();
+            try {
+                $statement = $pdo->prepare("
+                    INSERT INTO payments (organization_id, branch_id, invoice_id, method, amount, reference_no, received_by)
+                    VALUES (:organization_id, :branch_id, :invoice_id, :method, :amount, :reference_no, :received_by)
+                ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'branch_id' => $invoice['branch_id'],
+                    'invoice_id' => $invoiceId,
+                    'method' => $method,
+                    'amount' => $amount,
+                    'reference_no' => $referenceNo ?: null,
+                    'received_by' => $user['id']
+                ]);
 
-            header('Location: /invoice.php?id=' . $invoiceId);
-            exit;
+                $newAmountPaid = (float) $invoice['amount_paid'] + $amount;
+                $newStatus = $newAmountPaid >= (float) $invoice['total'] - 0.01 ? 'paid' : 'partial';
 
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            $error = $e->getMessage();
+                $statement = $pdo->prepare("
+                    UPDATE invoices
+                    SET amount_paid = :amount_paid, status = :status, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                ");
+                $statement->execute([
+                    'amount_paid' => $newAmountPaid,
+                    'status' => $newStatus,
+                    'id' => $invoiceId
+                ]);
+
+                $pdo->commit();
+
+                header('Location: /invoice.php?id=' . $invoiceId);
+                exit;
+
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = $e->getMessage();
+            }
         }
     }
 }
@@ -230,6 +312,44 @@ $topbarTitle = $invoice['invoice_no'];
                         </div>
                     </div>
 
+                    <?php if (user_can($user, 'invoices.manage') && (float) $invoice['amount_paid'] <= 0.009): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('receipt', 15) ?></span>
+                                    Adjust GST
+                                </div>
+                            </div>
+                            <div class="card-body">
+
+                                <?php if ($error && $errorAction === 'update_gst'): ?>
+                                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                                <?php endif; ?>
+
+                                <form method="POST" action="">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="update_gst">
+                                    <div class="form-grid single">
+                                        <div class="form-field">
+                                            <label>GST rate</label>
+                                            <?php $orgDefaultRate = (float) $invoice['organization_default_tax_rate']; ?>
+                                            <select name="gst_rate">
+                                                <option value="<?= $orgDefaultRate ?>" selected><?= rtrim(rtrim(number_format($orgDefaultRate, 2), '0'), '.') ?>% (your organization's rate)</option>
+                                                <?php if ($orgDefaultRate !== 0.0): ?>
+                                                    <option value="0">No GST (0%)</option>
+                                                <?php endif; ?>
+                                            </select>
+                                            <p class="result-meta" style="margin-top:6px;">Only your organization's GST rate or exempt (0%) are available here — only changeable before a payment is recorded.</p>
+                                        </div>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button type="submit" class="button secondary"><?= icon('check', 16) ?> Update GST</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if ($balanceDue > 0.009): ?>
                         <div class="card">
                             <div class="card-header">
@@ -240,12 +360,13 @@ $topbarTitle = $invoice['invoice_no'];
                             </div>
                             <div class="card-body">
 
-                                <?php if ($error): ?>
+                                <?php if ($error && $errorAction === 'record_payment'): ?>
                                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
                                 <?php endif; ?>
 
                                 <form method="POST" action="">
                                     <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="record_payment">
                                     <div class="form-grid single">
                                         <div class="form-field">
                                             <label>Method</label>

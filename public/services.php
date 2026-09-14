@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Gst.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -128,6 +129,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statement = $pdo->prepare("SELECT id, name FROM service_categories WHERE organization_id = :organization_id ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
 $categories = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$statement = $pdo->prepare("SELECT default_tax_rate FROM organizations WHERE id = :id");
+$statement->execute(['id' => $organizationId]);
+$defaultTaxRate = (float) $statement->fetchColumn();
 
 $statement = $pdo->prepare("SELECT COUNT(*) FROM services WHERE organization_id = :organization_id");
 $statement->execute(['organization_id' => $organizationId]);
@@ -293,11 +298,7 @@ $topbarTitle = 'Service Catalog';
                     <div class="form-field">
                         <label>GST rate</label>
                         <select name="tax_rate">
-                            <option value="0">No GST (0%)</option>
-                            <option value="5">5%</option>
-                            <option value="12">12%</option>
-                            <option value="18" selected>18%</option>
-                            <option value="28">28%</option>
+                            <?= gst_rate_options($defaultTaxRate, true) ?>
                         </select>
                     </div>
                     <div class="form-field">
@@ -360,11 +361,7 @@ $topbarTitle = 'Service Catalog';
                         <div class="form-field">
                             <label>GST rate</label>
                             <select name="tax_rate">
-                                <?php foreach ([0, 5, 12, 18, 28] as $rate): ?>
-                                    <option value="<?= $rate ?>" <?= (float) $editingService['tax_rate'] === (float) $rate ? 'selected' : '' ?>>
-                                        <?= $rate === 0 ? 'No GST (0%)' : $rate . '%' ?>
-                                    </option>
-                                <?php endforeach; ?>
+                                <?= gst_rate_options((float) $editingService['tax_rate'], true) ?>
                             </select>
                         </div>
                         <div class="form-field">

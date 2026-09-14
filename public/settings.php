@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Gst.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -27,19 +28,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $currency = trim($_POST['currency'] ?? '');
     $taxNumber = trim($_POST['tax_number'] ?? '');
+    $defaultTaxRate = $_POST['default_tax_rate'] ?? '';
 
     if ($name === '' || $currency === '') {
         $error = 'Name and currency are required.';
+    } elseif (!gst_rate_is_valid($defaultTaxRate)) {
+        $error = 'Choose a valid GST rate.';
     } else {
         $statement = $pdo->prepare("
             UPDATE organizations
-            SET name = :name, currency = :currency, tax_number = :tax_number, updated_at = CURRENT_TIMESTAMP
+            SET name = :name, currency = :currency, tax_number = :tax_number,
+                default_tax_rate = :default_tax_rate, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $statement->execute([
             'name' => $name,
             'currency' => $currency,
             'tax_number' => $taxNumber ?: null,
+            'default_tax_rate' => $defaultTaxRate,
             'id' => $organizationId
         ]);
 
@@ -113,6 +119,13 @@ $topbarTitle = 'Settings';
                                 <label><?= htmlspecialchars($organization['tax_label']) ?> number (GSTIN)</label>
                                 <input type="text" name="tax_number" value="<?= htmlspecialchars($organization['tax_number'] ?? '') ?>" placeholder="e.g. 32AAAAA0000A1Z5" maxlength="50">
                                 <p class="result-meta" style="margin-top:6px;">Shown on every invoice you generate — required for a valid GST tax invoice.</p>
+                            </div>
+                            <div class="form-field">
+                                <label>Default GST rate</label>
+                                <select name="default_tax_rate">
+                                    <?= gst_rate_options((float) $organization['default_tax_rate']) ?>
+                                </select>
+                                <p class="result-meta" style="margin-top:6px;">Used to pre-fill the GST rate when adding a new part or service — change it here once instead of picking it every time, or when the GST rate itself changes.</p>
                             </div>
                         </div>
                         <div class="form-actions" style="margin-top:14px;">
