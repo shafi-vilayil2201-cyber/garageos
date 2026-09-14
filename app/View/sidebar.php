@@ -26,6 +26,7 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
 $showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
 $showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'purchases.view') || user_can($user, 'suppliers.view');
 $showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage') || user_can($user, 'settings.manage');
+$showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manage');
 
 ?>
 <aside class="sidebar">
@@ -82,6 +83,24 @@ $showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage
 
                 <?php if (user_can($user, 'suppliers.view')): ?>
                     <?php nav_link('/suppliers.php', 'suppliers', $activeNav, 'warehouse', 'Suppliers'); ?>
+                <?php endif; ?>
+
+            </div>
+        <?php endif; ?>
+
+        <?php if ($showHR): ?>
+            <div class="nav-section">
+
+                <div class="nav-label">
+                    HR
+                </div>
+
+                <?php if (user_can($user, 'attendance.manage')): ?>
+                    <?php nav_link('/attendance.php', 'attendance', $activeNav, 'calendar', 'Attendance'); ?>
+                <?php endif; ?>
+
+                <?php if (user_can($user, 'payroll.manage')): ?>
+                    <?php nav_link('/payroll.php', 'payroll', $activeNav, 'wallet', 'Payroll'); ?>
                 <?php endif; ?>
 
             </div>

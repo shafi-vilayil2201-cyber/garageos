@@ -147,7 +147,10 @@ try {
         ['Manage suppliers', 'suppliers.manage'],
         ['View reports', 'reports.view'],
         ['Manage settings', 'settings.manage'],
-        ['Manage users', 'users.manage']
+        ['Manage users', 'users.manage'],
+        ['Manage attendance', 'attendance.manage'],
+        ['Manage payroll', 'payroll.manage'],
+        ['View own attendance', 'attendance.view_own']
     ];
 
     $permissionIds = [];
@@ -185,13 +188,13 @@ try {
                 'invoices.view', 'invoices.manage',
                 'customers.view', 'customers.manage',
                 'vehicles.view', 'vehicles.manage',
-                'parts.view'
+                'parts.view', 'attendance.view_own'
             ]
         ],
         'TECHNICIAN' => [
             'name' => 'Technician',
             'description' => 'Workshop floor: sees assigned job cards only',
-            'permissions' => ['dashboard.view', 'job_cards.view']
+            'permissions' => ['dashboard.view', 'job_cards.view', 'attendance.view_own']
         ],
         'ACCOUNTANT' => [
             'name' => 'Accountant',
@@ -200,7 +203,7 @@ try {
                 'dashboard.view', 'job_cards.view',
                 'invoices.view', 'invoices.manage',
                 'parts.view', 'purchases.view',
-                'reports.view'
+                'reports.view', 'attendance.view_own'
             ]
         ],
         'PARTS_MANAGER' => [
@@ -211,7 +214,7 @@ try {
                 'parts.view', 'parts.manage',
                 'purchases.view', 'purchases.manage',
                 'suppliers.view', 'suppliers.manage',
-                'reports.view'
+                'reports.view', 'attendance.view_own'
             ]
         ]
     ];

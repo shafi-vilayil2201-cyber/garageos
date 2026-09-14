@@ -164,6 +164,52 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId]);
 $recentJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
 
+// Someone who marks other people's attendance (Owner/Manager) wants a
+// glance at today's team attendance, not a card about their own — they're
+// the one doing the marking, not the one being tracked. Everyone else
+// (Technician, Advisor, etc.) sees their own attendance/salary instead,
+// since attendance.view_own is granted broadly to every role.
+$myAttendance = null;
+$myPayroll = null;
+$teamAttendanceToday = null;
+
+if (user_can($user, 'attendance.manage')) {
+
+    $statement = $pdo->prepare("
+        SELECT u.name, a.status
+        FROM users u
+        LEFT JOIN attendance a ON a.user_id = u.id AND a.work_date = CURRENT_DATE
+        WHERE u.organization_id = :organization_id AND u.status = 'active' AND u.salary_type IS NOT NULL
+        ORDER BY u.name
+    ");
+    $statement->execute(['organization_id' => $organizationId]);
+    $teamAttendanceToday = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+} elseif (user_can($user, 'attendance.view_own')) {
+
+    $statement = $pdo->prepare("
+        SELECT status, COUNT(*) AS total
+        FROM attendance
+        WHERE user_id = :user_id
+          AND work_date >= DATE_TRUNC('month', CURRENT_DATE)
+          AND work_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+        GROUP BY status
+    ");
+    $statement->execute(['user_id' => $user['id']]);
+    $myAttendance = ['present' => 0, 'absent' => 0, 'half_day' => 0];
+    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $myAttendance[$row['status']] = (int) $row['total'];
+    }
+
+    $statement = $pdo->prepare("
+        SELECT days_present, days_absent, days_half_day, gross_salary, deduction_amount, net_salary
+        FROM payroll_runs
+        WHERE user_id = :user_id AND period_month = DATE_TRUNC('month', CURRENT_DATE)
+    ");
+    $statement->execute(['user_id' => $user['id']]);
+    $myPayroll = $statement->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
 $activeNav = 'dashboard';
 $topbarTitle = 'Dashboard';
 
@@ -385,6 +431,80 @@ $topbarTitle = 'Dashboard';
                 </div>
 
             </div>
+
+            <?php if ($teamAttendanceToday !== null): ?>
+                <div class="card" style="margin-top:20px;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('calendar', 15) ?></span>
+                            Today's staff attendance
+                        </div>
+                        <a href="/attendance.php" class="card-header-link">Mark attendance</a>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <?php if (empty($teamAttendanceToday)): ?>
+                            <div class="empty-state">
+                                <?= icon('team', 28) ?>
+                                No salaried staff yet — set a salary type for a user to start tracking attendance.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <tr><th>Name</th><th>Today's status</th></tr>
+                                    <?php foreach ($teamAttendanceToday as $row): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($row['name']) ?></td>
+                                            <td>
+                                                <span class="badge badge-<?= $row['status'] ?? 'not_marked' ?>">
+                                                    <?= htmlspecialchars($row['status'] ? str_replace('_', ' ', $row['status']) : 'Not marked') ?>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php elseif ($myAttendance !== null): ?>
+                <div class="card" style="margin-top:20px;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('calendar', 15) ?></span>
+                            My attendance — <?= htmlspecialchars(date('F Y')) ?>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats" style="margin:0;">
+                            <div class="card stat-card">
+                                <div class="stat-label">Present</div>
+                                <div class="stat-value"><?= $myAttendance['present'] ?></div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-label">Absent</div>
+                                <div class="stat-value"><?= $myAttendance['absent'] ?></div>
+                            </div>
+                            <div class="card stat-card">
+                                <div class="stat-label">Half-day</div>
+                                <div class="stat-value"><?= $myAttendance['half_day'] ?></div>
+                            </div>
+                            <?php if ($myPayroll): ?>
+                                <div class="card stat-card">
+                                    <div class="stat-label">Net salary so far</div>
+                                    <div class="stat-value">&#8377;<?= number_format((float) $myPayroll['net_salary'], 2) ?></div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($myPayroll): ?>
+                            <p class="stat-meta" style="margin-top:12px;">
+                                &#8377;<?= number_format((float) $myPayroll['deduction_amount'], 2) ?> deducted for <?= rtrim(rtrim(number_format((float) $myPayroll['days_absent'], 1), '0'), '.') ?> absent day(s) and <?= rtrim(rtrim(number_format((float) $myPayroll['days_half_day'], 1), '0'), '.') ?> half-day(s) this month.
+                            </p>
+                        <?php else: ?>
+                            <p class="stat-meta" style="margin-top:12px;">Payroll for this month hasn't been generated yet.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
 
         </section>
 

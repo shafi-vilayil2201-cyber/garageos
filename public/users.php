@@ -24,6 +24,30 @@ $error = null;
 $errorAction = null;
 $editingUserId = (int) ($_GET['edit'] ?? 0);
 
+// Salary is optional per user (e.g. an Owner-only account may not need it
+// tracked), but if either field is filled in, both must be valid together —
+// a salary type with no amount (or vice versa) is a half-filled mistake.
+function read_salary_fields(array $post): array
+{
+    $designation = trim($post['designation'] ?? '');
+    $salaryType = $post['salary_type'] ?? '';
+    $salaryAmountRaw = trim($post['salary_amount'] ?? '');
+    $joinedAt = trim($post['joined_at'] ?? '');
+
+    $salaryType = in_array($salaryType, ['monthly', 'daily_wage'], true) ? $salaryType : null;
+    $joinedAt = $joinedAt !== '' ? $joinedAt : null;
+
+    if ($salaryType === null && $salaryAmountRaw === '') {
+        return [$designation ?: null, null, null, $joinedAt, null];
+    }
+
+    if ($salaryType === null || $salaryAmountRaw === '' || !is_numeric($salaryAmountRaw) || (float) $salaryAmountRaw <= 0) {
+        return [null, null, null, null, 'Salary type and a positive salary amount must be set together.'];
+    }
+
+    return [$designation ?: null, $salaryType, (float) $salaryAmountRaw, $joinedAt, null];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
@@ -38,9 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $roleId = (int) ($_POST['role_id'] ?? 0);
+        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryError] = read_salary_fields($_POST);
 
         if ($name === '' || $email === '' || !$roleId || ($password !== '' && strlen($password) < 8)) {
             $error = 'Name, email and a role are required. If you set a new password, it must be at least 8 characters.';
+            $errorAction = 'update';
+        } elseif ($salaryError) {
+            $error = $salaryError;
             $errorAction = 'update';
         } else {
 
@@ -64,24 +92,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($password !== '') {
                         $statement = $pdo->prepare("
                             UPDATE users
-                            SET name = :name, email = :email, password_hash = :password_hash, updated_at = CURRENT_TIMESTAMP
+                            SET name = :name, email = :email, password_hash = :password_hash,
+                                designation = :designation, salary_type = :salary_type,
+                                salary_amount = :salary_amount, joined_at = :joined_at,
+                                updated_at = CURRENT_TIMESTAMP
                             WHERE id = :id
                         ");
                         $statement->execute([
                             'name' => $name,
                             'email' => $email,
                             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                            'designation' => $designation,
+                            'salary_type' => $salaryType,
+                            'salary_amount' => $salaryAmount,
+                            'joined_at' => $joinedAt,
                             'id' => $editingUserId
                         ]);
                     } else {
                         $statement = $pdo->prepare("
                             UPDATE users
-                            SET name = :name, email = :email, updated_at = CURRENT_TIMESTAMP
+                            SET name = :name, email = :email,
+                                designation = :designation, salary_type = :salary_type,
+                                salary_amount = :salary_amount, joined_at = :joined_at,
+                                updated_at = CURRENT_TIMESTAMP
                             WHERE id = :id
                         ");
                         $statement->execute([
                             'name' => $name,
                             'email' => $email,
+                            'designation' => $designation,
+                            'salary_type' => $salaryType,
+                            'salary_amount' => $salaryAmount,
+                            'joined_at' => $joinedAt,
                             'id' => $editingUserId
                         ]);
                     }
@@ -116,9 +158,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $roleId = (int) ($_POST['role_id'] ?? 0);
+        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryError] = read_salary_fields($_POST);
 
         if ($name === '' || $email === '' || strlen($password) < 8 || !$roleId) {
             $error = 'Name, email, a role, and a password of at least 8 characters are required.';
+            $errorAction = 'create';
+        } elseif ($salaryError) {
+            $error = $salaryError;
             $errorAction = 'create';
         } else {
 
@@ -134,8 +180,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 try {
                     $statement = $pdo->prepare("
-                        INSERT INTO users (organization_id, branch_id, name, email, password_hash, status)
-                        VALUES (:organization_id, :branch_id, :name, :email, :password_hash, 'active')
+                        INSERT INTO users (organization_id, branch_id, name, email, password_hash, status, designation, salary_type, salary_amount, joined_at)
+                        VALUES (:organization_id, :branch_id, :name, :email, :password_hash, 'active', :designation, :salary_type, :salary_amount, :joined_at)
                         RETURNING id
                     ");
                     $statement->execute([
@@ -143,7 +189,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'branch_id' => $branchId,
                         'name' => $name,
                         'email' => $email,
-                        'password_hash' => password_hash($password, PASSWORD_DEFAULT)
+                        'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                        'designation' => $designation,
+                        'salary_type' => $salaryType,
+                        'salary_amount' => $salaryAmount,
+                        'joined_at' => $joinedAt
                     ]);
                     $newUserId = $statement->fetchColumn();
 
@@ -175,12 +225,13 @@ $totalUsers = (int) $statement->fetchColumn();
 $page = paginate_page($totalUsers);
 
 $statement = $pdo->prepare("
-    SELECT u.id, u.name, u.email, u.status, STRING_AGG(r.name, ', ' ORDER BY r.name) AS role_names
+    SELECT u.id, u.name, u.email, u.status, u.designation, u.salary_type, u.salary_amount,
+        STRING_AGG(r.name, ', ' ORDER BY r.name) AS role_names
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
     WHERE u.organization_id = :organization_id
-    GROUP BY u.id, u.name, u.email, u.status
+    GROUP BY u.id, u.name, u.email, u.status, u.designation, u.salary_type, u.salary_amount
     ORDER BY u.name
     LIMIT :limit OFFSET :offset
 ");
@@ -198,11 +249,12 @@ $editingUser = null;
 
 if ($editingUserId) {
     $statement = $pdo->prepare("
-        SELECT u.id, u.name, u.email, MIN(ur.role_id) AS role_id
+        SELECT u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at,
+            MIN(ur.role_id) AS role_id
         FROM users u
         LEFT JOIN user_roles ur ON ur.user_id = u.id
         WHERE u.id = :id AND u.organization_id = :organization_id
-        GROUP BY u.id, u.name, u.email
+        GROUP BY u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at
     ");
     $statement->execute(['id' => $editingUserId, 'organization_id' => $organizationId]);
     $editingUser = $statement->fetch(PDO::FETCH_ASSOC);
@@ -266,7 +318,7 @@ $topbarTitle = 'Users';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>
+                                <tr><th>Name</th><th>Email</th><th>Role</th><th>Salary</th><th></th></tr>
                                 <?php foreach ($users as $u): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($u['name']) ?></td>
@@ -276,6 +328,14 @@ $topbarTitle = 'Users';
                                                 <span class="badge badge-ready"><?= htmlspecialchars($u['role_names']) ?></span>
                                             <?php else: ?>
                                                 <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?> No role assigned</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($u['salary_type']): ?>
+                                                &#8377;<?= number_format((float) $u['salary_amount'], 2) ?>
+                                                <span class="muted"><?= $u['salary_type'] === 'monthly' ? '/ month' : '/ day' ?></span>
+                                            <?php else: ?>
+                                                <span class="muted">&mdash;</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
@@ -349,6 +409,26 @@ $topbarTitle = 'Users';
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <div class="form-field">
+                            <label>Designation (optional)</label>
+                            <input type="text" name="designation" placeholder="e.g. Senior Technician">
+                        </div>
+                        <div class="form-field">
+                            <label>Salary type (optional)</label>
+                            <select name="salary_type">
+                                <option value="">Not tracked</option>
+                                <option value="monthly">Monthly (fixed)</option>
+                                <option value="daily_wage">Daily wage</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>Salary amount</label>
+                            <input type="number" name="salary_amount" min="0" step="0.01" placeholder="Monthly salary, or per-day rate">
+                        </div>
+                        <div class="form-field">
+                            <label>Joined on (optional)</label>
+                            <input type="date" name="joined_at">
+                        </div>
                     </div>
 
                     <div class="form-actions">
@@ -406,6 +486,26 @@ $topbarTitle = 'Users';
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Designation (optional)</label>
+                                <input type="text" name="designation" value="<?= htmlspecialchars($editingUser['designation'] ?? '') ?>" placeholder="e.g. Senior Technician">
+                            </div>
+                            <div class="form-field">
+                                <label>Salary type (optional)</label>
+                                <select name="salary_type">
+                                    <option value="">Not tracked</option>
+                                    <option value="monthly" <?= $editingUser['salary_type'] === 'monthly' ? 'selected' : '' ?>>Monthly (fixed)</option>
+                                    <option value="daily_wage" <?= $editingUser['salary_type'] === 'daily_wage' ? 'selected' : '' ?>>Daily wage</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Salary amount</label>
+                                <input type="number" name="salary_amount" min="0" step="0.01" value="<?= htmlspecialchars($editingUser['salary_amount'] ?? '') ?>" placeholder="Monthly salary, or per-day rate">
+                            </div>
+                            <div class="form-field">
+                                <label>Joined on (optional)</label>
+                                <input type="date" name="joined_at" value="<?= htmlspecialchars($editingUser['joined_at'] ?? '') ?>">
                             </div>
                         </div>
 
