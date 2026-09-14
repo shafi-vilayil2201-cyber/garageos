@@ -25,6 +25,7 @@ $canManageParts = user_can($user, 'parts.manage');
 $error = null;
 $errorAction = null;
 $editingPartId = (int) ($_GET['edit'] ?? 0);
+$adjustingPartId = (int) ($_GET['adjust'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -77,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-    } else {
+    } elseif ($action === 'create') {
 
         $name = trim($_POST['name'] ?? '');
         $sku = strtoupper(trim($_POST['sku'] ?? ''));
@@ -148,6 +149,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errorAction = 'create';
             }
         }
+
+    } elseif ($action === 'adjust_stock') {
+
+        $adjustPartId = (int) ($_POST['part_id'] ?? 0);
+        $type = $_POST['type'] ?? '';
+        $quantity = (float) ($_POST['quantity'] ?? 0);
+
+        // One dropdown, three real-world cases — each maps to a
+        // (direction, reason) pair for inventory_movements. 'reference_type'
+        // stays NULL: this is a manual correction, not tied to a purchase
+        // or job card, the same way opening_stock movements have no
+        // reference either.
+        $types = [
+            'found' => ['direction' => 'in', 'reason' => 'adjustment'],
+            'lower' => ['direction' => 'out', 'reason' => 'adjustment'],
+            'damage' => ['direction' => 'out', 'reason' => 'damage'],
+        ];
+
+        if ($quantity <= 0 || !isset($types[$type])) {
+            $error = 'Choose a reason and enter a quantity greater than zero.';
+            $errorAction = 'adjust_stock';
+        } else {
+
+            $direction = $types[$type]['direction'];
+            $reason = $types[$type]['reason'];
+
+            $pdo->beginTransaction();
+
+            try {
+                $statement = $pdo->prepare("
+                    SELECT quantity FROM inventory
+                    WHERE part_id = :part_id AND branch_id = :branch_id
+                    FOR UPDATE
+                ");
+                $statement->execute(['part_id' => $adjustPartId, 'branch_id' => $branchId]);
+                $available = (float) $statement->fetchColumn();
+
+                if ($direction === 'out' && $available < $quantity) {
+                    throw new RuntimeException('Not enough stock to remove that much.');
+                }
+
+                $statement = $pdo->prepare("
+                    UPDATE inventory
+                    SET quantity = quantity " . ($direction === 'in' ? '+' : '-') . " :quantity, updated_at = CURRENT_TIMESTAMP
+                    WHERE part_id = :part_id AND branch_id = :branch_id
+                ");
+                $statement->execute([
+                    'quantity' => $quantity,
+                    'part_id' => $adjustPartId,
+                    'branch_id' => $branchId
+                ]);
+
+                $statement = $pdo->prepare("
+                    INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, created_by)
+                    VALUES (:organization_id, :branch_id, :part_id, :quantity, :direction, :reason, :created_by)
+                ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'branch_id' => $branchId,
+                    'part_id' => $adjustPartId,
+                    'quantity' => $quantity,
+                    'direction' => $direction,
+                    'reason' => $reason,
+                    'created_by' => $user['id']
+                ]);
+
+                $pdo->commit();
+
+                header('Location: /parts.php');
+                exit;
+
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = $e->getMessage();
+                $errorAction = 'adjust_stock';
+            }
+        }
     }
 }
 
@@ -188,6 +266,24 @@ if ($editingPartId) {
     $editingPart = $statement->fetch(PDO::FETCH_ASSOC);
 
     if (!$editingPart) {
+        header('Location: /parts.php');
+        exit;
+    }
+}
+
+$adjustingPart = null;
+
+if ($adjustingPartId) {
+    $statement = $pdo->prepare("
+        SELECT p.id, p.name, COALESCE(i.quantity, 0) AS stock_quantity
+        FROM parts p
+        LEFT JOIN inventory i ON i.part_id = p.id AND i.branch_id = :branch_id
+        WHERE p.id = :id AND p.organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $adjustingPartId, 'branch_id' => $branchId, 'organization_id' => $organizationId]);
+    $adjustingPart = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$adjustingPart) {
         header('Location: /parts.php');
         exit;
     }
@@ -274,14 +370,16 @@ $topbarTitle = 'Parts';
                                         </td>
                                         <td>
                                             <?php if ($canManageParts): ?>
+                                                <a href="?adjust=<?= (int) $part['id'] ?>" class="link-action" style="margin-right:14px;"><?= icon('box', 14) ?> Adjust stock</a>
                                                 <a href="?edit=<?= (int) $part['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
+                                </tbody>
                             </table>
                         </div>
-                        <?= render_pagination($page, $totalParts) ?>
+                        <div id="parts-pagination"><?= render_pagination($page, $totalParts) ?></div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -408,7 +506,7 @@ $topbarTitle = 'Parts';
                                 <input type="number" name="reorder_level" step="0.01" min="0" value="<?= htmlspecialchars($editingPart['reorder_level']) ?>">
                             </div>
                         </div>
-                        <p class="page-description">Current stock isn't edited here — use Purchases to record new stock coming in.</p>
+                        <p class="page-description">Current stock isn't edited here — use Purchases to record new stock coming in, or "Adjust stock" for a count correction or damage/loss.</p>
                         <div class="form-actions">
                             <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
                         </div>
@@ -418,7 +516,106 @@ $topbarTitle = 'Parts';
         </div>
     </div>
 
+    <div class="modal-backdrop<?= $adjustingPart ? ' open' : '' ?>" id="adjust-stock-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('box', 16) ?></span>
+                    Adjust Stock
+                </div>
+                <button type="button" class="modal-close" data-close-modal="adjust-stock-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <?php if ($errorAction === 'adjust_stock' && $error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($adjustingPart): ?>
+                    <p class="page-description">
+                        <strong><?= htmlspecialchars($adjustingPart['name']) ?></strong> —
+                        currently <?= rtrim(rtrim(number_format($adjustingPart['stock_quantity'], 2), '0'), '.') ?> in stock.
+                    </p>
+                    <form method="POST" action="">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="adjust_stock">
+                        <input type="hidden" name="part_id" value="<?= (int) $adjustingPart['id'] ?>">
+                        <div class="form-grid single">
+                            <div class="form-field">
+                                <label>Reason</label>
+                                <select name="type" required>
+                                    <option value="">Select a reason</option>
+                                    <option value="found">Found extra stock (count correction)</option>
+                                    <option value="lower">Stock count is lower (correction)</option>
+                                    <option value="damage">Damage / loss</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Quantity</label>
+                                <input type="number" name="quantity" step="0.01" min="0.01" required>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Save adjustment</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/modal.js"></script>
+
+<?php endif; ?>
+
+<?php if (!empty($parts)): ?>
+
+    <script src="/js/live-table-search.js"></script>
+    <script>
+        const canManageParts = <?= json_encode($canManageParts) ?>;
+        const editIcon = <?= json_encode(icon('settings', 14)) ?>;
+        const adjustIcon = <?= json_encode(icon('box', 14)) ?>;
+        const warningIcon = <?= json_encode(icon('alert-triangle', 12)) ?>;
+
+        function trimTrailingZeros(value)
+        {
+            return Number(value).toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        initLiveTableSearch({
+            inputId: 'part-filter',
+            tbodyId: 'parts-tbody',
+            paginationId: 'parts-pagination',
+            endpoint: '/api/parts/search.php',
+            resultsKey: 'parts',
+            colspan: 6,
+            emptyMessage: 'No parts found.',
+            renderRow: (part, escapeHtml) =>
+            {
+                const low = Number(part.stock_quantity) <= Number(part.reorder_level);
+
+                return `
+                    <tr>
+                        <td>
+                            ${escapeHtml(part.name)}
+                            ${part.hsn_code ? `<div class="result-meta">HSN ${escapeHtml(part.hsn_code)}</div>` : ''}
+                        </td>
+                        <td>${escapeHtml(part.sku)}</td>
+                        <td class="num">₹${Number(part.selling_price).toFixed(2)}</td>
+                        <td class="num">${Number(part.tax_rate).toFixed(0)}%</td>
+                        <td class="num">
+                            <span class="badge ${low ? 'badge-on_hold' : 'badge-ready'}">
+                                ${low ? warningIcon : ''}${trimTrailingZeros(part.stock_quantity)}${low ? ' — reorder' : ''}
+                            </span>
+                        </td>
+                        <td>
+                            ${canManageParts ? `<a href="?adjust=${part.id}" class="link-action" style="margin-right:14px;">${adjustIcon} Adjust stock</a><a href="?edit=${part.id}" class="link-action">${editIcon} Edit</a>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }
+        });
+    </script>
 
 <?php endif; ?>
 

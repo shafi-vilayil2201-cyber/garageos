@@ -39,6 +39,15 @@ if (!$jobCard) {
     exit;
 }
 
+// Fetched early (not just at render time) so it can also gate the
+// remove_service/remove_part actions below — once an invoice exists,
+// what's on the job card must stay exactly what was actually invoiced.
+$statement = $pdo->prepare("SELECT id, invoice_no, status FROM invoices WHERE job_card_id = :job_card_id");
+$statement->execute(['job_card_id' => $jobCardId]);
+$invoice = $statement->fetch(PDO::FETCH_ASSOC);
+
+$canRemoveLines = $canManageJobCards && !$invoice;
+
 $error = null;
 $errorAction = null;
 $allStatuses = ['received', 'in_progress', 'quality_check', 'ready', 'delivered', 'on_hold', 'cancelled'];
@@ -180,12 +189,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'invoices.manage');
 
-        $statement = $pdo->prepare("SELECT id FROM invoices WHERE job_card_id = :job_card_id");
-        $statement->execute(['job_card_id' => $jobCardId]);
-        $existingInvoiceId = $statement->fetchColumn();
-
-        if ($existingInvoiceId) {
-            header('Location: /invoice.php?id=' . $existingInvoiceId);
+        if ($invoice) {
+            header('Location: /invoice.php?id=' . $invoice['id']);
             exit;
         }
 
@@ -307,6 +312,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = $e->getMessage();
             }
         }
+
+    } elseif ($action === 'remove_service') {
+
+        require_permission($user, 'job_cards.manage');
+
+        // Once an invoice exists, what's on the job card must stay exactly
+        // what was actually invoiced — same boundary as GST on an invoice
+        // locking once a payment exists.
+        if (!$invoice) {
+            $statement = $pdo->prepare("DELETE FROM job_card_items WHERE id = :id AND job_card_id = :job_card_id");
+            $statement->execute(['id' => (int) ($_POST['item_id'] ?? 0), 'job_card_id' => $jobCardId]);
+        }
+
+        header('Location: /job-card.php?id=' . $jobCardId);
+        exit;
+
+    } elseif ($action === 'remove_part') {
+
+        require_permission($user, 'job_cards.manage');
+
+        if (!$invoice) {
+
+            $pdo->beginTransaction();
+
+            try {
+                $statement = $pdo->prepare("
+                    SELECT part_id, quantity FROM job_card_parts
+                    WHERE id = :id AND job_card_id = :job_card_id
+                    FOR UPDATE
+                ");
+                $statement->execute(['id' => (int) ($_POST['item_id'] ?? 0), 'job_card_id' => $jobCardId]);
+                $removed = $statement->fetch(PDO::FETCH_ASSOC);
+
+                if ($removed) {
+
+                    $statement = $pdo->prepare("DELETE FROM job_card_parts WHERE id = :id");
+                    $statement->execute(['id' => (int) ($_POST['item_id'] ?? 0)]);
+
+                    $statement = $pdo->prepare("
+                        UPDATE inventory SET quantity = quantity + :quantity, updated_at = CURRENT_TIMESTAMP
+                        WHERE part_id = :part_id AND branch_id = :branch_id
+                    ");
+                    $statement->execute([
+                        'quantity' => $removed['quantity'],
+                        'part_id' => $removed['part_id'],
+                        'branch_id' => $branchId
+                    ]);
+
+                    $statement = $pdo->prepare("
+                        INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, reference_type, reference_id, created_by)
+                        VALUES (:organization_id, :branch_id, :part_id, :quantity, 'in', 'adjustment', 'job_card', :reference_id, :created_by)
+                    ");
+                    $statement->execute([
+                        'organization_id' => $organizationId,
+                        'branch_id' => $branchId,
+                        'part_id' => $removed['part_id'],
+                        'quantity' => $removed['quantity'],
+                        'reference_id' => $jobCardId,
+                        'created_by' => $user['id']
+                    ]);
+                }
+
+                $pdo->commit();
+
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+            }
+        }
+
+        header('Location: /job-card.php?id=' . $jobCardId);
+        exit;
     }
 }
 
@@ -341,10 +417,6 @@ $services = $statement->fetchAll(PDO::FETCH_ASSOC);
 $statement = $pdo->prepare("SELECT id, name FROM users WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
 $technicians = $statement->fetchAll(PDO::FETCH_ASSOC);
-
-$statement = $pdo->prepare("SELECT id, invoice_no, status FROM invoices WHERE job_card_id = :job_card_id");
-$statement->execute(['job_card_id' => $jobCardId]);
-$invoice = $statement->fetch(PDO::FETCH_ASSOC);
 
 $statusIcons = [
     'received' => 'clipboard-list',
@@ -441,12 +513,22 @@ $topbarTitle = $jobCard['job_no'];
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
-                                        <tr><th>Service</th><th>Technician</th><th>Price</th></tr>
+                                        <tr><th>Service</th><th>Technician</th><th>Price</th><?php if ($canRemoveLines): ?><th></th><?php endif; ?></tr>
                                         <?php foreach ($serviceLines as $line): ?>
                                             <tr>
                                                 <td><?= htmlspecialchars($line['name']) ?></td>
                                                 <td><?= htmlspecialchars($line['technician_name'] ?? '—') ?></td>
                                                 <td class="num">₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
+                                                <?php if ($canRemoveLines): ?>
+                                                    <td>
+                                                        <form method="POST" action="" onsubmit="return confirm('Remove this service from the job card?');">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="action" value="remove_service">
+                                                            <input type="hidden" name="item_id" value="<?= (int) $line['id'] ?>">
+                                                            <button type="submit" class="link-action" style="background:none; border:none; cursor:pointer; padding:0;"><?= icon('x', 14) ?> Remove</button>
+                                                        </form>
+                                                    </td>
+                                                <?php endif; ?>
                                             </tr>
                                         <?php endforeach; ?>
                                     </table>
@@ -474,13 +556,23 @@ $topbarTitle = $jobCard['job_no'];
                             <?php else: ?>
                                 <div class="table-wrap">
                                     <table class="data-table">
-                                        <tr><th>Part</th><th>Qty</th><th>Unit price</th><th>Total</th></tr>
+                                        <tr><th>Part</th><th>Qty</th><th>Unit price</th><th>Total</th><?php if ($canRemoveLines): ?><th></th><?php endif; ?></tr>
                                         <?php foreach ($partLines as $line): ?>
                                             <tr>
                                                 <td><?= htmlspecialchars($line['name']) ?></td>
                                                 <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
                                                 <td class="num">₹<?= number_format($line['unit_price'], 2) ?></td>
                                                 <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
+                                                <?php if ($canRemoveLines): ?>
+                                                    <td>
+                                                        <form method="POST" action="" onsubmit="return confirm('Remove this part and restore its stock?');">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="action" value="remove_part">
+                                                            <input type="hidden" name="item_id" value="<?= (int) $line['id'] ?>">
+                                                            <button type="submit" class="link-action" style="background:none; border:none; cursor:pointer; padding:0;"><?= icon('x', 14) ?> Remove</button>
+                                                        </form>
+                                                    </td>
+                                                <?php endif; ?>
                                             </tr>
                                         <?php endforeach; ?>
                                     </table>
