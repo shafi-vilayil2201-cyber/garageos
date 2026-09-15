@@ -58,6 +58,18 @@ function vehicle_intake_form(
         </div>
 
         <div id="<?= $prefix ?>-new-customer-vehicle" style="display:none; margin-bottom:16px;">
+
+            <div class="form-field" style="margin-bottom:14px;">
+                <label for="<?= $prefix ?>-vehicle-model-search">Find a car <span class="result-meta">— fills Make/Model below (e.g. "Swift", "Hyundai Creta")</span></label>
+                <input
+                    type="search"
+                    id="<?= $prefix ?>-vehicle-model-search"
+                    placeholder="Start typing a make or model..."
+                    autocomplete="off"
+                >
+                <div id="<?= $prefix ?>-vehicle-model-results"></div>
+            </div>
+
             <div class="form-grid">
                 <div class="form-field">
                     <label for="<?= $prefix ?>-new_customer_name">Customer name</label>

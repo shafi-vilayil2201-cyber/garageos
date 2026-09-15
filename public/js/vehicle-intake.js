@@ -10,6 +10,8 @@ function initVehicleIntake(prefix)
     const formMode = el('form_mode');
     const selectedSummary = el('selected-summary');
     const newCustomerVehicle = el('new-customer-vehicle');
+    const modelSearchInput = el('vehicle-model-search');
+    const modelResultsContainer = el('vehicle-model-results');
 
     if (!form)
     {
@@ -214,4 +216,92 @@ function initVehicleIntake(prefix)
     });
 
     addNewButton.addEventListener('click', startNewCustomerVehicle);
+
+
+    // "Find a car" — suggests Make/Model from the org's own vehicle
+    // history plus a built-in common-makes list (see
+    // api/vehicle-models/search.php), so free-typing Make/Model below
+    // stays the fallback rather than the only option.
+    if (modelSearchInput && modelResultsContainer)
+    {
+        let modelSearchAbortController = null;
+        let modelDebounceTimer = null;
+
+        async function searchVehicleModels()
+        {
+            const query = modelSearchInput.value.trim();
+
+            if (!query)
+            {
+                modelResultsContainer.innerHTML = '';
+                return;
+            }
+
+            if (modelSearchAbortController)
+            {
+                modelSearchAbortController.abort();
+            }
+
+            modelSearchAbortController = new AbortController();
+
+            try
+            {
+                const response = await fetch(
+                    `/api/vehicle-models/search.php?q=${encodeURIComponent(query)}`,
+                    { signal: modelSearchAbortController.signal }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok)
+                {
+                    throw new Error(data.error || 'Search failed');
+                }
+
+                modelResultsContainer.innerHTML = '';
+
+                data.models.forEach(model =>
+                {
+                    const result = document.createElement('div');
+
+                    result.className = 'search-result';
+                    result.innerHTML = `<div><strong>${escapeHtml(model.make)} ${escapeHtml(model.model)}</strong></div>`;
+
+                    result.addEventListener('click', () =>
+                    {
+                        el('new_make').value = model.make;
+                        el('new_model').value = model.model;
+
+                        modelSearchInput.value = '';
+                        modelResultsContainer.innerHTML = '';
+                    });
+
+                    modelResultsContainer.appendChild(result);
+                });
+
+            } catch (error)
+            {
+                if (error.name === 'AbortError')
+                {
+                    return;
+                }
+
+                console.error(error);
+            }
+        }
+
+        modelSearchInput.addEventListener('input', () =>
+        {
+            clearTimeout(modelDebounceTimer);
+            modelDebounceTimer = setTimeout(searchVehicleModels, 300);
+        });
+
+        modelSearchInput.addEventListener('keydown', event =>
+        {
+            if (event.key === 'Enter')
+            {
+                event.preventDefault();
+            }
+        });
+    }
 }
