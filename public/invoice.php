@@ -240,7 +240,10 @@ $topbarTitle = $invoice['invoice_no'];
                     </p>
                 </div>
 
-                <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
+                <div style="display:flex; gap:10px;">
+                    <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>" target="_blank" class="button secondary"><?= icon('printer', 16) ?> Print Invoice</a>
+                    <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
+                </div>
             </div>
 
             <div class="content-grid content-grid-aside">
