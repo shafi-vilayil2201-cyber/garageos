@@ -27,9 +27,14 @@ function calculate_payroll(array $user, array $attendanceRows, int $daysInMonth)
     $salaryAmount = (float) $user['salary_amount'];
 
     if ($user['salary_type'] === 'daily_wage') {
-        $grossSalary = 0.0;
-        $deduction = 0.0;
-        $netSalary = round($salaryAmount * ($daysPresent + 0.5 * $daysHalfDay), 2);
+        // Gross treats a half-day as a full day worked (what they'd earn
+        // if it hadn't been docked), so it reads the same way a monthly
+        // employee's row does — Deduction is the half-day discount,
+        // Net = Gross - Deduction — instead of a flat ₹0.00 that looks
+        // like nothing was calculated.
+        $grossSalary = round($salaryAmount * ($daysPresent + $daysHalfDay), 2);
+        $deduction = round($salaryAmount * 0.5 * $daysHalfDay, 2);
+        $netSalary = round($grossSalary - $deduction, 2);
     } else {
         $perDayRate = $daysInMonth > 0 ? $salaryAmount / $daysInMonth : 0.0;
         $grossSalary = $salaryAmount;
