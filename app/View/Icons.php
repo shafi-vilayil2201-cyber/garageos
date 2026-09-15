@@ -40,6 +40,7 @@ function icon(string $name, int $size = 18): string
         'chevron-left' => '<polyline points="15 18 9 12 15 6"/>',
         'chevron-right' => '<polyline points="9 18 15 12 9 6"/>',
         'wrench' => '<path d="M14.7 6.3a4 4 0 0 0-5.4 5l-7 7 2.4 2.4 7-7a4 4 0 0 0 5-5.4l-2.7 2.7-2.4-2.4z"/>',
+        'printer' => '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
     ];
 
     $body = $paths[$name] ?? $paths['box'];

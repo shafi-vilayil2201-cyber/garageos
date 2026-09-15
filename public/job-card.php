@@ -504,20 +504,24 @@ $topbarTitle = $jobCard['job_no'];
                     </p>
                 </div>
 
-                <?php if ($invoice): ?>
-                    <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary"><?= icon('receipt', 16) ?> View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
-                <?php elseif ($canManageInvoices): ?>
-                    <?php $hasLines = !empty($serviceLines) || !empty($partLines); ?>
-                    <form method="POST" action="">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="generate_invoice">
-                        <button
-                            type="submit"
-                            class="button"
-                            <?= $hasLines ? '' : 'disabled title="Add at least one service or part first"' ?>
-                        ><?= icon('receipt', 16) ?> Generate invoice</button>
-                    </form>
-                <?php endif; ?>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <a href="/job-card-print.php?id=<?= $jobCardId ?>" target="_blank" class="button secondary"><?= icon('printer', 16) ?> Print Job Card</a>
+
+                    <?php if ($invoice): ?>
+                        <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary"><?= icon('receipt', 16) ?> View invoice <?= htmlspecialchars($invoice['invoice_no']) ?></a>
+                    <?php elseif ($canManageInvoices): ?>
+                        <?php $hasLines = !empty($serviceLines) || !empty($partLines); ?>
+                        <form method="POST" action="">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="generate_invoice">
+                            <button
+                                type="submit"
+                                class="button"
+                                <?= $hasLines ? '' : 'disabled title="Add at least one service or part first"' ?>
+                            ><?= icon('receipt', 16) ?> Generate invoice</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <?php if ($error): ?>
