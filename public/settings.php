@@ -29,16 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currency = trim($_POST['currency'] ?? '');
     $taxNumber = trim($_POST['tax_number'] ?? '');
     $defaultTaxRate = $_POST['default_tax_rate'] ?? '';
+    $state = trim($_POST['state'] ?? '');
 
     if ($name === '' || $currency === '') {
         $error = 'Name and currency are required.';
     } elseif (!gst_rate_is_valid($defaultTaxRate)) {
         $error = 'Choose a valid GST rate.';
+    } elseif ($state !== '' && !in_array($state, INDIAN_STATES, true)) {
+        $error = 'Choose a valid state.';
     } else {
         $statement = $pdo->prepare("
             UPDATE organizations
             SET name = :name, currency = :currency, tax_number = :tax_number,
-                default_tax_rate = :default_tax_rate, updated_at = CURRENT_TIMESTAMP
+                default_tax_rate = :default_tax_rate, state = :state, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $statement->execute([
@@ -46,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'currency' => $currency,
             'tax_number' => $taxNumber ?: null,
             'default_tax_rate' => $defaultTaxRate,
+            'state' => $state ?: null,
             'id' => $organizationId
         ]);
 
@@ -119,6 +123,13 @@ $topbarTitle = 'Settings';
                                 <label><?= htmlspecialchars($organization['tax_label']) ?> number (GSTIN)</label>
                                 <input type="text" name="tax_number" value="<?= htmlspecialchars($organization['tax_number'] ?? '') ?>" placeholder="e.g. 32AAAAA0000A1Z5" maxlength="50">
                                 <p class="result-meta" style="margin-top:6px;">Shown on every invoice you generate — required for a valid GST tax invoice.</p>
+                            </div>
+                            <div class="form-field">
+                                <label>State</label>
+                                <select name="state">
+                                    <?= state_options($organization['state'] ?? null) ?>
+                                </select>
+                                <p class="result-meta" style="margin-top:6px;">Compared against each customer's state to show GST as CGST+SGST (same state) or IGST (different state) on invoices.</p>
                             </div>
                             <div class="form-field">
                                 <label>Default GST rate</label>

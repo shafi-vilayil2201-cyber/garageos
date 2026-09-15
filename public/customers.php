@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Gst.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -35,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $address = trim($_POST['address'] ?? '');
     $gstin = strtoupper(trim($_POST['gstin'] ?? ''));
+    $state = trim($_POST['state'] ?? '');
 
     if ($action === 'update') {
 
@@ -43,10 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '' || $phone === '') {
             $error = 'Name and phone are required.';
             $errorAction = 'update';
+        } elseif ($state !== '' && !in_array($state, INDIAN_STATES, true)) {
+            $error = 'Choose a valid state.';
+            $errorAction = 'update';
         } else {
             $statement = $pdo->prepare("
                 UPDATE customers
-                SET name = :name, phone = :phone, email = :email, address = :address, gstin = :gstin, updated_at = CURRENT_TIMESTAMP
+                SET name = :name, phone = :phone, email = :email, address = :address, gstin = :gstin, state = :state, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND organization_id = :organization_id
             ");
             $statement->execute([
@@ -55,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email ?: null,
                 'address' => $address ?: null,
                 'gstin' => $gstin ?: null,
+                'state' => $state ?: null,
                 'id' => $editingCustomerId,
                 'organization_id' => $organizationId
             ]);
@@ -127,7 +133,7 @@ $editingCustomer = null;
 
 if ($editingCustomerId) {
     $statement = $pdo->prepare("
-        SELECT id, name, phone, email, address, gstin
+        SELECT id, name, phone, email, address, gstin, state
         FROM customers
         WHERE id = :id AND organization_id = :organization_id
     ");
@@ -343,6 +349,14 @@ $topbarTitle = 'Customers';
                             <div class="form-field">
                                 <label>GSTIN (optional)</label>
                                 <input type="text" name="gstin" placeholder="For B2B invoices" value="<?= htmlspecialchars($editingCustomer['gstin'] ?? '') ?>">
+                            </div>
+
+                            <div class="form-field">
+                                <label>State (optional)</label>
+                                <select name="state">
+                                    <?= state_options($editingCustomer['state'] ?? null) ?>
+                                </select>
+                                <p class="result-meta" style="margin-top:6px;">Used to show GST as CGST+SGST or IGST on invoices — leave unset if unsure.</p>
                             </div>
 
                         </div>

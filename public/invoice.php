@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Gst.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -21,10 +22,11 @@ $invoiceId = (int) ($_GET['id'] ?? 0);
 
 $statement = $pdo->prepare("
     SELECT i.*, c.name AS customer_name, c.phone AS customer_phone, c.gstin AS customer_gstin,
+           c.state AS customer_state,
            jc.job_no, v.registration_no, v.make, v.model,
            o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address,
            o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number,
-           o.default_tax_rate AS organization_default_tax_rate
+           o.default_tax_rate AS organization_default_tax_rate, o.state AS organization_state
     FROM invoices i
     INNER JOIN customers c ON c.id = i.customer_id
     INNER JOIN job_cards jc ON jc.id = i.job_card_id
@@ -190,6 +192,7 @@ $statement->execute(['invoice_id' => $invoiceId]);
 $payments = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
+$isInterState = gst_is_inter_state($invoice['organization_state'], $invoice['customer_state']);
 
 $invoiceStatusIcons = [
     'unpaid' => 'alert-triangle',
@@ -284,18 +287,26 @@ $topbarTitle = $invoice['invoice_no'];
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
                                 <span>Subtotal</span><strong class="num">₹<?= number_format($invoice['subtotal'], 2) ?></strong>
                             </div>
-                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                            </div>
-                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                            </div>
+                            <?php if ($isInterState): ?>
+                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                    <span>IGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
+                                </div>
+                            <?php else: ?>
+                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                    <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                </div>
+                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                    <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                </div>
+                            <?php endif; ?>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); margin-top:6px; font-size:18px;">
                                 <span>Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
                             </div>
-                            <p class="result-meta" style="margin-top:10px;">
-                                GST shown as CGST + SGST (intra-state sale). For an inter-state customer, this should be shown as IGST instead — not yet handled automatically.
-                            </p>
+                            <?php if (!$invoice['organization_state'] || !$invoice['customer_state']): ?>
+                                <p class="result-meta" style="margin-top:10px;">
+                                    GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? 'your organization\'s' : 'this customer\'s' ?> state isn't set, so this couldn't be verified. Set it in <?= !$invoice['organization_state'] ? '<a href="/settings.php">Settings</a>' : '<a href="/customers.php?edit=' . (int) $invoice['customer_id'] . '">Customers</a>' ?> to switch to IGST automatically for inter-state sales.
+                                </p>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
