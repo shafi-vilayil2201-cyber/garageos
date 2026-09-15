@@ -183,6 +183,63 @@ textarea:focus-visible,
     color: var(--primary);
 }
 
+/* Finance's expandable sub-nav — the only nested nav group in the
+   sidebar. The parent row reuses .nav-item itself (it's a real link to
+   /finance.php) alongside a separate toggle button, so it needs no
+   visual styling of its own beyond the flex layout that pairs the two
+   and the indentation for children. */
+.nav-group-header {
+    display: flex;
+    align-items: center;
+}
+
+.nav-group-header .nav-item {
+    flex: 1;
+    min-width: 0;
+}
+
+.nav-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    margin-left: 2px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--sidebar-muted);
+    cursor: pointer;
+}
+
+.nav-group-toggle:hover {
+    background: var(--sidebar-active);
+    color: #ffffff;
+}
+
+.nav-group-toggle svg {
+    transition: transform 0.15s ease;
+}
+
+.nav-group-toggle.expanded svg {
+    transform: rotate(90deg);
+}
+
+.nav-subitems {
+    display: flex;
+    flex-direction: column;
+    padding-left: 20px;
+}
+
+.nav-subitems[hidden] {
+    display: none;
+}
+
+.nav-subitems .nav-item {
+    font-size: 13.5px;
+}
+
 /* Tablet-only manual collapse toggle — hidden everywhere else; shown
    by the tablet media query below. */
 .sidebar-collapse-toggle {
@@ -1360,7 +1417,9 @@ body.kanban-touch-dragging {
     .app.sidebar-collapsed .nav-label,
     .app.sidebar-collapsed .nav-item span:last-child,
     .app.sidebar-collapsed .sidebar-footer,
-    .app.sidebar-collapsed .sidebar-collapse-toggle span {
+    .app.sidebar-collapsed .sidebar-collapse-toggle span,
+    .app.sidebar-collapsed .nav-group-toggle,
+    .app.sidebar-collapsed .nav-subitems {
         display: none;
     }
 

@@ -150,7 +150,9 @@ try {
         ['Manage users', 'users.manage'],
         ['Manage attendance', 'attendance.manage'],
         ['Manage payroll', 'payroll.manage'],
-        ['View own attendance', 'attendance.view_own']
+        ['View own attendance', 'attendance.view_own'],
+        ['View finance', 'finance.view'],
+        ['Manage finance', 'finance.manage']
     ];
 
     $permissionIds = [];
@@ -203,7 +205,8 @@ try {
                 'dashboard.view', 'job_cards.view',
                 'invoices.view', 'invoices.manage',
                 'parts.view', 'purchases.view',
-                'reports.view', 'attendance.view_own'
+                'reports.view', 'attendance.view_own',
+                'finance.view', 'finance.manage'
             ]
         ],
         'PARTS_MANAGER' => [

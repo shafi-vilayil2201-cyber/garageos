@@ -140,4 +140,58 @@ document.addEventListener('DOMContentLoaded', () =>
             }
         });
     }
+
+    // Finance's expandable sub-nav (currently the only nested nav
+    // group). The active group is already server-rendered expanded —
+    // see $financeGroupActive in sidebar.php — so a stale "collapsed"
+    // localStorage preference from browsing elsewhere must never hide
+    // the links for the page actually in view.
+    document.querySelectorAll('[data-nav-group]').forEach(toggle =>
+    {
+        const key = toggle.dataset.navGroup;
+        const isActive = toggle.dataset.navGroupActive === 'true';
+        const subitems = document.querySelector(`[data-nav-subitems="${key}"]`);
+
+        if (!subitems)
+        {
+            return;
+        }
+
+        const storageKey = `garageos-nav-group-${key}`;
+
+        function setExpanded(expanded)
+        {
+            subitems.hidden = !expanded;
+            toggle.classList.toggle('expanded', expanded);
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+
+        if (!isActive)
+        {
+            try
+            {
+                if (localStorage.getItem(storageKey) === '1')
+                {
+                    setExpanded(true);
+                }
+            } catch (error)
+            {
+                // Non-fatal — same as the sidebar-collapsed preference above.
+            }
+        }
+
+        toggle.addEventListener('click', () =>
+        {
+            const expanded = subitems.hidden;
+            setExpanded(expanded);
+
+            try
+            {
+                localStorage.setItem(storageKey, expanded ? '1' : '0');
+            } catch (error)
+            {
+                // Non-fatal.
+            }
+        });
+    });
 });

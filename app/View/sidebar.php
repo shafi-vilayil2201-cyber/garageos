@@ -24,9 +24,17 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
 // visible — an empty "Operations" heading with nothing under it is clutter,
 // not navigation, for a restricted role like Technician.
 $showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
-$showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'purchases.view') || user_can($user, 'suppliers.view');
+$showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'suppliers.view');
 $showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage') || user_can($user, 'settings.manage');
-$showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manage');
+$showHR = user_can($user, 'attendance.manage');
+
+// Purchases and Payroll live here now, alongside the new Finance pages
+// — the group shows if any one child would be visible, exactly like
+// the $showX booleans above; each child link below is still
+// independently permission-gated on its own.
+$showFinance = user_can($user, 'finance.view') || user_can($user, 'payroll.manage') || user_can($user, 'purchases.view');
+$financeChildKeys = ['finance_revenue', 'finance_expenses', 'finance_dues', 'finance_pnl', 'payroll', 'purchases'];
+$financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, $financeChildKeys, true);
 
 ?>
 <script>
@@ -104,10 +112,6 @@ $showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manag
                     <?php nav_link('/vehicles.php', 'vehicles', $activeNav, 'car', 'Vehicles'); ?>
                 <?php endif; ?>
 
-                <?php if (user_can($user, 'purchases.view')): ?>
-                    <?php nav_link('/purchases.php', 'purchases', $activeNav, 'truck', 'Purchases'); ?>
-                <?php endif; ?>
-
                 <?php if (user_can($user, 'suppliers.view')): ?>
                     <?php nav_link('/suppliers.php', 'suppliers', $activeNav, 'warehouse', 'Suppliers'); ?>
                 <?php endif; ?>
@@ -126,9 +130,46 @@ $showHR = user_can($user, 'attendance.manage') || user_can($user, 'payroll.manag
                     <?php nav_link('/attendance.php', 'attendance', $activeNav, 'calendar', 'Attendance'); ?>
                 <?php endif; ?>
 
-                <?php if (user_can($user, 'payroll.manage')): ?>
-                    <?php nav_link('/payroll.php', 'payroll', $activeNav, 'wallet', 'Payroll'); ?>
-                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($showFinance): ?>
+            <div class="nav-section">
+
+                <div class="nav-label">
+                    Finance
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-header">
+                        <a href="/finance.php" class="<?= nav_class('finance_overview', $activeNav) ?>">
+                            <span class="nav-icon"><?= icon('wallet') ?></span>
+                            <span>Finance</span>
+                        </a>
+                        <button type="button" class="nav-group-toggle<?= $financeGroupActive ? ' expanded' : '' ?>"
+                                data-nav-group="finance" data-nav-group-active="<?= $financeGroupActive ? 'true' : 'false' ?>"
+                                aria-expanded="<?= $financeGroupActive ? 'true' : 'false' ?>" aria-label="Toggle Finance links">
+                            <?= icon('chevron-right', 14) ?>
+                        </button>
+                    </div>
+
+                    <div class="nav-subitems" data-nav-subitems="finance"<?= $financeGroupActive ? '' : ' hidden' ?>>
+                        <?php if (user_can($user, 'finance.view')): ?>
+                            <?php nav_link('/finance-revenue.php', 'finance_revenue', $activeNav, 'trending-up', 'Revenue'); ?>
+                            <?php nav_link('/finance-expenses.php', 'finance_expenses', $activeNav, 'receipt', 'Expenses'); ?>
+                            <?php nav_link('/finance-dues.php', 'finance_dues', $activeNav, 'alert-triangle', 'Debt'); ?>
+                            <?php nav_link('/finance-pnl.php', 'finance_pnl', $activeNav, 'chart', 'P&L'); ?>
+                        <?php endif; ?>
+
+                        <?php if (user_can($user, 'payroll.manage')): ?>
+                            <?php nav_link('/payroll.php', 'payroll', $activeNav, 'team', 'Payroll'); ?>
+                        <?php endif; ?>
+
+                        <?php if (user_can($user, 'purchases.view')): ?>
+                            <?php nav_link('/purchases.php', 'purchases', $activeNav, 'truck', 'Purchases'); ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
 
             </div>
         <?php endif; ?>
