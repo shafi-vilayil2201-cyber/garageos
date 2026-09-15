@@ -964,6 +964,12 @@ table.data-table {
 
 .kanban-card-link[draggable="true"] {
     cursor: grab;
+    /* Touch drag (job-cards-board.js) takes over the gesture itself once
+       it crosses the drag threshold — without these, touch devices would
+       instead try to scroll the page and/or show the browser's own
+       long-press link callout/context menu. */
+    touch-action: none;
+    -webkit-touch-callout: none;
 }
 
 .kanban-card-link[draggable="true"]:active {
@@ -972,6 +978,21 @@ table.data-table {
 
 .kanban-card-link.dragging .kanban-card {
     opacity: 0.4;
+}
+
+/* The floating clone that follows the finger during a touch drag — the
+   original card (above) just dims via .dragging in place until drop. */
+.kanban-card-ghost {
+    position: fixed;
+    z-index: 1000;
+    margin: 0;
+    pointer-events: none;
+    transform: scale(1.03);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+body.kanban-touch-dragging {
+    overscroll-behavior: contain;
 }
 
 .kanban-card {
