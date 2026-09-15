@@ -114,6 +114,11 @@ function selectPart(part)
 
     document.getElementById('part_quantity').max = part.stock_quantity;
 
+    // Labour charge/technician are per-addition, not per-part — reset them
+    // so a value left over from adding a different part doesn't carry over.
+    document.getElementById('part_labour_charge').value = 0;
+    document.getElementById('part_technician_id').value = '';
+
     partResults.innerHTML = '';
     addPartForm.style.display = 'flex';
 }

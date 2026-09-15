@@ -42,20 +42,33 @@ for ($i = 6; $i >= 0; $i--) {
 }
 $maxRevenue = max([1, ...array_values($last7Days)]);
 
-// Technician productivity — jobs completed and revenue generated
+// Technician productivity — jobs completed and revenue generated.
+// Combines catalog Service work with ad-hoc per-part labour charges
+// (see job_card_parts.labour_charge) so a technician's number reflects
+// both — not just Services, which would otherwise miss part-linked work.
 $statement = $pdo->prepare("
     SELECT
         u.name,
         COUNT(*) AS jobs_count,
-        SUM(jci.price - jci.discount) AS revenue
-    FROM job_card_items jci
-    INNER JOIN job_cards jc ON jc.id = jci.job_card_id
-    INNER JOIN users u ON u.id = jci.technician_id
-    WHERE jc.organization_id = :organization_id
+        SUM(combined.revenue) AS revenue
+    FROM (
+        SELECT jci.technician_id, (jci.price - jci.discount) AS revenue
+        FROM job_card_items jci
+        INNER JOIN job_cards jc ON jc.id = jci.job_card_id
+        WHERE jc.organization_id = :organization_id AND jci.technician_id IS NOT NULL
+
+        UNION ALL
+
+        SELECT jcp.technician_id, jcp.labour_charge AS revenue
+        FROM job_card_parts jcp
+        INNER JOIN job_cards jc ON jc.id = jcp.job_card_id
+        WHERE jc.organization_id = :organization_id2 AND jcp.technician_id IS NOT NULL AND jcp.labour_charge > 0
+    ) combined
+    INNER JOIN users u ON u.id = combined.technician_id
     GROUP BY u.name
     ORDER BY revenue DESC
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->execute(['organization_id' => $organizationId, 'organization_id2' => $organizationId]);
 $technicianStats = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 // Top parts used, all time

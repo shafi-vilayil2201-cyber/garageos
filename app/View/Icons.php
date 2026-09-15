@@ -39,6 +39,7 @@ function icon(string $name, int $size = 18): string
         'arrow-left' => '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18.5 4.5 12 11 5.5"/>',
         'chevron-left' => '<polyline points="15 18 9 12 15 6"/>',
         'chevron-right' => '<polyline points="9 18 15 12 9 6"/>',
+        'wrench' => '<path d="M14.7 6.3a4 4 0 0 0-5.4 5l-7 7 2.4 2.4 7-7a4 4 0 0 0 5-5.4l-2.7 2.7-2.4-2.4z"/>',
     ];
 
     $body = $paths[$name] ?? $paths['box'];

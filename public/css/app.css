@@ -621,6 +621,37 @@ table.data-table {
     cursor: pointer;
 }
 
+.part-labour-row td {
+    padding: 6px 20px 14px 44px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.part-labour-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.part-labour-label svg {
+    flex-shrink: 0;
+}
+
+.part-labour-row .num {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--text);
+}
+
 .data-table tr.clickable:hover {
     background: #faf9f6;
 }
