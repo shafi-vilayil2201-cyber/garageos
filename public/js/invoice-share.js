@@ -1,11 +1,23 @@
 // Turns the existing printable invoice page into a real PDF file (via
-// vendored jsPDF + html2canvas — no server-side PDF generation exists,
+// vendored html2canvas + jsPDF — no server-side PDF generation exists,
 // see public/invoice-print.php) and hands it to the OS Share Sheet so
 // WhatsApp can appear as a target with the file actually attached.
 // navigator.share with files only works on mobile Chrome/Safari — on
 // desktop there's no way to attach a file into a wa.me chat, so this
 // falls back to downloading the PDF and opening the pre-filled chat
 // for the file to be attached by hand.
+//
+// This deliberately does NOT use jsPDF's own .html() method. That
+// method has real, confirmed rendering bugs independent of html2canvas
+// itself: it drops border and conditional-color styling entirely (the
+// "PAID" badge, table lines, the letterhead rule all vanish), it
+// mis-places CSS Grid content (the "Billed to" / "Vehicle & job
+// reference" two-column block gets torn out of order), and its
+// "slice" page-break mode cuts straight through content sitting at a
+// page boundary. Calling html2canvas directly and building the PDF
+// page-by-page ourselves avoids all three — html2canvas alone renders
+// the page faithfully; jsPDF is only used here as a thin image
+// container.
 document.addEventListener('DOMContentLoaded', () =>
 {
     const button = document.getElementById('whatsapp-share-btn');
@@ -27,12 +39,14 @@ document.addEventListener('DOMContentLoaded', () =>
     }
 
     // Matches print.css's .sheet { max-width: 210mm }, i.e. an A4 page
-    // width at 96 CSS px/inch. Passed to jsPDF as a fixed windowWidth
-    // instead of measuring sheet.scrollWidth live — on at least one real
-    // device (iOS Safari) that live measurement came back far too small,
-    // making jsPDF compute a huge scale (width ÷ windowWidth) and blow
-    // the invoice up into oversized text spread across many pages.
+    // width at 96 CSS px/inch. Used as a fixed iframe/capture width
+    // instead of measuring the DOM live — on at least one real device
+    // (iOS Safari) a live scrollWidth measurement came back far too
+    // small, blowing up the resulting scale factor.
     const A4_WIDTH_PX = 794;
+    const RENDER_SCALE = 2;
+    const PAGE_WIDTH_MM = 210;
+    const PAGE_HEIGHT_MM = 297;
 
     async function buildInvoicePdf(printUrl)
     {
@@ -71,37 +85,65 @@ document.addEventListener('DOMContentLoaded', () =>
             // unaffected and keep the real ₹ symbol.
             sheet.innerHTML = sheet.innerHTML.replace(/₹/g, 'Rs. ');
 
-            // jsPDF's html() renderer doesn't correctly place CSS Grid
-            // content — .info-grid (the only display:grid in print.css,
-            // see public/css/print.css) gets torn out of normal flow and
-            // dumped near the bottom of the page, after the totals and
-            // signature, instead of staying under the letterhead. Force
-            // it to a plain stacked block layout, which the renderer
-            // handles correctly, purely for this capture clone.
-            const infoGrid = sheet.querySelector('.info-grid');
-            if (infoGrid) {
-                infoGrid.style.display = 'block';
-                infoGrid.querySelectorAll('.info-block').forEach(block => {
-                    block.style.marginBottom = '16px';
-                });
-            }
+            // Measure safe page-break points BEFORE rasterizing: the
+            // bottom edge of every top-level section and every table
+            // row. A page break is only ever placed at one of these, so
+            // it never lands in the middle of a row or a line of text.
+            const sheetTop = sheet.getBoundingClientRect().top;
+            const breakOffsets = new Set([0]);
+            Array.from(sheet.children).forEach(el => {
+                breakOffsets.add(el.getBoundingClientRect().bottom - sheetTop);
+            });
+            sheet.querySelectorAll('tr').forEach(el => {
+                breakOffsets.add(el.getBoundingClientRect().bottom - sheetTop);
+            });
+            const safeBreaksCss = Array.from(breakOffsets).sort((a, b) => a - b);
+
+            const canvas = await window.html2canvas(sheet, {
+                backgroundColor: '#ffffff',
+                scale: RENDER_SCALE
+            });
 
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
+            const pxPerMm = canvas.width / PAGE_WIDTH_MM;
+            const pageHeightPx = PAGE_HEIGHT_MM * pxPerMm;
 
-            await pdf.html(sheet, {
-                x: 0,
-                y: 0,
-                width: 210,
-                windowWidth: A4_WIDTH_PX,
-                // jsPDF's default page-break mode ("slice") cuts straight
-                // through whatever content happens to sit at the page
-                // boundary — on any invoice long enough to need a second
-                // page, a table row or totals line gets sliced in half
-                // and duplicated across both pages. "text" mode breaks
-                // between text runs instead, avoiding that.
-                autoPaging: 'text'
-            });
+            const safeBreaksPx = safeBreaksCss
+                .map(px => px * RENDER_SCALE)
+                .filter(px => px <= canvas.height);
+            if (safeBreaksPx[safeBreaksPx.length - 1] !== canvas.height) {
+                safeBreaksPx.push(canvas.height);
+            }
+
+            let cursor = 0;
+            let isFirstPage = true;
+
+            while (cursor < canvas.height) {
+                const maxAllowed = cursor + pageHeightPx;
+                const candidates = safeBreaksPx.filter(p => p > cursor && p <= maxAllowed);
+                // No safe break fits this page at all (a single row taller
+                // than a page) — fall back to a hard cut rather than loop
+                // forever.
+                const cut = candidates.length ? candidates[candidates.length - 1] : Math.min(maxAllowed, canvas.height);
+
+                const sliceHeightPx = cut - cursor;
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = sliceHeightPx;
+                pageCanvas.getContext('2d').drawImage(
+                    canvas, 0, cursor, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx
+                );
+
+                const sliceImgData = pageCanvas.toDataURL('image/jpeg', 0.92);
+                const sliceHeightMm = sliceHeightPx / pxPerMm;
+
+                if (!isFirstPage) { pdf.addPage(); }
+                pdf.addImage(sliceImgData, 'JPEG', 0, 0, PAGE_WIDTH_MM, sliceHeightMm);
+
+                cursor = cut;
+                isFirstPage = false;
+            }
 
             return pdf.output('blob');
 
