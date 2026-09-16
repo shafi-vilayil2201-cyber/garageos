@@ -1,6 +1,8 @@
 <?php
 
-// Expects $topbarTitle and $user to be set by the including page.
+// Expects $user to be set by the including page. $topbarTitle is no
+// longer shown here — each page's own <h1 class="page-title"> in the
+// body is the one place the page name is displayed now.
 $initial = strtoupper(substr($user['name'], 0, 1));
 
 ?>
@@ -10,10 +12,6 @@ $initial = strtoupper(substr($user['name'], 0, 1));
         <button type="button" class="hamburger-button" id="hamburger-button" aria-label="Open navigation">
             <?= icon('menu', 18) ?>
         </button>
-
-        <div class="topbar-title">
-            <?= htmlspecialchars($topbarTitle ?? '') ?>
-        </div>
     </div>
 
     <div class="user-menu">
@@ -22,12 +20,27 @@ $initial = strtoupper(substr($user['name'], 0, 1));
             <?= htmlspecialchars($user['name']) ?>
         </div>
 
-        <div class="avatar">
-            <?= htmlspecialchars($initial) ?>
-        </div>
+        <div class="user-menu-trigger" id="user-menu-trigger">
+            <button type="button" class="avatar" id="user-menu-button"
+                    aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+                <?= htmlspecialchars($initial) ?>
+            </button>
 
-        <a href="/logout.php" class="logout-link"><?= icon('logout', 15) ?> <span>Logout</span></a>
+            <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
+                <a href="/profile.php" class="user-menu-item"><?= icon('person', 15) ?> Profile</a>
+                <?php if (user_can($user, 'settings.manage')): ?>
+                    <a href="/settings.php" class="user-menu-item"><?= icon('settings', 15) ?> Settings</a>
+                <?php endif; ?>
+                <?php if (user_can($user, 'reports.view')): ?>
+                    <a href="/reports.php" class="user-menu-item"><?= icon('chart', 15) ?> Reports</a>
+                <?php endif; ?>
+                <div class="user-menu-divider"></div>
+                <a href="/logout.php" class="user-menu-item user-menu-item-danger"><?= icon('logout', 15) ?> Logout</a>
+            </div>
+        </div>
 
     </div>
 
 </header>
+
+<script src="/js/user-menu.js"></script>

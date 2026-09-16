@@ -25,7 +25,6 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
 // not navigation, for a restricted role like Technician.
 $showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
 $showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'suppliers.view');
-$showInsights = user_can($user, 'reports.view') || user_can($user, 'users.manage') || user_can($user, 'settings.manage');
 $showHR = user_can($user, 'attendance.manage');
 
 // Purchases and Payroll live here now, alongside the new Finance pages
@@ -170,28 +169,6 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
                         <?php endif; ?>
                     </div>
                 </div>
-
-            </div>
-        <?php endif; ?>
-
-        <?php if ($showInsights): ?>
-            <div class="nav-section">
-
-                <div class="nav-label">
-                    Insights
-                </div>
-
-                <?php if (user_can($user, 'reports.view')): ?>
-                    <?php nav_link('/reports.php', 'reports', $activeNav, 'chart', 'Reports'); ?>
-                <?php endif; ?>
-
-                <?php if (user_can($user, 'users.manage')): ?>
-                    <?php nav_link('/users.php', 'users', $activeNav, 'team', 'Users'); ?>
-                <?php endif; ?>
-
-                <?php if (user_can($user, 'settings.manage')): ?>
-                    <?php nav_link('/settings.php', 'settings', $activeNav, 'settings', 'Settings'); ?>
-                <?php endif; ?>
 
             </div>
         <?php endif; ?>
