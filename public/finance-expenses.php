@@ -192,7 +192,7 @@ $topbarTitle = 'Expenses';
                         </div>
                         <form method="GET" action="">
                             <div class="header-date-wrap">
-                                <button type="button" class="button secondary header-date-trigger" aria-label="Choose month" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?></button>
+                                <button type="button" class="button secondary header-date-trigger" aria-label="Choose month" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?> <?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?></button>
                                 <input type="month" name="month" value="<?= htmlspecialchars($periodMonth) ?>" onchange="this.form.submit()">
                             </div>
                         </form>

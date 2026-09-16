@@ -943,17 +943,30 @@ table.data-table {
     gap: 8px;
 }
 
-/* Date/month picker in a card-header (Attendance, Payroll) — the native
-   input stays functional but hidden on mobile in favor of a compact
-   icon button, since the full input plus a Generate/label button
-   together don't fit a narrow header without wrapping badly. */
+/* Date/month picker in a card-header (Attendance, Payroll, Finance).
+   The native input's own click target only opens the picker when you
+   hit its built-in calendar glyph exactly — clicking its text instead
+   drops into inline keyboard-editing. The button is the one real,
+   always-visible control (icon + a formatted label, e.g. "September
+   2026"); the native input sits behind it, invisible and unclickable,
+   purely to hold the value and drive showPicker()/name= submission —
+   so clicking anywhere in the box behaves identically. */
 .header-date-wrap {
     position: relative;
     display: inline-flex;
 }
 
 .header-date-trigger {
-    display: none;
+    display: inline-flex;
+}
+
+.header-date-wrap input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* Search / results (job card intake, parts lookup) */
@@ -1571,19 +1584,6 @@ body.kanban-touch-dragging {
         max-width: none !important;
         width: 100%;
         margin-top: 10px;
-    }
-
-    .header-date-trigger {
-        display: inline-flex;
-    }
-
-    .header-date-wrap input {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        opacity: 0;
-        pointer-events: none;
     }
 
     .modal-backdrop {

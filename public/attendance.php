@@ -141,7 +141,7 @@ $topbarTitle = 'Attendance';
                     </div>
                     <form method="GET" action="">
                         <div class="header-date-wrap">
-                            <button type="button" class="button secondary header-date-trigger" aria-label="Choose date" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?></button>
+                            <button type="button" class="button secondary header-date-trigger" aria-label="Choose date" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?> <?= htmlspecialchars((new DateTime($workDate))->format('d M Y')) ?></button>
                             <input type="date" name="date" value="<?= htmlspecialchars($workDate) ?>" onchange="this.form.submit()">
                         </div>
                     </form>
