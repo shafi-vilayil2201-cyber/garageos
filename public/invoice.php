@@ -282,7 +282,15 @@ if ($hasWhatsappNumber) {
                 <div style="display:flex; flex-wrap:wrap; gap:10px;">
                     <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>" target="_blank" class="button secondary"><?= icon('printer', 16) ?> Print Invoice</a>
                     <?php if ($hasWhatsappNumber): ?>
-                        <a href="<?= htmlspecialchars($whatsappUrl) ?>" target="_blank" rel="noopener" class="button secondary"><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</a>
+                        <button
+                            type="button"
+                            id="whatsapp-share-btn"
+                            class="button secondary"
+                            data-invoice-url="/invoice-print.php?id=<?= (int) $invoice['id'] ?>"
+                            data-wa-number="<?= htmlspecialchars($customerPhoneDigits) ?>"
+                            data-wa-message="<?= htmlspecialchars($whatsappMessage) ?>"
+                            data-filename="<?= htmlspecialchars($invoice['invoice_no']) ?>.pdf"
+                        ><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</button>
                     <?php else: ?>
                         <span class="button secondary" aria-disabled="true" title="No phone number on file for this customer"><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</span>
                     <?php endif; ?>
@@ -481,6 +489,17 @@ if ($hasWhatsappNumber) {
     </main>
 
 </div>
+
+<?php if ($hasWhatsappNumber): ?>
+    <!-- Only loaded here (not app-wide) — these exist purely to turn the
+         printable invoice into a real PDF for the WhatsApp share button,
+         see public/js/invoice-share.js. Vendored locally rather than
+         from a CDN, matching this app's no-external-runtime-dependency
+         convention (config/database.php's load_env() comment). -->
+    <script src="/js/vendor/jspdf.umd.min.js"></script>
+    <script src="/js/vendor/html2canvas.min.js"></script>
+    <script src="/js/invoice-share.js"></script>
+<?php endif; ?>
 
 </body>
 </html>
