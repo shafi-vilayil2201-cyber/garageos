@@ -155,7 +155,10 @@ $topbarTitle = 'Suppliers';
         <section class="page">
 
             <div class="page-header">
-                <div></div>
+                <div>
+                    <h1 class="page-title">Suppliers</h1>
+                    <p class="page-description">Who you buy parts from.</p>
+                </div>
 
                 <?php if ($canManageSuppliers): ?>
                     <button type="button" class="button" onclick="openModal('supplier-modal')"><?= icon('plus', 16) ?> Add Supplier</button>

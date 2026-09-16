@@ -99,6 +99,13 @@ $topbarTitle = 'Finance';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Finance</h1>
+                    <p class="page-description"><?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?> at a glance.</p>
+                </div>
+            </div>
+
             <div class="stats">
 
                 <div class="card stat-card">

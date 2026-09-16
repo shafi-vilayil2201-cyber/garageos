@@ -124,6 +124,13 @@ $topbarTitle = 'Reports';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Reports</h1>
+                    <p class="page-description">Revenue, technician productivity, and parts usage.</p>
+                </div>
+            </div>
+
             <div class="content-grid content-grid-reports">
 
                 <div class="card">

@@ -122,6 +122,13 @@ $topbarTitle = 'Attendance';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Attendance</h1>
+                    <p class="page-description">Mark who was present, absent, or half-day for a given date.</p>
+                </div>
+            </div>
+
             <?php if ($saved): ?>
                 <div class="form-success" style="margin-bottom:16px;"><?= icon('check-circle', 16) ?> Attendance saved for <?= htmlspecialchars($workDate) ?>.</div>
             <?php endif; ?>

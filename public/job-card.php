@@ -509,11 +509,14 @@ $topbarTitle = $jobCard['job_no'];
 
             <div class="page-header">
                 <div>
-                    <p class="page-description" style="margin-top:0;">
-                        <span class="badge badge-<?= htmlspecialchars($jobCard['status']) ?>" style="margin-right:8px; vertical-align:middle;">
+                    <h1 class="page-title">
+                        <?= htmlspecialchars($jobCard['job_no']) ?>
+                        <span class="badge badge-<?= htmlspecialchars($jobCard['status']) ?>" style="margin-left:10px; vertical-align:middle;">
                             <?= icon($statusIcons[$jobCard['status']] ?? 'job-card', 12) ?>
                             <?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?>
                         </span>
+                    </h1>
+                    <p class="page-description">
                         <?= htmlspecialchars($jobCard['registration_no']) ?> —
                         <?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?>
                         · <?= htmlspecialchars($jobCard['customer_name']) ?> (<?= htmlspecialchars($jobCard['customer_phone']) ?>)

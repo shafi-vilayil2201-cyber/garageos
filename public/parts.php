@@ -316,7 +316,10 @@ $topbarTitle = 'Parts';
         <section class="page">
 
             <div class="page-header">
-                <div></div>
+                <div>
+                    <h1 class="page-title">Parts</h1>
+                    <p class="page-description">Stock on hand at this branch.</p>
+                </div>
 
                 <?php if ($canManageParts): ?>
                     <button type="button" class="button" onclick="openModal('part-modal')"><?= icon('plus', 16) ?> Add Part</button>

@@ -86,6 +86,13 @@ $topbarTitle = 'Revenue';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Revenue</h1>
+                    <p class="page-description">Money received from customers.</p>
+                </div>
+            </div>
+
             <div class="stats">
                 <div class="card stat-card">
                     <div class="stat-top">

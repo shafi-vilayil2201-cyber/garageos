@@ -156,6 +156,13 @@ $topbarTitle = 'Payroll';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Payroll</h1>
+                    <p class="page-description">Generate monthly salary from attendance — safe to re-run after fixing an attendance mistake.</p>
+                </div>
+            </div>
+
             <?php if ($generated): ?>
                 <div class="form-success" style="margin-bottom:16px;"><?= icon('check-circle', 16) ?> Payroll generated for <?= htmlspecialchars($periodMonth) ?>.</div>
             <?php endif; ?>

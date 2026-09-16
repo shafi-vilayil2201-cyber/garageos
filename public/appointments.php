@@ -211,7 +211,10 @@ $topbarTitle = 'Appointments';
         <section class="page">
 
             <div class="page-header">
-                <div></div>
+                <div>
+                    <h1 class="page-title">Appointments</h1>
+                    <p class="page-description">Vehicles booked for a future visit.</p>
+                </div>
 
                 <?php if ($canManageJobCards): ?>
                     <button type="button" class="button" onclick="openModal('appt-modal')"><?= icon('plus', 16) ?> New Appointment</button>

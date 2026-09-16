@@ -191,6 +191,13 @@ $topbarTitle = 'New Purchase';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">New Purchase</h1>
+                    <p class="page-description">Record parts received from a supplier — stock updates immediately.</p>
+                </div>
+            </div>
+
             <?php if (empty($suppliers)): ?>
                 <div class="card">
                     <div class="empty-state">

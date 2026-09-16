@@ -197,6 +197,13 @@ $topbarTitle = 'Reminders';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Reminders</h1>
+                    <p class="page-description">Vehicles due for their next service, and job cards running past the promised delivery.</p>
+                </div>
+            </div>
+
             <?php if (!empty($overdueJobCards)): ?>
                 <div class="card" style="margin-bottom:16px; border-color:var(--danger);">
                     <div class="card-header">

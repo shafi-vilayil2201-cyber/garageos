@@ -178,7 +178,10 @@ $topbarTitle = 'Vehicles';
         <section class="page">
 
             <div class="page-header">
-                <div></div>
+                <div>
+                    <h1 class="page-title">Vehicles</h1>
+                    <p class="page-description">Every vehicle that's passed through your workshop.</p>
+                </div>
 
                 <?php if ($canManageVehicles): ?>
                     <button type="button" class="button" onclick="openModal('vehicle-modal')"><?= icon('plus', 16) ?> Add Vehicle</button>

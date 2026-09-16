@@ -108,7 +108,15 @@ $topbarTitle = 'Job Cards';
         <section class="page">
 
             <div class="page-header">
-                <div></div>
+                <div>
+                    <h1 class="page-title">Job Cards</h1>
+                    <p class="page-description">
+                        Every vehicle currently moving through the workshop.
+                        <?php if ($canManageJobCards && !empty($jobCards)): ?>
+                            Drag a card forward to move it along — it can't go back a stage.
+                        <?php endif; ?>
+                    </p>
+                </div>
 
                 <?php if ($canManageJobCards): ?>
                     <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>

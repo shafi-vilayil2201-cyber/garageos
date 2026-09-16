@@ -164,6 +164,13 @@ $topbarTitle = 'Expenses';
 
         <section class="page">
 
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Expenses</h1>
+                    <p class="page-description">Everything going out — rent, electricity, purchases, and payroll, together.</p>
+                </div>
+            </div>
+
             <div class="card stat-card" style="max-width:280px; margin-bottom:16px;">
                 <div class="stat-top">
                     <div>
