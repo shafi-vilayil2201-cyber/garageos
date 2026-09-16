@@ -26,14 +26,29 @@ document.addEventListener('DOMContentLoaded', () =>
         button.innerHTML = originalLabel;
     }
 
+    // Matches print.css's .sheet { max-width: 210mm }, i.e. an A4 page
+    // width at 96 CSS px/inch. Passed to jsPDF as a fixed windowWidth
+    // instead of measuring sheet.scrollWidth live — on at least one real
+    // device (iOS Safari) that live measurement came back far too small,
+    // making jsPDF compute a huge scale (width ÷ windowWidth) and blow
+    // the invoice up into oversized text spread across many pages.
+    const A4_WIDTH_PX = 794;
+
     async function buildInvoicePdf(printUrl)
     {
         const iframe = document.createElement('iframe');
+        // Kept within normal viewport bounds (just visually hidden) rather
+        // than flung far off-screen — an extreme negative offset is a
+        // known trigger for WebKit/Safari to skip or botch layout for
+        // content it treats as far outside any visible/composited area.
         iframe.style.position = 'fixed';
-        iframe.style.left = '-10000px';
         iframe.style.top = '0';
-        iframe.style.width = '900px';
+        iframe.style.left = '0';
+        iframe.style.width = A4_WIDTH_PX + 'px';
         iframe.style.height = '1200px';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.zIndex = '-1';
         document.body.appendChild(iframe);
 
         try {
@@ -78,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () =>
                 x: 0,
                 y: 0,
                 width: 210,
-                windowWidth: sheet.scrollWidth || 900,
+                windowWidth: A4_WIDTH_PX,
                 // jsPDF's default page-break mode ("slice") cuts straight
                 // through whatever content happens to sit at the page
                 // boundary — on any invoice long enough to need a second
