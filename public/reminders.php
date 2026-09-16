@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/ServiceDue.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -50,28 +51,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// Generate upcoming insurance/PUC expiry reminders from the vehicle
-// records themselves. Idempotent — the unique constraint on
-// (vehicle_id, due_type, due_date) means running this twice is harmless.
-// Each installation is a single self-contained instance with no
-// background worker, so this runs inline whenever the page loads.
-$expiryTypes = [
-    'insurance_expiry' => 'insurance_expiry',
-    'puc_expiry' => 'puc_expiry'
-];
+// Generate upcoming "service due" reminders by projecting each vehicle's
+// next service from its own odometer history — see
+// app/Domain/ServiceDue.php for the "whichever comes first" (km or
+// months) rule. Each installation is a single self-contained instance
+// with no background worker, so this runs inline whenever the page loads.
+$statement = $pdo->prepare("SELECT service_interval_km, service_interval_months FROM organizations WHERE id = :id");
+$statement->execute(['id' => $organizationId]);
+$serviceInterval = $statement->fetch(PDO::FETCH_ASSOC);
 
-foreach ($expiryTypes as $column => $dueType) {
-    $statement = $pdo->prepare("
-        INSERT INTO reminders (organization_id, customer_id, vehicle_id, due_type, due_date)
-        SELECT v.organization_id, v.customer_id, v.id, :due_type, v.{$column}
-        FROM vehicles v
-        WHERE v.organization_id = :organization_id
-          AND v.{$column} IS NOT NULL
-          AND v.{$column} <= CURRENT_DATE + INTERVAL '30 days'
-        ON CONFLICT (vehicle_id, due_type, due_date) DO NOTHING
-    ");
-    $statement->execute(['due_type' => $dueType, 'organization_id' => $organizationId]);
+$statement = $pdo->prepare("
+    SELECT jc.vehicle_id, v.customer_id, jc.created_at::date AS date, jc.odometer_in AS odometer
+    FROM job_cards jc
+    INNER JOIN vehicles v ON v.id = jc.vehicle_id
+    WHERE jc.organization_id = :organization_id AND jc.odometer_in IS NOT NULL
+    ORDER BY jc.vehicle_id, jc.created_at
+");
+$statement->execute(['organization_id' => $organizationId]);
+
+$historyByVehicle = [];
+
+foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $historyByVehicle[$row['vehicle_id']]['customer_id'] = $row['customer_id'];
+    $historyByVehicle[$row['vehicle_id']]['rows'][] = ['date' => $row['date'], 'odometer' => (int) $row['odometer']];
 }
+
+$deleteStale = $pdo->prepare("
+    DELETE FROM reminders
+    WHERE vehicle_id = :vehicle_id AND due_type = 'service_due' AND status = 'pending' AND due_date != :due_date
+");
+$insertFresh = $pdo->prepare("
+    INSERT INTO reminders (organization_id, customer_id, vehicle_id, due_type, due_date)
+    VALUES (:organization_id, :customer_id, :vehicle_id, 'service_due', :due_date)
+    ON CONFLICT (vehicle_id, due_type, due_date) DO NOTHING
+");
+
+foreach ($historyByVehicle as $vehicleId => $vehicle) {
+    $dueDate = calculate_next_service_due($vehicle['rows'], (int) $serviceInterval['service_interval_km'], (int) $serviceInterval['service_interval_months']);
+
+    if ($dueDate === null || $dueDate > date('Y-m-d', strtotime('+30 days'))) {
+        continue;
+    }
+
+    $deleteStale->execute(['vehicle_id' => $vehicleId, 'due_date' => $dueDate]);
+    $insertFresh->execute([
+        'organization_id' => $organizationId,
+        'customer_id' => $vehicle['customer_id'],
+        'vehicle_id' => $vehicleId,
+        'due_date' => $dueDate
+    ]);
+}
+
+// Job cards running past the delivery date staff promised the customer
+// — an internal, operational nudge rather than a customer-facing
+// reminder, so it's computed live from job_cards directly instead of
+// being materialized into the reminders table: there's nothing to
+// "dismiss" or "mark contacted" about it, it should just disappear the
+// moment the job card is actually delivered (or the promise changes).
+$statement = $pdo->prepare("
+    SELECT jc.id, jc.job_no, jc.promised_at, jc.status,
+           v.registration_no, v.make, v.model,
+           c.name AS customer_name
+    FROM job_cards jc
+    INNER JOIN vehicles v ON v.id = jc.vehicle_id
+    INNER JOIN customers c ON c.id = jc.customer_id
+    WHERE jc.organization_id = :organization_id
+      AND jc.promised_at IS NOT NULL
+      AND jc.promised_at < CURRENT_TIMESTAMP
+      AND jc.status NOT IN ('delivered', 'cancelled')
+    ORDER BY jc.promised_at
+");
+$statement->execute(['organization_id' => $organizationId]);
+$overdueJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $statement = $pdo->prepare("
     SELECT
@@ -92,15 +143,11 @@ $reminders = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $dueTypeLabels = [
     'service_due' => 'Service due',
-    'insurance_expiry' => 'Insurance expiring',
-    'puc_expiry' => 'PUC expiring',
     'follow_up' => 'Follow-up'
 ];
 
 $dueTypeIcons = [
     'service_due' => 'settings',
-    'insurance_expiry' => 'receipt',
-    'puc_expiry' => 'receipt',
     'follow_up' => 'message'
 ];
 
@@ -133,22 +180,53 @@ $topbarTitle = 'Reminders';
             <div class="page-header">
                 <div>
                     <h1 class="page-title">Reminders</h1>
-                    <p class="page-description">Vehicles due for service, or with documents expiring soon.</p>
+                    <p class="page-description">Vehicles due for their next service, and job cards running past the promised delivery.</p>
                 </div>
             </div>
+
+            <?php if (!empty($overdueJobCards)): ?>
+                <div class="card" style="margin-bottom:16px; border-color:var(--danger);">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
+                            Running late — promised but not delivered
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Job card</th><th>Vehicle</th><th>Customer</th><th>Promised</th><th>Status</th><th></th></tr>
+                                <?php foreach ($overdueJobCards as $jobCard): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($jobCard['job_no']) ?></td>
+                                        <td>
+                                            <?= htmlspecialchars($jobCard['registration_no']) ?>
+                                            <div class="result-meta"><?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?></div>
+                                        </td>
+                                        <td><?= htmlspecialchars($jobCard['customer_name']) ?></td>
+                                        <td class="stat-meta warning"><?= htmlspecialchars(date('d M, h:i A', strtotime($jobCard['promised_at']))) ?></td>
+                                        <td style="text-transform:capitalize;"><?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?></td>
+                                        <td><a href="/job-card.php?id=<?= (int) $jobCard['id'] ?>" class="button secondary">View</a></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <div class="card">
                 <div class="card-header">
                     <div class="card-header-title">
                         <span class="icon-badge"><?= icon('bell', 15) ?></span>
-                        Due in the next 30 days
+                        Service due in the next 30 days
                     </div>
                 </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($reminders)): ?>
                         <div class="empty-state">
                             <?= icon('check-circle', 28) ?>
-                            Nothing due. New reminders appear automatically as vehicles approach their next service or document expiry.
+                            Nothing due. Reminders appear automatically as a vehicle approaches its next service, projected from its own odometer history.
                         </div>
                     <?php else: ?>
                         <div class="table-wrap">

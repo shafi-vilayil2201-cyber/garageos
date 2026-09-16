@@ -40,11 +40,11 @@ function create_job_card(PDO $pdo, array $fields): int
     $statement = $pdo->prepare("
         INSERT INTO job_cards (
             organization_id, branch_id, job_no, customer_id, vehicle_id,
-            advisor_id, status, customer_complaint, odometer_in
+            advisor_id, status, customer_complaint, odometer_in, promised_at
         )
         VALUES (
             :organization_id, :branch_id, :job_no, :customer_id, :vehicle_id,
-            :advisor_id, 'received', :customer_complaint, :odometer_in
+            :advisor_id, 'received', :customer_complaint, :odometer_in, :promised_at
         )
         RETURNING id
     ");
@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? 'existing';
     $complaint = trim($_POST['customer_complaint'] ?? '');
     $odometerIn = trim($_POST['odometer_in'] ?? '');
+    $promisedAt = trim($_POST['promised_at'] ?? '');
 
     if ($mode === 'new') {
 
@@ -136,7 +137,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'vehicle_id' => $vehicleId,
                     'advisor_id' => $user['id'],
                     'customer_complaint' => $complaint ?: null,
-                    'odometer_in' => $odometerIn ?: null
+                    'odometer_in' => $odometerIn ?: null,
+                    'promised_at' => $promisedAt ?: null
                 ]);
 
                 $pdo->commit();
@@ -169,7 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'vehicle_id' => $vehicleId,
                 'advisor_id' => $user['id'],
                 'customer_complaint' => $complaint ?: null,
-                'odometer_in' => $odometerIn ?: null
+                'odometer_in' => $odometerIn ?: null,
+                'promised_at' => $promisedAt ?: null
             ]);
 
             header('Location: /job-card.php?id=' . $jobCardId);
@@ -186,6 +189,10 @@ $extraFields = '
         <div class="form-field">
             <label for="jobcard-odometer_in">Odometer reading (km)</label>
             <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
+        </div>
+        <div class="form-field">
+            <label for="jobcard-promised_at">Promised delivery (optional)</label>
+            <input type="datetime-local" id="jobcard-promised_at" name="promised_at">
         </div>
         <div class="form-field">
             <label for="jobcard-customer_complaint">Customer complaint / request</label>

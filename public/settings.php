@@ -30,6 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $taxNumber = trim($_POST['tax_number'] ?? '');
     $defaultTaxRate = $_POST['default_tax_rate'] ?? '';
     $state = trim($_POST['state'] ?? '');
+    $serviceIntervalKm = (int) ($_POST['service_interval_km'] ?? 0);
+    $serviceIntervalMonths = (int) ($_POST['service_interval_months'] ?? 0);
 
     if ($name === '' || $currency === '') {
         $error = 'Name and currency are required.';
@@ -37,11 +39,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Choose a valid GST rate.';
     } elseif ($state !== '' && !in_array($state, INDIAN_STATES, true)) {
         $error = 'Choose a valid state.';
+    } elseif ($serviceIntervalKm <= 0 || $serviceIntervalMonths <= 0) {
+        $error = 'Service interval must be a positive number of km and months.';
     } else {
         $statement = $pdo->prepare("
             UPDATE organizations
             SET name = :name, currency = :currency, tax_number = :tax_number,
-                default_tax_rate = :default_tax_rate, state = :state, updated_at = CURRENT_TIMESTAMP
+                default_tax_rate = :default_tax_rate, state = :state,
+                service_interval_km = :service_interval_km, service_interval_months = :service_interval_months,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $statement->execute([
@@ -50,6 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'tax_number' => $taxNumber ?: null,
             'default_tax_rate' => $defaultTaxRate,
             'state' => $state ?: null,
+            'service_interval_km' => $serviceIntervalKm,
+            'service_interval_months' => $serviceIntervalMonths,
             'id' => $organizationId
         ]);
 
@@ -137,6 +145,14 @@ $topbarTitle = 'Settings';
                                     <?= gst_rate_options((float) $organization['default_tax_rate']) ?>
                                 </select>
                                 <p class="result-meta" style="margin-top:6px;">Used to pre-fill the GST rate when adding a new part or service — change it here once instead of picking it every time, or when the GST rate itself changes.</p>
+                            </div>
+                            <div class="form-field">
+                                <label>Service interval</label>
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                    <input type="number" name="service_interval_km" min="1" value="<?= (int) $organization['service_interval_km'] ?>" style="width:110px;"> <span>km, or</span>
+                                    <input type="number" name="service_interval_months" min="1" value="<?= (int) $organization['service_interval_months'] ?>" style="width:80px;"> <span>months</span>
+                                </div>
+                                <p class="result-meta" style="margin-top:6px;">Whichever comes first — used to project each vehicle's next service-due reminder from its odometer history.</p>
                             </div>
                         </div>
                         <div class="form-actions" style="margin-top:14px;">

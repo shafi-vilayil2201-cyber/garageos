@@ -79,6 +79,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+    } elseif ($action === 'update_promised_at') {
+
+        require_permission($user, 'job_cards.manage');
+
+        $promisedAt = trim($_POST['promised_at'] ?? '');
+
+        $statement = $pdo->prepare("
+            UPDATE job_cards SET promised_at = :promised_at, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND organization_id = :organization_id
+        ");
+        $statement->execute([
+            'promised_at' => $promisedAt ?: null,
+            'id' => $jobCardId,
+            'organization_id' => $organizationId
+        ]);
+
+        header('Location: /job-card.php?id=' . $jobCardId);
+        exit;
+
     } elseif ($action === 'add_service') {
 
         require_permission($user, 'job_cards.manage');
@@ -704,6 +723,18 @@ $topbarTitle = $jobCard['job_no'];
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
+                                    </div>
+                                </form>
+
+                                <form method="POST" action="" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="update_promised_at">
+                                    <div class="form-field">
+                                        <label>Promised delivery</label>
+                                        <input type="datetime-local" name="promised_at" value="<?= $jobCard['promised_at'] ? htmlspecialchars(date('Y-m-d\TH:i', strtotime($jobCard['promised_at']))) : '' ?>">
+                                    </div>
+                                    <div class="form-actions" style="margin-top:10px;">
+                                        <button type="submit" class="button secondary"><?= icon('check', 16) ?> Save</button>
                                     </div>
                                 </form>
                             </div>
