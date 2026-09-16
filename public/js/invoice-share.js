@@ -134,7 +134,8 @@ document.addEventListener('DOMContentLoaded', () =>
                 // User cancelled the native share sheet — not a failure.
             } else {
                 console.error(error);
-                alert("Couldn't prepare the invoice PDF. Try Print Invoice instead.");
+                const detail = error && (error.message || error.name) ? ': ' + (error.message || error.name) : '';
+                alert("Couldn't prepare the invoice PDF" + detail + ". Try Print Invoice instead.");
             }
 
         } finally {
