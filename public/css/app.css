@@ -846,6 +846,14 @@ table.data-table {
 .form-field input,
 .form-field select,
 .form-field textarea {
+    width: 100%;
+    /* A <select> sizes its closed box to its longest option by default
+       and won't shrink below that on its own (unlike a plain input) —
+       without this, one long option (e.g. "Dadra and Nagar Haveli and
+       Daman and Diu" in the state picker) forces the field, its grid
+       track, and the whole page wider than the viewport on mobile. The
+       dropdown itself still shows full option text when opened. */
+    min-width: 0;
     height: 42px;
     padding: 0 14px;
     border: 1px solid var(--border);
