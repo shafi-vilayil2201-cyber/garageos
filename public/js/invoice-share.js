@@ -56,6 +56,21 @@ document.addEventListener('DOMContentLoaded', () =>
             // unaffected and keep the real ₹ symbol.
             sheet.innerHTML = sheet.innerHTML.replace(/₹/g, 'Rs. ');
 
+            // jsPDF's html() renderer doesn't correctly place CSS Grid
+            // content — .info-grid (the only display:grid in print.css,
+            // see public/css/print.css) gets torn out of normal flow and
+            // dumped near the bottom of the page, after the totals and
+            // signature, instead of staying under the letterhead. Force
+            // it to a plain stacked block layout, which the renderer
+            // handles correctly, purely for this capture clone.
+            const infoGrid = sheet.querySelector('.info-grid');
+            if (infoGrid) {
+                infoGrid.style.display = 'block';
+                infoGrid.querySelectorAll('.info-block').forEach(block => {
+                    block.style.marginBottom = '16px';
+                });
+            }
+
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -63,7 +78,14 @@ document.addEventListener('DOMContentLoaded', () =>
                 x: 0,
                 y: 0,
                 width: 210,
-                windowWidth: sheet.scrollWidth || 900
+                windowWidth: sheet.scrollWidth || 900,
+                // jsPDF's default page-break mode ("slice") cuts straight
+                // through whatever content happens to sit at the page
+                // boundary — on any invoice long enough to need a second
+                // page, a table row or totals line gets sliced in half
+                // and duplicated across both pages. "text" mode breaks
+                // between text runs instead, avoiding that.
+                autoPaging: 'text'
             });
 
             return pdf.output('blob');
