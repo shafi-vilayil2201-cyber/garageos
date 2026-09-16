@@ -1,5 +1,14 @@
 <?php
 
+// Every page requires this file first, so this is the one place that
+// guarantees it runs before any page computes "today"/"now". Without
+// it, PHP defaults to UTC while Postgres runs in Asia/Kolkata (see
+// organizations.timezone) — between 12:00am and 5:29am IST, PHP's
+// date('Y-m-d')/date('Y-m') would report the previous calendar day or
+// month, silently defaulting things like Finance/Payroll's "this
+// month" or a new expense's date to the wrong day during that window.
+date_default_timezone_set('Asia/Kolkata');
+
 require_once __DIR__ . '/../app/Support/Env.php';
 
 load_env(__DIR__ . '/../.env');
