@@ -353,7 +353,6 @@ $topbarTitle = $invoice['invoice_no'];
                                                     <option value="0">No GST (0%)</option>
                                                 <?php endif; ?>
                                             </select>
-                                            <p class="result-meta" style="margin-top:6px;">Only your organization's GST rate or exempt (0%) are available here — only changeable before a payment is recorded.</p>
                                         </div>
                                     </div>
                                     <div class="form-actions">
