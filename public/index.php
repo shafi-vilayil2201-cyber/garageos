@@ -43,6 +43,15 @@ if ($organizationCount === 1) {
     $brandName = $pdo->query('SELECT name FROM organizations LIMIT 1')->fetchColumn();
 }
 
+// Swaps the login background between the day and night workshop photos.
+// PHP's default timezone is already forced to Asia/Kolkata in
+// config/database.php, so date('H') here is the workshop's actual
+// local hour, not a UTC-shifted one. "Night" spans 6pm through 5:59am
+// so a visitor at 1am still sees the night photo instead of it
+// flipping back to day at midnight.
+$hour = (int) date('H');
+$isNight = $hour >= 18 || $hour < 6;
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -56,7 +65,7 @@ if ($organizationCount === 1) {
 </head>
 <body>
 
-<div class="auth-shell">
+<div class="auth-shell<?= $isNight ? ' auth-shell-night' : '' ?>">
 
     <div class="auth-card">
 
