@@ -152,9 +152,43 @@ document.addEventListener('DOMContentLoaded', () =>
         }
     }
 
+    // Safari requires navigator.share() to run within a very short
+    // window of the actual tap, with no meaningful async work first. PDF
+    // generation (loading the iframe, running html2canvas) easily takes
+    // longer than that window, so the very first share() call on iOS
+    // reliably fails with NotAllowedError — not a real permissions
+    // issue, just Safari deciding the user gesture has gone stale. When
+    // that happens, the already-built file is cached here and the
+    // button switches to a "tap again" state; that next tap is a fresh,
+    // synchronous gesture with the file already in hand, which Safari
+    // accepts.
+    let pendingShare = null;
+
+    async function shareNow(file, waMessage)
+    {
+        await navigator.share({ files: [file], text: waMessage });
+    }
+
     button.addEventListener('click', async event => {
 
         event.preventDefault();
+
+        if (pendingShare) {
+            const { file, waMessage } = pendingShare;
+            pendingShare = null;
+
+            try {
+                await shareNow(file, waMessage);
+            } catch (error) {
+                if (!(error && error.name === 'AbortError')) {
+                    console.error(error);
+                    alert("Couldn't share the invoice PDF. Try Print Invoice instead.");
+                }
+            } finally {
+                restore();
+            }
+            return;
+        }
 
         const printUrl = button.dataset.invoiceUrl;
         const waNumber = button.dataset.waNumber;
@@ -170,7 +204,18 @@ document.addEventListener('DOMContentLoaded', () =>
             const file = new File([blob], filename, { type: 'application/pdf' });
 
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], text: waMessage });
+                try {
+                    await shareNow(file, waMessage);
+                } catch (shareError) {
+                    if (shareError && shareError.name === 'NotAllowedError') {
+                        pendingShare = { file, waMessage };
+                        button.disabled = false;
+                        button.textContent = 'Tap to send via WhatsApp';
+                        return;
+                    }
+                    throw shareError;
+                }
+                restore();
                 return;
             }
 
@@ -184,19 +229,18 @@ document.addEventListener('DOMContentLoaded', () =>
             URL.revokeObjectURL(downloadUrl);
 
             window.open(waTextUrl, '_blank', 'noopener');
+            restore();
 
         } catch (error) {
 
             if (error && error.name === 'AbortError') {
-                // User cancelled the native share sheet — not a failure.
+                restore();
             } else {
                 console.error(error);
                 const detail = error && (error.message || error.name) ? ': ' + (error.message || error.name) : '';
                 alert("Couldn't prepare the invoice PDF" + detail + ". Try Print Invoice instead.");
+                restore();
             }
-
-        } finally {
-            restore();
         }
     });
 });
