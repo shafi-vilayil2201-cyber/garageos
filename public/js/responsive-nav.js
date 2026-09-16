@@ -194,4 +194,58 @@ document.addEventListener('DOMContentLoaded', () =>
             }
         });
     });
+
+    // The sidebar (see .sidebar's overflow-y:auto in app.css) is its own
+    // scroll container, separate from the page body. Every nav click is
+    // a full page load in this multi-page app, so without this the
+    // sidebar would snap back to the top on every navigation — forcing
+    // a rescroll to reach anything below the fold (e.g. a lower item in
+    // an expanded Finance group) after every single click. Restored
+    // last, after the nav-group expand/collapse above has already
+    // settled — expanding a group changes the sidebar's scrollable
+    // height, and restoring against the wrong height would miss the
+    // intended position.
+    const sidebar = document.querySelector('.sidebar');
+    const SIDEBAR_SCROLL_KEY = 'garageos-sidebar-scroll';
+
+    if (sidebar)
+    {
+        try
+        {
+            const savedScroll = localStorage.getItem(SIDEBAR_SCROLL_KEY);
+
+            if (savedScroll !== null)
+            {
+                sidebar.scrollTop = parseInt(savedScroll, 10);
+            }
+        } catch (error)
+        {
+            // Non-fatal — same as the preferences above.
+        }
+
+        let scrollSaveScheduled = false;
+
+        sidebar.addEventListener('scroll', () =>
+        {
+            if (scrollSaveScheduled)
+            {
+                return;
+            }
+
+            scrollSaveScheduled = true;
+
+            requestAnimationFrame(() =>
+            {
+                scrollSaveScheduled = false;
+
+                try
+                {
+                    localStorage.setItem(SIDEBAR_SCROLL_KEY, String(sidebar.scrollTop));
+                } catch (error)
+                {
+                    // Non-fatal.
+                }
+            });
+        });
+    }
 });
