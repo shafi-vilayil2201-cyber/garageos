@@ -224,13 +224,6 @@ $extraFields = '
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">New Job Card</h1>
-                    <p class="page-description">Look up the vehicle, or add a new customer and vehicle right here.</p>
-                </div>
-            </div>
-
             <div class="card" style="max-width: 640px;">
                 <div class="card-header">
                     <div class="card-header-title">

@@ -292,10 +292,7 @@ $topbarTitle = 'Users';
         <section class="page">
 
             <div class="page-header">
-                <div>
-                    <h1 class="page-title">Users</h1>
-                    <p class="page-description">Staff accounts and what they're allowed to do.</p>
-                </div>
+                <div></div>
 
                 <?php if (!empty($roles)): ?>
                     <button type="button" class="button" onclick="openModal('user-modal')"><?= icon('plus', 16) ?> Add User</button>

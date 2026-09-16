@@ -102,13 +102,6 @@ $topbarTitle = 'Settings';
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">Settings</h1>
-                    <p class="page-description">Organization, tax, and service configuration.</p>
-                </div>
-            </div>
-
             <?php if ($error): ?>
                 <div class="form-error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>

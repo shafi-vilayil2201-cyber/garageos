@@ -70,10 +70,7 @@ $topbarTitle = 'Purchases';
         <section class="page">
 
             <div class="page-header">
-                <div>
-                    <h1 class="page-title">Purchases</h1>
-                    <p class="page-description">Restocking parts from your suppliers.</p>
-                </div>
+                <div></div>
 
                 <a href="/purchase-new.php" class="button"><?= icon('plus', 16) ?> New Purchase</a>
             </div>

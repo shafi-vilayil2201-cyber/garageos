@@ -173,10 +173,7 @@ $topbarTitle = 'Customers';
         <section class="page">
 
             <div class="page-header">
-                <div>
-                    <h1 class="page-title">Customers</h1>
-                    <p class="page-description">Everyone who's ever brought a vehicle to your workshop.</p>
-                </div>
+                <div></div>
 
                 <?php if ($canManageCustomers): ?>
                     <button type="button" class="button" onclick="openModal('customer-modal')"><?= icon('plus', 16) ?> Add Customer</button>

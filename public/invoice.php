@@ -229,14 +229,11 @@ $topbarTitle = $invoice['invoice_no'];
 
             <div class="page-header">
                 <div>
-                    <h1 class="page-title">
-                        <?= htmlspecialchars($invoice['invoice_no']) ?>
-                        <span class="badge badge-<?= htmlspecialchars($invoice['status']) ?>" style="margin-left:10px; vertical-align:middle;">
+                    <p class="page-description" style="margin-top:0;">
+                        <span class="badge badge-<?= htmlspecialchars($invoice['status']) ?>" style="margin-right:8px; vertical-align:middle;">
                             <?= icon($invoiceStatusIcons[$invoice['status']] ?? 'receipt', 12) ?>
                             <?= htmlspecialchars($invoice['status']) ?>
                         </span>
-                    </h1>
-                    <p class="page-description">
                         Job card <?= htmlspecialchars($invoice['job_no']) ?> ·
                         <?= htmlspecialchars($invoice['registration_no']) ?> —
                         <?= htmlspecialchars($invoice['make'] . ' ' . $invoice['model']) ?>

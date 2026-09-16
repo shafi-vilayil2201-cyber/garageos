@@ -134,13 +134,6 @@ $topbarTitle = 'Debt';
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">Debt</h1>
-                    <p class="page-description">What you owe suppliers, and what customers owe you.</p>
-                </div>
-            </div>
-
             <div class="stats">
                 <div class="card stat-card">
                     <div class="stat-top">

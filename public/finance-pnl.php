@@ -126,13 +126,6 @@ $topbarTitle = 'Profit & Loss';
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">Profit &amp; Loss</h1>
-                    <p class="page-description">Revenue, cost of goods, and operating expenses for the period.</p>
-                </div>
-            </div>
-
             <div class="card">
                 <div class="card-header">
                     <div class="card-header-title">

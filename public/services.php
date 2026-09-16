@@ -197,10 +197,7 @@ $topbarTitle = 'Service Catalog';
         <section class="page">
 
             <div class="page-header">
-                <div>
-                    <h1 class="page-title">Service Catalog</h1>
-                    <p class="page-description">The labor services you offer, and what you charge for them.</p>
-                </div>
+                <div></div>
 
                 <button type="button" class="button" onclick="openModal('service-modal')"><?= icon('plus', 16) ?> Add Service</button>
             </div>
