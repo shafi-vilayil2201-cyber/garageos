@@ -15,7 +15,7 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
         '<a href="%s" class="%s"><span class="nav-icon">%s</span><span>%s</span></a>',
         htmlspecialchars($href),
         nav_class($key, $activeNav),
-        icon($iconName),
+        icon($iconName, 20),
         htmlspecialchars($label)
     );
 }
@@ -66,7 +66,7 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
     </div>
 
     <button type="button" class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-label="Collapse sidebar">
-        <?= icon('chevron-left', 16) ?>
+        <?= icon('chevron-left', 18) ?>
         <span>Collapse</span>
     </button>
 
@@ -142,13 +142,13 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
                 <div class="nav-group">
                     <div class="nav-group-header">
                         <a href="/finance.php" class="<?= nav_class('finance_overview', $activeNav) ?>">
-                            <span class="nav-icon"><?= icon('wallet') ?></span>
+                            <span class="nav-icon"><?= icon('wallet', 20) ?></span>
                             <span>Finance</span>
                         </a>
                         <button type="button" class="nav-group-toggle<?= $financeGroupActive ? ' expanded' : '' ?>"
                                 data-nav-group="finance" data-nav-group-active="<?= $financeGroupActive ? 'true' : 'false' ?>"
                                 aria-expanded="<?= $financeGroupActive ? 'true' : 'false' ?>" aria-label="Toggle Finance links">
-                            <?= icon('chevron-right', 14) ?>
+                            <?= icon('chevron-right', 15) ?>
                         </button>
                     </div>
 
