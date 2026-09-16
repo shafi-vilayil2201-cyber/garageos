@@ -204,6 +204,42 @@ $invoiceStatusIcons = [
 $activeNav = 'job_cards';
 $topbarTitle = $invoice['invoice_no'];
 
+// WhatsApp's "click to chat" links can only pre-fill a text message —
+// there's no way to auto-attach a file through them, and this app has
+// no hosted, publicly-reachable PDF to attach anyway (Print Invoice is
+// a browser-printed HTML page, not a generated file). So this opens
+// WhatsApp with the invoice summary ready to send; staff still tap
+// Send themselves. The phone field is free-text (no format enforced —
+// see public/customers.php), so normalize the common ways an Indian
+// mobile number ends up stored: a bare 10-digit number, one with a
+// leading trunk "0" some people still type out of landline habit, or
+// one that already includes the 91 country code.
+$customerPhoneDigits = preg_replace('/\D+/', '', $invoice['customer_phone'] ?? '');
+if (strlen($customerPhoneDigits) === 11 && $customerPhoneDigits[0] === '0') {
+    $customerPhoneDigits = substr($customerPhoneDigits, 1);
+}
+if (strlen($customerPhoneDigits) === 10) {
+    $customerPhoneDigits = '91' . $customerPhoneDigits;
+}
+$hasWhatsappNumber = strlen($customerPhoneDigits) === 12 && str_starts_with($customerPhoneDigits, '91');
+
+if ($hasWhatsappNumber) {
+    $whatsappMessage = sprintf(
+        "Hi %s, here's your invoice from %s.\n\nInvoice: %s\nJob card: %s — %s %s (%s)\nTotal: ₹%s\nBalance due: ₹%s\n\nThank you for choosing %s!",
+        $invoice['customer_name'],
+        $invoice['organization_name'],
+        $invoice['invoice_no'],
+        $invoice['job_no'],
+        $invoice['make'],
+        $invoice['model'],
+        $invoice['registration_no'],
+        number_format((float) $invoice['total'], 2),
+        number_format($balanceDue, 2),
+        $invoice['organization_name']
+    );
+    $whatsappUrl = 'https://wa.me/' . $customerPhoneDigits . '?text=' . rawurlencode($whatsappMessage);
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -243,8 +279,13 @@ $topbarTitle = $invoice['invoice_no'];
                     </p>
                 </div>
 
-                <div style="display:flex; gap:10px;">
+                <div style="display:flex; flex-wrap:wrap; gap:10px;">
                     <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>" target="_blank" class="button secondary"><?= icon('printer', 16) ?> Print Invoice</a>
+                    <?php if ($hasWhatsappNumber): ?>
+                        <a href="<?= htmlspecialchars($whatsappUrl) ?>" target="_blank" rel="noopener" class="button secondary"><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</a>
+                    <?php else: ?>
+                        <span class="button secondary" aria-disabled="true" title="No phone number on file for this customer"><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</span>
+                    <?php endif; ?>
                     <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
                 </div>
             </div>

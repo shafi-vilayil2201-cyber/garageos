@@ -818,7 +818,7 @@ table.data-table {
     white-space: nowrap;
 }
 
-.pagination-controls span.button[aria-disabled="true"] {
+.button[aria-disabled="true"] {
     opacity: 0.45;
     cursor: not-allowed;
     pointer-events: none;
