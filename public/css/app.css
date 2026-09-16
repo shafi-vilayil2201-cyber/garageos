@@ -533,6 +533,17 @@ textarea:focus-visible,
     margin-top: 20px;
 }
 
+/* Settings: each card sizes to its own content instead of stretching
+   to match its row's tallest neighbor, and wraps to fewer columns —
+   down to one on narrow screens — instead of a fixed column count. */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    align-items: start;
+    margin-top: 20px;
+}
+
 /* Grid items default to min-width:auto (content-sized) — without this,
    a wide table inside a card can force the whole grid track wider than
    the viewport, bypassing the table's own .table-wrap scroll entirely. */
