@@ -124,6 +124,26 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId]);
 $overdueJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
 
+// A heads-up before a promise is actually missed — anything still
+// promised for later today, so staff can catch it before it slides
+// into "Running late" above.
+$statement = $pdo->prepare("
+    SELECT jc.id, jc.job_no, jc.promised_at, jc.status,
+           v.registration_no, v.make, v.model,
+           c.name AS customer_name
+    FROM job_cards jc
+    INNER JOIN vehicles v ON v.id = jc.vehicle_id
+    INNER JOIN customers c ON c.id = jc.customer_id
+    WHERE jc.organization_id = :organization_id
+      AND jc.promised_at IS NOT NULL
+      AND jc.promised_at >= CURRENT_TIMESTAMP
+      AND jc.promised_at < (CURRENT_DATE + INTERVAL '1 day')
+      AND jc.status NOT IN ('delivered', 'cancelled')
+    ORDER BY jc.promised_at
+");
+$statement->execute(['organization_id' => $organizationId]);
+$dueTodayJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
+
 $statement = $pdo->prepare("
     SELECT
         r.id, r.due_type, r.due_date, r.status,
@@ -205,6 +225,37 @@ $topbarTitle = 'Reminders';
                                         </td>
                                         <td><?= htmlspecialchars($jobCard['customer_name']) ?></td>
                                         <td class="stat-meta warning"><?= htmlspecialchars(date('d M, h:i A', strtotime($jobCard['promised_at']))) ?></td>
+                                        <td style="text-transform:capitalize;"><?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?></td>
+                                        <td><a href="/job-card.php?id=<?= (int) $jobCard['id'] ?>" class="button secondary">View</a></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($dueTodayJobCards)): ?>
+                <div class="card" style="margin-bottom:16px;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('bell', 15) ?></span>
+                            Due today — not yet delivered
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Job card</th><th>Vehicle</th><th>Customer</th><th>Promised</th><th>Status</th><th></th></tr>
+                                <?php foreach ($dueTodayJobCards as $jobCard): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($jobCard['job_no']) ?></td>
+                                        <td>
+                                            <?= htmlspecialchars($jobCard['registration_no']) ?>
+                                            <div class="result-meta"><?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?></div>
+                                        </td>
+                                        <td><?= htmlspecialchars($jobCard['customer_name']) ?></td>
+                                        <td><?= htmlspecialchars(date('h:i A', strtotime($jobCard['promised_at']))) ?></td>
                                         <td style="text-transform:capitalize;"><?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?></td>
                                         <td><a href="/job-card.php?id=<?= (int) $jobCard['id'] ?>" class="button secondary">View</a></td>
                                     </tr>
