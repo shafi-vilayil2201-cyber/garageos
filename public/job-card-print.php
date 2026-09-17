@@ -22,7 +22,8 @@ $statement = $pdo->prepare("
     SELECT jc.*, v.registration_no, v.make, v.model, v.year, v.fuel_type, v.color, v.odometer_km,
            c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address,
            o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address,
-           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number
+           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number,
+           o.logo_url AS organization_logo_url
     FROM job_cards jc
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
@@ -72,6 +73,7 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
     <title>GarageOS — <?= htmlspecialchars($jobCard['job_no']) ?> — Job Card</title>
 
     <link rel="stylesheet" href="/css/print.css">
+    <?= favicon_tag($jobCard['organization_logo_url'] ?? null) ?>
 </head>
 <body>
 
@@ -86,6 +88,9 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
 
     <div class="letterhead">
         <div>
+            <?php if (!empty($jobCard['organization_logo_url'])): ?>
+                <img class="org-logo" src="<?= htmlspecialchars($jobCard['organization_logo_url']) ?>" alt="<?= htmlspecialchars($jobCard['organization_name']) ?>">
+            <?php endif; ?>
             <div class="org-name"><?= htmlspecialchars($jobCard['organization_name']) ?></div>
             <div class="org-meta">
                 <?php if ($jobCard['organization_address']): ?>

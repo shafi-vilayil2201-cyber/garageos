@@ -136,7 +136,8 @@ class Auth
                 u.name,
                 u.email,
                 u.status,
-                o.name AS organization_name
+                o.name AS organization_name,
+                o.logo_url AS organization_logo_url
             FROM sessions s
             INNER JOIN users u
                 ON u.id = s.user_id

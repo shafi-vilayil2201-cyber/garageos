@@ -73,3 +73,13 @@ function brand_icon(string $name, int $size = 18): string
         $body
     );
 }
+
+// Falls back to a static /favicon.ico (a harmless 404 if that file
+// isn't present) when the organization hasn't uploaded a logo — every
+// org today, until someone uses Settings' new Logo card.
+function favicon_tag(?string $logoUrl): string
+{
+    $href = $logoUrl ?: '/favicon.ico';
+
+    return sprintf('<link rel="icon" href="%s">', htmlspecialchars($href, ENT_QUOTES));
+}

@@ -69,6 +69,12 @@ body {
     margin-bottom: 18px;
 }
 
+.org-logo {
+    display: block;
+    max-height: 56px;
+    margin-bottom: 8px;
+}
+
 .org-name {
     font-size: 20px;
     font-weight: 700;

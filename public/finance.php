@@ -86,6 +86,7 @@ $topbarTitle = 'Finance';
     <title>GarageOS — Finance</title>
 
     <link rel="stylesheet" href="/css/app.css">
+    <?= favicon_tag($user['organization_logo_url'] ?? null) ?>
 </head>
 <body>
 

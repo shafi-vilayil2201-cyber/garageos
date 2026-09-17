@@ -24,7 +24,8 @@ $statement = $pdo->prepare("
            c.gstin AS customer_gstin, c.state AS customer_state,
            jc.job_no, v.registration_no, v.make, v.model,
            o.name AS organization_name, o.phone AS organization_phone, o.address AS organization_address,
-           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number, o.state AS organization_state
+           o.tax_label AS organization_tax_label, o.tax_number AS organization_tax_number, o.state AS organization_state,
+           o.logo_url AS organization_logo_url
     FROM invoices i
     INNER JOIN customers c ON c.id = i.customer_id
     INNER JOIN job_cards jc ON jc.id = i.job_card_id
@@ -68,6 +69,7 @@ $statusLabels = [
     <title>GarageOS — <?= htmlspecialchars($invoice['invoice_no']) ?> — Invoice</title>
 
     <link rel="stylesheet" href="/css/print.css">
+    <?= favicon_tag($invoice['organization_logo_url'] ?? null) ?>
 </head>
 <body>
 
@@ -82,6 +84,9 @@ $statusLabels = [
 
     <div class="letterhead">
         <div>
+            <?php if (!empty($invoice['organization_logo_url'])): ?>
+                <img class="org-logo" src="<?= htmlspecialchars($invoice['organization_logo_url']) ?>" alt="<?= htmlspecialchars($invoice['organization_name']) ?>">
+            <?php endif; ?>
             <div class="org-name"><?= htmlspecialchars($invoice['organization_name']) ?></div>
             <div class="org-meta">
                 <?php if ($invoice['organization_address']): ?>

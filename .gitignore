@@ -2,3 +2,4 @@
 /vendor/
 .env
 /dist/
+/public/uploads/

@@ -125,6 +125,12 @@ textarea:focus-visible,
     line-height: 1.2;
 }
 
+.brand-logo {
+    display: block;
+    max-width: 100%;
+    max-height: 48px;
+}
+
 .brand-subtitle {
     margin-top: 4px;
     font-size: 13px;
@@ -1558,6 +1564,10 @@ body.kanban-touch-dragging {
 
     .app.sidebar-collapsed .brand {
         padding-left: 10px;
+    }
+
+    .app.sidebar-collapsed .brand-logo {
+        max-height: 28px;
     }
 
     .app.sidebar-collapsed .main {

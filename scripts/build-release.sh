@@ -63,6 +63,7 @@ rsync -a \
     --exclude='dist' \
     --exclude='vendor' \
     --exclude='node_modules' \
+    --exclude='public/uploads' \
     --exclude='*.log' \
     "$REPO_ROOT/" "$STAGE_DIR/$RELEASE_NAME/"
 

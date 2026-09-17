@@ -68,7 +68,7 @@ apt-get update -qq
 apt-get install -y -qq \
     nginx \
     postgresql postgresql-contrib \
-    php-fpm php-pgsql php-cli php-common \
+    php-fpm php-pgsql php-cli php-common php-gd \
     certbot python3-certbot-nginx \
     openssl >/dev/null
 
