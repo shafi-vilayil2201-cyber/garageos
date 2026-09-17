@@ -22,7 +22,10 @@ function paginate_offset(int $page, int $perPage = PAGINATION_PER_PAGE): int
     return ($page - 1) * $perPage;
 }
 
-function render_pagination(int $page, int $totalRows, int $perPage = PAGINATION_PER_PAGE): string
+// $extraParams preserves other active query-string filters (e.g. a
+// "filter by staff member" dropdown) across Prev/Next — without it,
+// paging away from page 1 would silently drop any such filter.
+function render_pagination(int $page, int $totalRows, int $perPage = PAGINATION_PER_PAGE, array $extraParams = []): string
 {
     $totalPages = max(1, (int) ceil($totalRows / $perPage));
 
@@ -33,12 +36,17 @@ function render_pagination(int $page, int $totalRows, int $perPage = PAGINATION_
     $firstRow = ($page - 1) * $perPage + 1;
     $lastRow = min($page * $perPage, $totalRows);
 
+    $buildUrl = function (int $targetPage) use ($extraParams): string {
+        $params = array_merge($extraParams, ['page' => $targetPage]);
+        return '?' . http_build_query($params);
+    };
+
     $prev = $page > 1
-        ? '<a href="?page=' . ($page - 1) . '" class="button secondary sm">' . icon('chevron-left', 14) . ' Prev</a>'
+        ? '<a href="' . htmlspecialchars($buildUrl($page - 1)) . '" class="button secondary sm">' . icon('chevron-left', 14) . ' Prev</a>'
         : '<span class="button secondary sm" aria-disabled="true">' . icon('chevron-left', 14) . ' Prev</span>';
 
     $next = $page < $totalPages
-        ? '<a href="?page=' . ($page + 1) . '" class="button secondary sm">Next ' . icon('chevron-right', 14) . '</a>'
+        ? '<a href="' . htmlspecialchars($buildUrl($page + 1)) . '" class="button secondary sm">Next ' . icon('chevron-right', 14) . '</a>'
         : '<span class="button secondary sm" aria-disabled="true">Next ' . icon('chevron-right', 14) . '</span>';
 
     return '

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -107,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement = $pdo->prepare("
                     INSERT INTO appointments (organization_id, branch_id, customer_id, vehicle_id, service_id, scheduled_at, source, notes)
                     VALUES (:organization_id, :branch_id, :customer_id, :vehicle_id, :service_id, :scheduled_at, :source, :notes)
+                    RETURNING id
                 ");
                 $statement->execute([
                     'organization_id' => $organizationId,
@@ -118,6 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'source' => $source,
                     'notes' => $notes ?: null
                 ]);
+                $newAppointmentId = (int) $statement->fetchColumn();
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'appointment', $newAppointmentId,
+                    "Booked appointment for $customerName — $registrationNo"
+                );
 
                 $pdo->commit();
 
@@ -144,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("
                 INSERT INTO appointments (organization_id, branch_id, customer_id, vehicle_id, service_id, scheduled_at, source, notes)
                 VALUES (:organization_id, :branch_id, :customer_id, :vehicle_id, :service_id, :scheduled_at, :source, :notes)
+                RETURNING id
             ");
             $statement->execute([
                 'organization_id' => $organizationId,
@@ -155,6 +164,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'source' => $source,
                 'notes' => $notes ?: null
             ]);
+            $newAppointmentId = (int) $statement->fetchColumn();
+
+            $statement = $pdo->prepare("
+                SELECT c.name AS customer_name, v.registration_no
+                FROM customers c, vehicles v
+                WHERE c.id = :customer_id AND v.id = :vehicle_id
+            ");
+            $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
+            $bookedFor = $statement->fetch(PDO::FETCH_ASSOC);
+
+            log_audit_event(
+                $pdo, $user, 'create', 'appointment', $newAppointmentId,
+                "Booked appointment for {$bookedFor['customer_name']} — {$bookedFor['registration_no']}"
+            );
 
             header('Location: /appointments.php');
             exit;

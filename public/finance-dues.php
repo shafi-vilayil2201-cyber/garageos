@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -71,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'payment_status' => $newStatus,
                 'id' => $purchaseId
             ]);
+
+            log_audit_event(
+                $pdo, $user, 'create', 'supplier_payment', $purchaseId,
+                'Recorded payment of ₹' . number_format($amount, 2) . " for purchase {$purchase['purchase_no']}"
+            );
 
             $pdo->commit();
 

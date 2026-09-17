@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -65,6 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
+            log_audit_event($pdo, $user, 'update', 'customer', $editingCustomerId, "Updated customer $name");
+
             header('Location: /customers.php');
             exit;
         }
@@ -88,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("
                 INSERT INTO customers (organization_id, name, code, phone, email, address)
                 VALUES (:organization_id, :name, :code, :phone, :email, :address)
+                RETURNING id
             ");
 
             $statement->execute([
@@ -98,6 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email ?: null,
                 'address' => $address ?: null
             ]);
+            $newCustomerId = (int) $statement->fetchColumn();
+
+            log_audit_event($pdo, $user, 'create', 'customer', $newCustomerId, "Created customer $name");
 
             header('Location: /customers.php');
             exit;

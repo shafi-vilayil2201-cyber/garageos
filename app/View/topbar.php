@@ -34,6 +34,9 @@ $initial = strtoupper(substr($user['name'], 0, 1));
                 <?php if (user_can($user, 'reports.view')): ?>
                     <a href="/reports.php" class="user-menu-item"><?= icon('chart', 15) ?> Reports</a>
                 <?php endif; ?>
+                <?php if (user_can($user, 'audit.view')): ?>
+                    <a href="/audit-logs.php" class="user-menu-item"><?= icon('clipboard-list', 15) ?> Audit Logs</a>
+                <?php endif; ?>
                 <div class="user-menu-divider"></div>
                 <a href="/logout.php" class="user-menu-item user-menu-item-danger"><?= icon('logout', 15) ?> Logout</a>
             </div>

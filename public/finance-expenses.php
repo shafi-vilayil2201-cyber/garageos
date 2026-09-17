@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -52,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $statement = $pdo->prepare("
             INSERT INTO expenses (organization_id, branch_id, category, description, amount, expense_date, created_by)
             VALUES (:organization_id, :branch_id, :category, :description, :amount, :expense_date, :created_by)
+            RETURNING id
         ");
         $statement->execute([
             'organization_id' => $organizationId,
@@ -62,6 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'expense_date' => $expenseDate,
             'created_by' => $user['id']
         ]);
+        $newExpenseId = (int) $statement->fetchColumn();
+
+        log_audit_event(
+            $pdo, $user, 'create', 'expense', $newExpenseId,
+            'Logged ' . ucfirst($category) . ' expense of ₹' . number_format($amount, 2)
+        );
 
         header('Location: /finance-expenses.php?month=' . urlencode(date('Y-m', strtotime($expenseDate))));
         exit;

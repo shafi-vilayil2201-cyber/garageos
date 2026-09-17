@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -116,6 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id' => $invoiceId
                 ]);
 
+                log_audit_event(
+                    $pdo, $user, 'update', 'invoice', $invoiceId,
+                    "Changed GST rate to {$gstRate}% on invoice {$invoice['invoice_no']}"
+                );
+
                 $pdo->commit();
 
                 header('Location: /invoice.php?id=' . $invoiceId);
@@ -169,6 +175,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'status' => $newStatus,
                     'id' => $invoiceId
                 ]);
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'payment', $invoiceId,
+                    'Recorded payment of ₹' . number_format($amount, 2) . " on invoice {$invoice['invoice_no']}"
+                );
 
                 $pdo->commit();
 

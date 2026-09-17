@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -129,10 +130,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $vehicleId = $statement->fetchColumn();
 
+                $jobNo = next_job_no($pdo, $branchId);
+
                 $jobCardId = create_job_card($pdo, [
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
-                    'job_no' => next_job_no($pdo, $branchId),
+                    'job_no' => $jobNo,
                     'customer_id' => $customerId,
                     'vehicle_id' => $vehicleId,
                     'advisor_id' => $user['id'],
@@ -140,6 +143,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'odometer_in' => $odometerIn ?: null,
                     'promised_at' => $promisedAt ?: null
                 ]);
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card', $jobCardId,
+                    "Opened job card $jobNo for $customerName — $registrationNo"
+                );
 
                 $pdo->commit();
 
@@ -163,10 +171,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Search for a vehicle and select it before creating the job card.';
         } else {
 
+            $jobNo = next_job_no($pdo, $branchId);
+
             $jobCardId = create_job_card($pdo, [
                 'organization_id' => $organizationId,
                 'branch_id' => $branchId,
-                'job_no' => next_job_no($pdo, $branchId),
+                'job_no' => $jobNo,
                 'customer_id' => $customerId,
                 'vehicle_id' => $vehicleId,
                 'advisor_id' => $user['id'],
@@ -174,6 +184,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'odometer_in' => $odometerIn ?: null,
                 'promised_at' => $promisedAt ?: null
             ]);
+
+            $statement = $pdo->prepare("
+                SELECT c.name AS customer_name, v.registration_no
+                FROM customers c, vehicles v
+                WHERE c.id = :customer_id AND v.id = :vehicle_id
+            ");
+            $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
+            $jobCardFor = $statement->fetch(PDO::FETCH_ASSOC);
+
+            log_audit_event(
+                $pdo, $user, 'create', 'job_card', $jobCardId,
+                "Opened job card $jobNo for {$jobCardFor['customer_name']} — {$jobCardFor['registration_no']}"
+            );
 
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;

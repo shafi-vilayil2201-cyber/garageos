@@ -61,6 +61,6 @@ if (!job_card_can_transition($jobCard['status'], $newStatus)) {
     exit;
 }
 
-apply_job_card_status($pdo, $jobCard, $newStatus, $user['organization_id']);
+apply_job_card_status($pdo, $jobCard, $newStatus, $user['organization_id'], $user);
 
 echo json_encode(['ok' => true, 'status' => $newStatus]);

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/ServiceDue.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -27,6 +28,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reminderId = (int) ($_POST['reminder_id'] ?? 0);
     $action = $_POST['action'] ?? '';
 
+    $statement = $pdo->prepare("
+        SELECT c.name AS customer_name, v.registration_no
+        FROM reminders r
+        INNER JOIN customers c ON c.id = r.customer_id
+        INNER JOIN vehicles v ON v.id = r.vehicle_id
+        WHERE r.id = :id AND r.organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $reminderId, 'organization_id' => $organizationId]);
+    $targetReminder = $statement->fetch(PDO::FETCH_ASSOC);
+
     if ($action === 'mark_sent') {
 
         $channel = $_POST['channel'] ?? 'call';
@@ -38,6 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $statement->execute(['channel' => $channel, 'id' => $reminderId, 'organization_id' => $organizationId]);
 
+        if ($targetReminder) {
+            log_audit_event(
+                $pdo, $user, 'update', 'reminder', $reminderId,
+                "Marked reminder contacted via $channel for {$targetReminder['customer_name']} — {$targetReminder['registration_no']}"
+            );
+        }
+
     } elseif ($action === 'dismiss') {
 
         $statement = $pdo->prepare("
@@ -45,6 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE id = :id AND organization_id = :organization_id
         ");
         $statement->execute(['id' => $reminderId, 'organization_id' => $organizationId]);
+
+        if ($targetReminder) {
+            log_audit_event(
+                $pdo, $user, 'update', 'reminder', $reminderId,
+                "Dismissed reminder for {$targetReminder['customer_name']} — {$targetReminder['registration_no']}"
+            );
+        }
     }
 
     header('Location: /reminders.php');

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -57,6 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
+            log_audit_event($pdo, $user, 'update', 'supplier', $editingSupplierId, "Updated supplier $name");
+
             header('Location: /suppliers.php');
             exit;
         }
@@ -79,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("
                 INSERT INTO suppliers (organization_id, name, code, phone)
                 VALUES (:organization_id, :name, :code, :phone)
+                RETURNING id
             ");
             $statement->execute([
                 'organization_id' => $organizationId,
@@ -86,6 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'code' => $code,
                 'phone' => $phone ?: null
             ]);
+            $newSupplierId = (int) $statement->fetchColumn();
+
+            log_audit_event($pdo, $user, 'create', 'supplier', $newSupplierId, "Created supplier $name");
 
             header('Location: /suppliers.php');
             exit;

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Payroll.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -108,6 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'generated_by' => $user['id']
                 ]);
             }
+
+            log_audit_event(
+                $pdo, $user, 'create', 'payroll_run', null,
+                'Generated payroll for ' . (new DateTime($periodStart))->format('F Y') . ' (' . count($salariedUsers) . ' staff)'
+            );
 
             $pdo->commit();
             $generated = true;

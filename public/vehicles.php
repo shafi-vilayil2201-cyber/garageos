@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -63,6 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
+            log_audit_event($pdo, $user, 'update', 'vehicle', $editingVehicleId, "Updated vehicle $registrationNo");
+
             header('Location: /vehicles.php');
             exit;
         }
@@ -78,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("
                 INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
                 VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
+                RETURNING id
             ");
 
             $statement->execute([
@@ -89,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'year' => $year ?: null,
                 'fuel_type' => $fuelType
             ]);
+            $newVehicleId = (int) $statement->fetchColumn();
+
+            log_audit_event($pdo, $user, 'create', 'vehicle', $newVehicleId, "Registered vehicle $registrationNo");
 
             header('Location: /vehicles.php');
             exit;

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -93,6 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
+            log_audit_event($pdo, $user, 'update', 'service', $editingServiceId, "Updated service '$name'");
+
             header('Location: /services.php');
             exit;
         }
@@ -108,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("
                 INSERT INTO services (organization_id, service_category_id, name, code, standard_price, estimated_minutes, tax_rate, sac_code)
                 VALUES (:organization_id, :service_category_id, :name, :code, :standard_price, :estimated_minutes, :tax_rate, :sac_code)
+                RETURNING id
             ");
             $statement->execute([
                 'organization_id' => $organizationId,
@@ -119,6 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'tax_rate' => $taxRate,
                 'sac_code' => $sacCode ?: null
             ]);
+            $newServiceId = (int) $statement->fetchColumn();
+
+            log_audit_event($pdo, $user, 'create', 'service', $newServiceId, "Created service '$name'");
 
             header('Location: /services.php');
             exit;

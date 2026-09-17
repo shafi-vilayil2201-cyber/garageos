@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -32,10 +33,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'cancel') {
 
         $statement = $pdo->prepare("
+            SELECT c.name AS customer_name, v.registration_no
+            FROM appointments a
+            INNER JOIN customers c ON c.id = a.customer_id
+            INNER JOIN vehicles v ON v.id = a.vehicle_id
+            WHERE a.id = :id AND a.organization_id = :organization_id
+        ");
+        $statement->execute(['id' => $appointmentId, 'organization_id' => $organizationId]);
+        $cancelledAppointment = $statement->fetch(PDO::FETCH_ASSOC);
+
+        $statement = $pdo->prepare("
             UPDATE appointments SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND organization_id = :organization_id
         ");
         $statement->execute(['id' => $appointmentId, 'organization_id' => $organizationId]);
+
+        if ($cancelledAppointment) {
+            log_audit_event(
+                $pdo, $user, 'update', 'appointment', $appointmentId,
+                "Cancelled appointment for {$cancelledAppointment['customer_name']} — {$cancelledAppointment['registration_no']}"
+            );
+        }
 
     } elseif ($action === 'convert_to_job_card') {
 
@@ -97,6 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     WHERE id = :id
                 ");
                 $statement->execute(['job_card_id' => $jobCardId, 'id' => $appointmentId]);
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card', (int) $jobCardId,
+                    "Converted appointment to job card $jobNo"
+                );
 
                 $pdo->commit();
 

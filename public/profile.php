@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -35,6 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = $pdo->prepare("UPDATE users SET name = :name, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
             $statement->execute(['name' => $name, 'id' => $user['id']]);
 
+            log_audit_event($pdo, $user, 'update', 'user', $user['id'], "Updated own profile ($name)");
+
             $user['name'] = $name;
             $success = 'Profile updated.';
         }
@@ -63,6 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
                     'id' => $user['id']
                 ]);
+
+                log_audit_event($pdo, $user, 'update', 'user', $user['id'], 'Changed own password');
 
                 $success = 'Password updated.';
             }

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -78,6 +79,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement2 = $pdo->prepare("SELECT 1 FROM roles WHERE id = :id AND organization_id = :organization_id");
             $statement2->execute(['id' => $roleId, 'organization_id' => $organizationId]);
 
+            $statement3 = $pdo->prepare("SELECT r.id, r.name FROM user_roles ur INNER JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = :user_id LIMIT 1");
+            $statement3->execute(['user_id' => $editingUserId]);
+            $previousRole = $statement3->fetch(PDO::FETCH_ASSOC);
+
             if (!$statement->fetch()) {
                 $error = 'That user does not belong to this organization.';
                 $errorAction = 'update';
@@ -136,6 +141,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ON CONFLICT DO NOTHING
                     ");
                     $statement->execute(['user_id' => $editingUserId, 'role_id' => $roleId]);
+
+                    $roleChanged = !$previousRole || (int) $previousRole['id'] !== $roleId;
+                    $description = "Updated staff member $name";
+
+                    if ($roleChanged) {
+                        $statement = $pdo->prepare("SELECT name FROM roles WHERE id = :id");
+                        $statement->execute(['id' => $roleId]);
+                        $newRoleName = $statement->fetchColumn();
+                        $description .= $previousRole
+                            ? ", changed role from {$previousRole['name']} to $newRoleName"
+                            : ", assigned role $newRoleName";
+                    }
+
+                    log_audit_event($pdo, $user, 'update', 'user', $editingUserId, $description);
 
                     $pdo->commit();
 
@@ -201,6 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)
                     ");
                     $statement->execute(['user_id' => $newUserId, 'role_id' => $roleId]);
+
+                    log_audit_event($pdo, $user, 'create', 'user', (int) $newUserId, "Created staff member $name");
 
                     $pdo->commit();
 

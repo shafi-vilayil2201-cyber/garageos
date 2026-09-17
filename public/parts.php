@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -68,6 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id' => $editingPartId,
                     'organization_id' => $organizationId
                 ]);
+
+                log_audit_event($pdo, $user, 'update', 'part', $editingPartId, "Updated part '$name'");
 
                 header('Location: /parts.php');
                 exit;
@@ -137,6 +140,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'created_by' => $user['id']
                     ]);
                 }
+
+                log_audit_event($pdo, $user, 'create', 'part', (int) $partId, "Created part '$name'");
 
                 $pdo->commit();
 
@@ -214,6 +219,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'reason' => $reason,
                     'created_by' => $user['id']
                 ]);
+
+                $statement = $pdo->prepare("SELECT name FROM parts WHERE id = :id");
+                $statement->execute(['id' => $adjustPartId]);
+                $adjustedPartName = $statement->fetchColumn();
+                $sign = $direction === 'in' ? '+' : '-';
+
+                log_audit_event(
+                    $pdo, $user, 'update', 'inventory', $adjustPartId,
+                    "Adjusted stock for '$adjustedPartName' by {$sign}{$quantity} ($reason)"
+                );
 
                 $pdo->commit();
 

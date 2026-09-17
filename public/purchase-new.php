@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -144,6 +145,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'created_by' => $user['id']
                 ]);
             }
+
+            $statement = $pdo->prepare("SELECT name FROM suppliers WHERE id = :id");
+            $statement->execute(['id' => $supplierId]);
+            $purchaseSupplierName = $statement->fetchColumn();
+
+            log_audit_event(
+                $pdo, $user, 'create', 'purchase', (int) $purchaseId,
+                "Created purchase order $purchaseNo from $purchaseSupplierName"
+            );
 
             $pdo->commit();
 

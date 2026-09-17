@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/Audit.php';
+
 // A job card moves forward through its lifecycle and never back — once a
 // vehicle is marked Delivered, it cannot return to Received or In Progress.
 // This is enforced here once, and both the status dropdown on the job
@@ -43,9 +45,9 @@ function job_card_can_transition(string $from, string $to): bool
 // Performs the status change itself, plus the one side effect that comes
 // with it: delivering a vehicle resolves any pending "come back for
 // service" reminder and starts the countdown to the next one. $jobCard
-// needs id, status, vehicle_id and customer_id (a `jc.*` row already has
-// all four).
-function apply_job_card_status(PDO $pdo, array $jobCard, string $newStatus, int $organizationId): void
+// needs id, job_no, status, vehicle_id and customer_id (a `jc.*` row already
+// has all but job_no, which every caller's SELECT includes too).
+function apply_job_card_status(PDO $pdo, array $jobCard, string $newStatus, int $organizationId, array $user): void
 {
     $becomingDelivered = $newStatus === 'delivered' && $jobCard['status'] !== 'delivered';
 
@@ -57,6 +59,11 @@ function apply_job_card_status(PDO $pdo, array $jobCard, string $newStatus, int 
         WHERE id = :id
     ");
     $statement->execute(['status' => $newStatus, 'id' => $jobCard['id']]);
+
+    log_audit_event(
+        $pdo, $user, 'update', 'job_card', $jobCard['id'],
+        "Changed job card {$jobCard['job_no']} status to " . str_replace('_', ' ', $newStatus)
+    );
 
     if (!$becomingDelivered) {
         return;

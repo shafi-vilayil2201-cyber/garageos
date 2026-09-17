@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -38,6 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $workDate = $postedDate;
 
+        $statement = $pdo->prepare("SELECT user_id, status FROM attendance WHERE organization_id = :organization_id AND work_date = :work_date");
+        $statement->execute(['organization_id' => $organizationId, 'work_date' => $workDate]);
+        $existingStatuses = array_column($statement->fetchAll(PDO::FETCH_ASSOC), 'status', 'user_id');
+
         $upsert = $pdo->prepare("
             INSERT INTO attendance (organization_id, user_id, work_date, status, marked_by)
             VALUES (:organization_id, :user_id, :work_date, :status, :marked_by)
@@ -49,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             DELETE FROM attendance WHERE user_id = :user_id AND work_date = :work_date
         ");
 
-        $checkUser = $pdo->prepare("SELECT 1 FROM users WHERE id = :id AND organization_id = :organization_id");
+        $checkUser = $pdo->prepare("SELECT name FROM users WHERE id = :id AND organization_id = :organization_id");
 
         $pdo->beginTransaction();
 
@@ -58,12 +63,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $userId = (int) $userId;
                 $checkUser->execute(['id' => $userId, 'organization_id' => $organizationId]);
+                $staffName = $checkUser->fetchColumn();
 
-                if (!$checkUser->fetch()) {
+                if ($staffName === false) {
                     continue;
                 }
 
-                if ($status === 'present' || $status === 'absent' || $status === 'half_day') {
+                $previousStatus = $existingStatuses[$userId] ?? null;
+                $isRealStatus = $status === 'present' || $status === 'absent' || $status === 'half_day';
+
+                if ($isRealStatus && $status === $previousStatus) {
+                    continue;
+                }
+
+                if (!$isRealStatus && $previousStatus === null) {
+                    continue;
+                }
+
+                if ($isRealStatus) {
                     $upsert->execute([
                         'organization_id' => $organizationId,
                         'user_id' => $userId,
@@ -71,8 +88,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'status' => $status,
                         'marked_by' => $user['id']
                     ]);
+
+                    log_audit_event(
+                        $pdo, $user, 'update', 'attendance', $userId,
+                        "Marked $staffName as " . str_replace('_', ' ', $status) . " for $workDate"
+                    );
                 } else {
                     $clear->execute(['user_id' => $userId, 'work_date' => $workDate]);
+
+                    log_audit_event(
+                        $pdo, $user, 'delete', 'attendance', $userId,
+                        "Cleared attendance mark for $staffName on $workDate"
+                    );
                 }
             }
 

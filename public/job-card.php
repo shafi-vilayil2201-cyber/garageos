@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -73,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (in_array($newStatus, $allStatuses, true) && job_card_can_transition($jobCard['status'], $newStatus)) {
 
-            apply_job_card_status($pdo, $jobCard, $newStatus, $organizationId);
+            apply_job_card_status($pdo, $jobCard, $newStatus, $organizationId, $user);
 
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
@@ -94,6 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'id' => $jobCardId,
             'organization_id' => $organizationId
         ]);
+
+        log_audit_event(
+            $pdo, $user, 'update', 'job_card', $jobCardId,
+            "Changed promised delivery for {$jobCard['job_no']} to " . ($promisedAt ?: 'not set')
+        );
 
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
@@ -124,6 +130,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'technician_id' => $technicianId,
                 'price' => $price
             ]);
+
+            $statement = $pdo->prepare("SELECT name FROM services WHERE id = :id");
+            $statement->execute(['id' => $serviceId]);
+            $addedServiceName = $statement->fetchColumn();
+
+            log_audit_event(
+                $pdo, $user, 'create', 'job_card_item', $jobCardId,
+                "Added service '$addedServiceName' to job card {$jobCard['job_no']}"
+            );
 
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
@@ -190,6 +205,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'reference_id' => $jobCardId,
                     'created_by' => $user['id']
                 ]);
+
+                $statement = $pdo->prepare("SELECT name FROM parts WHERE id = :id");
+                $statement->execute(['id' => $partId]);
+                $addedPartName = $statement->fetchColumn();
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card_part', $jobCardId,
+                    "Added part '$addedPartName' (x{$quantity}) to job card {$jobCard['job_no']}"
+                );
 
                 $pdo->commit();
 
@@ -352,6 +376,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
 
+                log_audit_event(
+                    $pdo, $user, 'create', 'invoice', $invoiceId,
+                    "Generated invoice $invoiceNo from job card {$jobCard['job_no']}"
+                );
+
                 $pdo->commit();
 
                 header('Location: /invoice.php?id=' . $invoiceId);
@@ -371,8 +400,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // what was actually invoiced — same boundary as GST on an invoice
         // locking once a payment exists.
         if (!$invoice) {
+            $removedItemId = (int) ($_POST['item_id'] ?? 0);
+
+            $statement = $pdo->prepare("
+                SELECT s.name FROM job_card_items jci
+                INNER JOIN services s ON s.id = jci.service_id
+                WHERE jci.id = :id AND jci.job_card_id = :job_card_id
+            ");
+            $statement->execute(['id' => $removedItemId, 'job_card_id' => $jobCardId]);
+            $removedServiceName = $statement->fetchColumn();
+
             $statement = $pdo->prepare("DELETE FROM job_card_items WHERE id = :id AND job_card_id = :job_card_id");
-            $statement->execute(['id' => (int) ($_POST['item_id'] ?? 0), 'job_card_id' => $jobCardId]);
+            $statement->execute(['id' => $removedItemId, 'job_card_id' => $jobCardId]);
+
+            if ($removedServiceName !== false) {
+                log_audit_event(
+                    $pdo, $user, 'delete', 'job_card_item', $jobCardId,
+                    "Removed service '$removedServiceName' from job card {$jobCard['job_no']}"
+                );
+            }
         }
 
         header('Location: /job-card.php?id=' . $jobCardId);
@@ -388,8 +434,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $statement = $pdo->prepare("
-                    SELECT part_id, quantity FROM job_card_parts
-                    WHERE id = :id AND job_card_id = :job_card_id
+                    SELECT jcp.part_id, jcp.quantity, p.name
+                    FROM job_card_parts jcp
+                    INNER JOIN parts p ON p.id = jcp.part_id
+                    WHERE jcp.id = :id AND jcp.job_card_id = :job_card_id
                     FOR UPDATE
                 ");
                 $statement->execute(['id' => (int) ($_POST['item_id'] ?? 0), 'job_card_id' => $jobCardId]);
@@ -422,6 +470,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'reference_id' => $jobCardId,
                         'created_by' => $user['id']
                     ]);
+
+                    log_audit_event(
+                        $pdo, $user, 'delete', 'job_card_part', $jobCardId,
+                        "Removed part '{$removed['name']}' from job card {$jobCard['job_no']}"
+                    );
                 }
 
                 $pdo->commit();
