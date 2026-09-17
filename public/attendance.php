@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
 
                     log_audit_event(
-                        $pdo, $user, 'update', 'attendance', $userId,
+                        $pdo, $user, $previousStatus === null ? 'create' : 'update', 'attendance', $userId,
                         "Marked $staffName as " . str_replace('_', ' ', $status) . " for $workDate"
                     );
                 } else {

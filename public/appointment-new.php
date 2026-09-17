@@ -174,10 +174,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
             $bookedFor = $statement->fetch(PDO::FETCH_ASSOC);
 
-            log_audit_event(
-                $pdo, $user, 'create', 'appointment', $newAppointmentId,
-                "Booked appointment for {$bookedFor['customer_name']} — {$bookedFor['registration_no']}"
-            );
+            if ($bookedFor) {
+                log_audit_event(
+                    $pdo, $user, 'create', 'appointment', $newAppointmentId,
+                    "Booked appointment for {$bookedFor['customer_name']} — {$bookedFor['registration_no']}"
+                );
+            }
 
             header('Location: /appointments.php');
             exit;

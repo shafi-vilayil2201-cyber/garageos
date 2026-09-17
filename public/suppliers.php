@@ -58,7 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
-            log_audit_event($pdo, $user, 'update', 'supplier', $editingSupplierId, "Updated supplier $name");
+            if ($statement->rowCount() > 0) {
+                log_audit_event($pdo, $user, 'update', 'supplier', $editingSupplierId, "Updated supplier $name");
+            }
 
             header('Location: /suppliers.php');
             exit;

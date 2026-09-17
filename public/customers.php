@@ -66,7 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
-            log_audit_event($pdo, $user, 'update', 'customer', $editingCustomerId, "Updated customer $name");
+            if ($statement->rowCount() > 0) {
+                log_audit_event($pdo, $user, 'update', 'customer', $editingCustomerId, "Updated customer $name");
+            }
 
             header('Location: /customers.php');
             exit;

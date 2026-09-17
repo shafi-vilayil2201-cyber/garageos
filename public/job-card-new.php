@@ -193,10 +193,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
             $jobCardFor = $statement->fetch(PDO::FETCH_ASSOC);
 
-            log_audit_event(
-                $pdo, $user, 'create', 'job_card', $jobCardId,
-                "Opened job card $jobNo for {$jobCardFor['customer_name']} — {$jobCardFor['registration_no']}"
-            );
+            if ($jobCardFor) {
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card', $jobCardId,
+                    "Opened job card $jobNo for {$jobCardFor['customer_name']} — {$jobCardFor['registration_no']}"
+                );
+            }
 
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;

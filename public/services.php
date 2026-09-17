@@ -94,7 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
-            log_audit_event($pdo, $user, 'update', 'service', $editingServiceId, "Updated service '$name'");
+            if ($statement->rowCount() > 0) {
+                log_audit_event($pdo, $user, 'update', 'service', $editingServiceId, "Updated service '$name'");
+            }
 
             header('Location: /services.php');
             exit;

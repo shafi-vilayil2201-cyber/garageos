@@ -64,7 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'organization_id' => $organizationId
             ]);
 
-            log_audit_event($pdo, $user, 'update', 'vehicle', $editingVehicleId, "Updated vehicle $registrationNo");
+            if ($statement->rowCount() > 0) {
+                log_audit_event($pdo, $user, 'update', 'vehicle', $editingVehicleId, "Updated vehicle $registrationNo");
+            }
 
             header('Location: /vehicles.php');
             exit;

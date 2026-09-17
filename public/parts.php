@@ -70,7 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'organization_id' => $organizationId
                 ]);
 
-                log_audit_event($pdo, $user, 'update', 'part', $editingPartId, "Updated part '$name'");
+                if ($statement->rowCount() > 0) {
+                    log_audit_event($pdo, $user, 'update', 'part', $editingPartId, "Updated part '$name'");
+                }
 
                 header('Location: /parts.php');
                 exit;

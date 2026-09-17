@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_permission($user, 'job_cards.manage');
 
         $promisedAt = trim($_POST['promised_at'] ?? '');
+        $previousPromisedAt = $jobCard['promised_at'] ? date('Y-m-d\TH:i', strtotime($jobCard['promised_at'])) : '';
 
         $statement = $pdo->prepare("
             UPDATE job_cards SET promised_at = :promised_at, updated_at = CURRENT_TIMESTAMP
@@ -96,10 +97,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'organization_id' => $organizationId
         ]);
 
-        log_audit_event(
-            $pdo, $user, 'update', 'job_card', $jobCardId,
-            "Changed promised delivery for {$jobCard['job_no']} to " . ($promisedAt ?: 'not set')
-        );
+        if ($promisedAt !== $previousPromisedAt) {
+            log_audit_event(
+                $pdo, $user, 'update', 'job_card', $jobCardId,
+                "Changed promised delivery for {$jobCard['job_no']} to " . ($promisedAt ?: 'not set')
+            );
+        }
 
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
