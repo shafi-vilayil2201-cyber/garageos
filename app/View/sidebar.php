@@ -63,9 +63,8 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
     <div class="brand">
         <?php if (!empty($user['organization_logo_url'])): ?>
             <img class="brand-logo" src="<?= htmlspecialchars($user['organization_logo_url']) ?>" alt="<?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?>">
-        <?php else: ?>
-            <div class="brand-name"><?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?></div>
         <?php endif; ?>
+        <div class="brand-name"><?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?></div>
         <div class="brand-subtitle">Workshop management</div>
     </div>
 
