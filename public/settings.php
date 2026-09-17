@@ -20,48 +20,8 @@ require_permission($user, 'settings.manage');
 
 $organizationId = $user['organization_id'];
 $error = null;
-$logoError = null;
-$logoSuccess = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_logo') {
-
-    csrf_verify();
-    require_permission($user, 'settings.manage');
-
-    $statement = $pdo->prepare("SELECT logo_url FROM organizations WHERE id = :id");
-    $statement->execute(['id' => $organizationId]);
-    $previousLogoUrl = $statement->fetchColumn();
-
-    $result = upload_organization_logo($_FILES['logo'] ?? null);
-
-    if ($result['error']) {
-        $logoError = $result['error'];
-    } else {
-        $pdo->prepare("UPDATE organizations SET logo_url = :logo_url, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
-            ->execute(['logo_url' => $result['path'], 'id' => $organizationId]);
-
-        delete_old_logo_file($previousLogoUrl ?: null);
-
-        $logoSuccess = 'Logo updated.';
-    }
-
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remove_logo') {
-
-    csrf_verify();
-    require_permission($user, 'settings.manage');
-
-    $statement = $pdo->prepare("SELECT logo_url FROM organizations WHERE id = :id");
-    $statement->execute(['id' => $organizationId]);
-    $previousLogoUrl = $statement->fetchColumn();
-
-    delete_old_logo_file($previousLogoUrl ?: null);
-
-    $pdo->prepare("UPDATE organizations SET logo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
-        ->execute(['id' => $organizationId]);
-
-    $logoSuccess = 'Logo removed.';
-
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_organization') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_organization') {
 
     csrf_verify();
     require_permission($user, 'settings.manage');
@@ -77,6 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
     $serviceIntervalKm = (int) ($_POST['service_interval_km'] ?? 0);
     $serviceIntervalMonths = (int) ($_POST['service_interval_months'] ?? 0);
 
+    // The logo lives in this same form now (see the Organization card
+    // below) rather than its own card+form, so it's optional here —
+    // most saves won't touch it at all — and validated alongside
+    // everything else rather than in a separate action/request.
+    $removeLogo = isset($_POST['remove_logo']);
+    $hasNewLogo = !empty($_FILES['logo']['name'] ?? '');
+    $logoResult = $hasNewLogo ? upload_organization_logo($_FILES['logo']) : null;
+
     if ($name === '' || $currency === '') {
         $error = 'Name and currency are required.';
     } elseif (!gst_rate_is_valid($defaultTaxRate)) {
@@ -85,13 +53,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
         $error = 'Choose a valid state.';
     } elseif ($serviceIntervalKm <= 0 || $serviceIntervalMonths <= 0) {
         $error = 'Service interval must be a positive number of km and months.';
+    } elseif ($logoResult && $logoResult['error']) {
+        $error = $logoResult['error'];
     } else {
+        $statement = $pdo->prepare("SELECT logo_url FROM organizations WHERE id = :id");
+        $statement->execute(['id' => $organizationId]);
+        $previousLogoUrl = $statement->fetchColumn();
+
+        $logoUrl = $previousLogoUrl;
+        if ($hasNewLogo) {
+            $logoUrl = $logoResult['path'];
+        } elseif ($removeLogo) {
+            $logoUrl = null;
+        }
+
         $statement = $pdo->prepare("
             UPDATE organizations
             SET name = :name, phone = :phone, email = :email, address = :address, currency = :currency,
                 tax_number = :tax_number, default_tax_rate = :default_tax_rate, state = :state,
                 service_interval_km = :service_interval_km, service_interval_months = :service_interval_months,
-                updated_at = CURRENT_TIMESTAMP
+                logo_url = :logo_url, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $statement->execute([
@@ -105,8 +86,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
             'state' => $state ?: null,
             'service_interval_km' => $serviceIntervalKm,
             'service_interval_months' => $serviceIntervalMonths,
+            'logo_url' => $logoUrl,
             'id' => $organizationId
         ]);
+
+        if ($previousLogoUrl && $previousLogoUrl !== $logoUrl) {
+            delete_old_logo_file($previousLogoUrl);
+        }
 
         header('Location: /settings.php');
         exit;
@@ -157,48 +143,7 @@ $topbarTitle = 'Settings';
 
             <div class="settings-grid">
 
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('sparkle', 15) ?></span>
-                            Logo
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <?php if ($logoError): ?>
-                            <div class="form-error"><?= htmlspecialchars($logoError) ?></div>
-                        <?php endif; ?>
-                        <?php if ($logoSuccess): ?>
-                            <div class="form-success"><?= icon('check-circle', 16) ?> <?= htmlspecialchars($logoSuccess) ?></div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($organization['logo_url'])): ?>
-                            <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:64px; display:block; margin-bottom:14px;">
-                        <?php endif; ?>
-
-                        <form method="POST" action="" enctype="multipart/form-data">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="upload_logo">
-                            <div class="form-field">
-                                <label>Upload new logo (PNG, JPEG, or WEBP, max 2MB)</label>
-                                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required>
-                            </div>
-                            <div class="form-actions" style="margin-top:14px;">
-                                <button type="submit" class="button"><?= icon('check', 16) ?> Upload</button>
-                            </div>
-                        </form>
-
-                        <?php if (!empty($organization['logo_url'])): ?>
-                            <form method="POST" action="" style="margin-top:10px;">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="remove_logo">
-                                <button type="submit" class="button secondary">Remove logo</button>
-                            </form>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <form method="POST" action="" style="display:contents;">
+                <form method="POST" action="" enctype="multipart/form-data" style="display:contents;">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="update_organization">
 
@@ -222,6 +167,20 @@ $topbarTitle = 'Settings';
                                 <div class="form-field">
                                     <label>Email</label>
                                     <input type="email" name="email" value="<?= htmlspecialchars($organization['email'] ?? '') ?>">
+                                </div>
+                                <div class="form-field">
+                                    <label>Logo</label>
+                                    <?php if (!empty($organization['logo_url'])): ?>
+                                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                                            <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:40px;">
+                                            <label style="display:flex; align-items:center; gap:6px; font-weight:400; font-size:13px; color:var(--muted);">
+                                                <input type="checkbox" name="remove_logo" value="1" style="width:auto;">
+                                                Remove
+                                            </label>
+                                        </div>
+                                    <?php endif; ?>
+                                    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+                                    <p class="result-meta" style="margin-top:6px;">PNG, JPEG, or WEBP, max 2MB.</p>
                                 </div>
                                 <div class="form-field">
                                     <label>Address</label>
