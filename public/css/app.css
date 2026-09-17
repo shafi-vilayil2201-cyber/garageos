@@ -590,6 +590,25 @@ textarea:focus-visible,
     margin-top: 20px;
 }
 
+/* The Organization/Tax/Service sub-sections inside the single combined
+   "Workshop settings" card — same idea as .settings-grid's columns,
+   but without each section getting its own card border/shadow, since
+   they're one form with one Save button, not separate settings. */
+.settings-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 28px;
+}
+
+.settings-section-title {
+    margin: 0 0 14px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
 /* Grid items default to min-width:auto (content-sized) — without this,
    a wide table inside a card can force the whole grid track wider than
    the viewport, bypassing the table's own .table-wrap scroll entirely. */

@@ -143,107 +143,101 @@ $topbarTitle = 'Settings';
 
             <div class="settings-grid">
 
-                <form method="POST" action="" enctype="multipart/form-data" style="display:contents;">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="update_organization">
-
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
-                                Organization
-                            </div>
+                <div class="card" style="grid-column:1 / -1;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
+                            Workshop settings
                         </div>
-                        <div class="card-body">
-                            <div class="form-grid single">
-                                <div class="form-field">
-                                    <label>Name</label>
-                                    <input type="text" name="name" value="<?= htmlspecialchars($organization['name']) ?>" required>
-                                </div>
-                                <div class="form-field">
-                                    <label>Phone</label>
-                                    <input type="tel" name="phone" value="<?= htmlspecialchars($organization['phone'] ?? '') ?>">
-                                </div>
-                                <div class="form-field">
-                                    <label>Email</label>
-                                    <input type="email" name="email" value="<?= htmlspecialchars($organization['email'] ?? '') ?>">
-                                </div>
-                                <div class="form-field">
-                                    <label>Logo</label>
-                                    <?php if (!empty($organization['logo_url'])): ?>
-                                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                                            <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:40px;">
-                                            <label style="display:flex; align-items:center; gap:6px; font-weight:400; font-size:13px; color:var(--muted);">
-                                                <input type="checkbox" name="remove_logo" value="1" style="width:auto;">
-                                                Remove
-                                            </label>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="" enctype="multipart/form-data">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="update_organization">
+
+                            <div class="settings-sections">
+
+                                <div class="settings-section">
+                                    <h3 class="settings-section-title">Organization</h3>
+                                    <div class="form-grid single">
+                                        <div class="form-field">
+                                            <label>Name</label>
+                                            <input type="text" name="name" value="<?= htmlspecialchars($organization['name']) ?>" required>
                                         </div>
-                                    <?php endif; ?>
-                                    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp">
-                                    <p class="result-meta" style="margin-top:6px;">PNG, JPEG, or WEBP, max 2MB.</p>
+                                        <div class="form-field">
+                                            <label>Phone</label>
+                                            <input type="tel" name="phone" value="<?= htmlspecialchars($organization['phone'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Email</label>
+                                            <input type="email" name="email" value="<?= htmlspecialchars($organization['email'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Logo</label>
+                                            <?php if (!empty($organization['logo_url'])): ?>
+                                                <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                                                    <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:40px;">
+                                                    <label style="display:flex; align-items:center; gap:6px; font-weight:400; font-size:13px; color:var(--muted);">
+                                                        <input type="checkbox" name="remove_logo" value="1" style="width:auto;">
+                                                        Remove
+                                                    </label>
+                                                </div>
+                                            <?php endif; ?>
+                                            <input type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+                                            <p class="result-meta" style="margin-top:6px;">PNG, JPEG, or WEBP, max 2MB.</p>
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Address</label>
+                                            <textarea name="address"><?= htmlspecialchars($organization['address'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Currency</label>
+                                            <input type="text" name="currency" value="<?= htmlspecialchars($organization['currency']) ?>" maxlength="10" required>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="form-field">
-                                    <label>Address</label>
-                                    <textarea name="address"><?= htmlspecialchars($organization['address'] ?? '') ?></textarea>
-                                </div>
-                                <div class="form-field">
-                                    <label>Currency</label>
-                                    <input type="text" name="currency" value="<?= htmlspecialchars($organization['currency']) ?>" maxlength="10" required>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                                Tax
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="form-grid single">
-                                <div class="form-field">
-                                    <label><?= htmlspecialchars($organization['tax_label']) ?> number</label>
-                                    <input type="text" name="tax_number" value="<?= htmlspecialchars($organization['tax_number'] ?? '') ?>" placeholder="e.g. 32AAAAA0000A1Z5" maxlength="50">
+                                <div class="settings-section">
+                                    <h3 class="settings-section-title">Tax</h3>
+                                    <div class="form-grid single">
+                                        <div class="form-field">
+                                            <label><?= htmlspecialchars($organization['tax_label']) ?> number</label>
+                                            <input type="text" name="tax_number" value="<?= htmlspecialchars($organization['tax_number'] ?? '') ?>" placeholder="e.g. 32AAAAA0000A1Z5" maxlength="50">
+                                        </div>
+                                        <div class="form-field">
+                                            <label>State</label>
+                                            <select name="state">
+                                                <?= state_options($organization['state'] ?? null) ?>
+                                            </select>
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Default GST rate</label>
+                                            <select name="default_tax_rate">
+                                                <?= gst_rate_options((float) $organization['default_tax_rate']) ?>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="form-field">
-                                    <label>State</label>
-                                    <select name="state">
-                                        <?= state_options($organization['state'] ?? null) ?>
-                                    </select>
-                                </div>
-                                <div class="form-field">
-                                    <label>Default GST rate</label>
-                                    <select name="default_tax_rate">
-                                        <?= gst_rate_options((float) $organization['default_tax_rate']) ?>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('bell', 15) ?></span>
-                                Service &amp; reminders
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="form-field">
-                                <label>Service interval</label>
-                                <div style="display:flex; gap:10px; align-items:center;">
-                                    <input type="number" name="service_interval_km" min="1" value="<?= (int) $organization['service_interval_km'] ?>" style="width:110px;"> <span>km, or</span>
-                                    <input type="number" name="service_interval_months" min="1" value="<?= (int) $organization['service_interval_months'] ?>" style="width:80px;"> <span>months</span>
+                                <div class="settings-section">
+                                    <h3 class="settings-section-title">Service &amp; reminders</h3>
+                                    <div class="form-field">
+                                        <label>Service interval</label>
+                                        <div style="display:flex; gap:10px; align-items:center;">
+                                            <input type="number" name="service_interval_km" min="1" value="<?= (int) $organization['service_interval_km'] ?>" style="width:110px;"> <span>km, or</span>
+                                            <input type="number" name="service_interval_months" min="1" value="<?= (int) $organization['service_interval_months'] ?>" style="width:80px;"> <span>months</span>
+                                        </div>
+                                    </div>
                                 </div>
+
                             </div>
-                            <div class="form-actions" style="margin-top:14px;">
+
+                            <div class="form-actions" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
                                 <button type="submit" class="button"><?= icon('check', 16) ?> Save changes</button>
                             </div>
-                        </div>
+                        </form>
                     </div>
-                </form>
+                </div>
 
                 <div class="card">
                     <div class="card-header">
