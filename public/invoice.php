@@ -495,10 +495,21 @@ if ($hasWhatsappNumber) {
          printable invoice into a real PDF for the WhatsApp share button,
          see public/js/invoice-share.js. Vendored locally rather than
          from a CDN, matching this app's no-external-runtime-dependency
-         convention (config/database.php's load_env() comment). -->
-    <script src="/js/vendor/jspdf.umd.min.js"></script>
-    <script src="/js/vendor/html2canvas.min.js"></script>
-    <script src="/js/invoice-share.js"></script>
+         convention (config/database.php's load_env() comment).
+
+         Each ?v= is that file's own mtime, so a deploy that changes one
+         of these automatically busts any cached copy on the visitor's
+         phone — this feature has an active-development track record of
+         confusing "is the bug still there?" reports with mobile Safari
+         just serving a stale cached invoice-share.js from before the fix. -->
+    <?php
+        $jspdfPath = __DIR__ . '/js/vendor/jspdf.umd.min.js';
+        $html2canvasPath = __DIR__ . '/js/vendor/html2canvas.min.js';
+        $invoiceSharePath = __DIR__ . '/js/invoice-share.js';
+    ?>
+    <script src="/js/vendor/jspdf.umd.min.js?v=<?= filemtime($jspdfPath) ?>"></script>
+    <script src="/js/vendor/html2canvas.min.js?v=<?= filemtime($html2canvasPath) ?>"></script>
+    <script src="/js/invoice-share.js?v=<?= filemtime($invoiceSharePath) ?>"></script>
 <?php endif; ?>
 
 </body>
