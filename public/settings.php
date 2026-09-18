@@ -176,7 +176,7 @@ $topbarTitle = 'Settings';
                                             <label>Logo</label>
                                             <?php if (!empty($organization['logo_url'])): ?>
                                                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                                                    <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:40px;">
+                                                    <img src="<?= htmlspecialchars($organization['logo_url']) ?>" alt="Current logo" style="max-height:40px; border-radius:6px;">
                                                     <label style="display:flex; align-items:center; gap:6px; font-weight:400; font-size:13px; color:var(--muted);">
                                                         <input type="checkbox" name="remove_logo" value="1" style="width:auto;">
                                                         Remove
