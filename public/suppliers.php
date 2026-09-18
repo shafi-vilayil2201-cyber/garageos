@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($_POST['phone'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $address = trim($_POST['address'] ?? '');
+    $gstin = strtoupper(trim($_POST['gstin'] ?? ''));
 
     if ($action === 'update') {
 
@@ -46,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $statement = $pdo->prepare("
                 UPDATE suppliers
-                SET name = :name, phone = :phone, email = :email, address = :address, updated_at = CURRENT_TIMESTAMP
+                SET name = :name, phone = :phone, email = :email, address = :address, gstin = :gstin, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND organization_id = :organization_id
             ");
             $statement->execute([
@@ -54,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'phone' => $phone ?: null,
                 'email' => $email ?: null,
                 'address' => $address ?: null,
+                'gstin' => $gstin ?: null,
                 'id' => $editingSupplierId,
                 'organization_id' => $organizationId
             ]);
@@ -124,7 +126,7 @@ $editingSupplier = null;
 
 if ($editingSupplierId) {
     $statement = $pdo->prepare("
-        SELECT id, name, phone, email, address
+        SELECT id, name, phone, email, address, gstin
         FROM suppliers
         WHERE id = :id AND organization_id = :organization_id
     ");
@@ -292,6 +294,10 @@ $topbarTitle = 'Suppliers';
                             <div class="form-field">
                                 <label>Address (optional)</label>
                                 <textarea name="address"><?= htmlspecialchars($editingSupplier['address'] ?? '') ?></textarea>
+                            </div>
+                            <div class="form-field">
+                                <label>GSTIN (optional)</label>
+                                <input type="text" name="gstin" placeholder="For input tax credit" value="<?= htmlspecialchars($editingSupplier['gstin'] ?? '') ?>">
                             </div>
                         </div>
                         <div class="form-actions">
