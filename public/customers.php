@@ -223,9 +223,9 @@ $topbarTitle = 'Customers';
                                 </thead>
                                 <tbody id="customers-tbody">
                                 <?php foreach ($customers as $customer): ?>
-                                    <tr>
+                                    <tr class="clickable" data-href="/customer.php?id=<?= (int) $customer['id'] ?>">
                                         <td>
-                                            <a href="/customer.php?id=<?= (int) $customer['id'] ?>" class="table-link"><strong><?= htmlspecialchars($customer['name']) ?></strong></a>
+                                            <strong><?= htmlspecialchars($customer['name']) ?></strong>
                                             <div class="result-meta"><?= htmlspecialchars($customer['code']) ?></div>
                                         </td>
                                         <td><?= htmlspecialchars($customer['phone']) ?></td>
@@ -389,6 +389,7 @@ $topbarTitle = 'Customers';
 <?php if (!empty($customers)): ?>
 
     <script src="/js/live-table-search.js"></script>
+    <script src="/js/clickable-rows.js"></script>
     <script>
         const canManageCustomers = <?= json_encode($canManageCustomers) ?>;
         const plusIcon = <?= json_encode(icon('plus', 14)) ?>;
@@ -403,9 +404,9 @@ $topbarTitle = 'Customers';
             colspan: 5,
             emptyMessage: 'No customers found.',
             renderRow: (customer, escapeHtml) => `
-                <tr>
+                <tr class="clickable" data-href="/customer.php?id=${customer.id}">
                     <td>
-                        <a href="/customer.php?id=${customer.id}" class="table-link"><strong>${escapeHtml(customer.name)}</strong></a>
+                        <strong>${escapeHtml(customer.name)}</strong>
                         <div class="result-meta">${escapeHtml(customer.code)}</div>
                     </td>
                     <td>${escapeHtml(customer.phone)}</td>

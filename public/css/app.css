@@ -802,14 +802,6 @@ textarea:focus-visible,
     height: 14px;
 }
 
-.table-link:hover {
-    color: var(--primary);
-}
-
-.table-link:hover strong {
-    text-decoration: underline;
-}
-
 .card-body {
     padding: 20px;
 }
