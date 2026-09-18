@@ -351,6 +351,20 @@ textarea:focus-visible,
     position: relative;
     display: flex;
     align-items: center;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.topbar-search.open {
+    border-color: var(--border);
+    background: var(--surface-sunken);
+}
+
+.topbar-search.open:focus-within {
+    border-color: var(--primary);
 }
 
 .topbar-search-trigger {
@@ -365,6 +379,12 @@ textarea:focus-visible,
     color: var(--text);
     cursor: pointer;
     flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.topbar-search.open .topbar-search-trigger {
+    border-color: transparent;
+    background: transparent;
 }
 
 .topbar-search-trigger:hover {
@@ -375,21 +395,23 @@ textarea:focus-visible,
     width: 0;
     opacity: 0;
     padding: 0;
-    margin-left: 0;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    height: 38px;
-    background: var(--surface-sunken);
+    border: none;
+    background: transparent;
+    height: 36px;
     color: var(--text);
-    transition: width 0.15s ease, opacity 0.15s ease, padding 0.15s ease, margin-left 0.15s ease;
+    font-size: 14px;
+    outline: none;
+    transition: width 0.15s ease, opacity 0.15s ease, padding 0.15s ease;
+}
+
+.topbar-search-input::placeholder {
+    color: var(--muted);
 }
 
 .topbar-search.open .topbar-search-input {
     width: 260px;
     opacity: 1;
-    padding: 0 12px;
-    margin-left: 8px;
-    border-color: var(--border);
+    padding: 0 12px 0 2px;
 }
 
 .topbar-search-results {
