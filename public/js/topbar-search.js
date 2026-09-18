@@ -1,17 +1,15 @@
-// Global customer search in the topbar — same debounce/AbortController/
-// escapeHtml pattern as vehicle-intake.js's search-as-you-type box, but
-// collapsed to an icon by default (like user-menu.js's anchored dropdown)
-// and navigates to the customer's history page on click/Enter instead of
-// filling form fields.
+// Global customer search in the topbar — always visible on the left side,
+// same debounce/AbortController/escapeHtml pattern as vehicle-intake.js's
+// search-as-you-type box, but navigates to the customer's history page on
+// click/Enter instead of filling form fields.
 
 document.addEventListener('DOMContentLoaded', () =>
 {
     const container = document.getElementById('topbar-search');
-    const trigger = document.getElementById('topbar-search-trigger');
     const input = document.getElementById('topbar-search-input');
     const resultsContainer = document.getElementById('topbar-search-results');
 
-    if (!container || !trigger || !input || !resultsContainer)
+    if (!container || !input || !resultsContainer)
     {
         return;
     }
@@ -29,21 +27,10 @@ document.addEventListener('DOMContentLoaded', () =>
     }
 
 
-    function openSearch()
+    function hideResults()
     {
-        container.classList.add('open');
-        trigger.setAttribute('aria-expanded', 'true');
-        input.focus();
-    }
-
-
-    function closeSearch()
-    {
-        container.classList.remove('open');
-        trigger.setAttribute('aria-expanded', 'false');
         resultsContainer.hidden = true;
         resultsContainer.innerHTML = '';
-        input.value = '';
         currentResults = [];
     }
 
@@ -63,9 +50,7 @@ document.addEventListener('DOMContentLoaded', () =>
 
         if (!query)
         {
-            resultsContainer.hidden = true;
-            resultsContainer.innerHTML = '';
-            currentResults = [];
+            hideResults();
             return;
         }
 
@@ -158,23 +143,18 @@ document.addEventListener('DOMContentLoaded', () =>
     }
 
 
-    trigger.addEventListener('click', event =>
-    {
-        event.stopPropagation();
-
-        if (container.classList.contains('open'))
-        {
-            closeSearch();
-        } else
-        {
-            openSearch();
-        }
-    });
-
     input.addEventListener('input', () =>
     {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(searchCustomers, 300);
+    });
+
+    input.addEventListener('focus', () =>
+    {
+        if (currentResults.length > 0)
+        {
+            resultsContainer.hidden = false;
+        }
     });
 
     input.addEventListener('keydown', event =>
@@ -187,22 +167,19 @@ document.addEventListener('DOMContentLoaded', () =>
             {
                 goToCustomer(currentResults[0]);
             }
+        } else if (event.key === 'Escape')
+        {
+            input.value = '';
+            hideResults();
+            input.blur();
         }
     });
 
     document.addEventListener('click', event =>
     {
-        if (container.classList.contains('open') && !container.contains(event.target))
+        if (!resultsContainer.hidden && !container.contains(event.target))
         {
-            closeSearch();
-        }
-    });
-
-    document.addEventListener('keydown', event =>
-    {
-        if (event.key === 'Escape' && container.classList.contains('open'))
-        {
-            closeSearch();
+            resultsContainer.hidden = true;
         }
     });
 });

@@ -12,17 +12,15 @@ $initial = strtoupper(substr($user['name'], 0, 1));
         <button type="button" class="hamburger-button" id="hamburger-button" aria-label="Open navigation">
             <?= icon('menu', 18) ?>
         </button>
-    </div>
 
-    <?php if (user_can($user, 'customers.view')): ?>
-        <div class="topbar-search" id="topbar-search">
-            <button type="button" class="topbar-search-trigger" id="topbar-search-trigger" aria-label="Search customers" aria-expanded="false">
-                <?= icon('search', 18) ?>
-            </button>
-            <input type="search" class="topbar-search-input" id="topbar-search-input" placeholder="Search customers..." autocomplete="off">
-            <div class="topbar-search-results" id="topbar-search-results" hidden></div>
-        </div>
-    <?php endif; ?>
+        <?php if (user_can($user, 'customers.view')): ?>
+            <div class="topbar-search" id="topbar-search">
+                <span class="topbar-search-icon"><?= icon('search', 16) ?></span>
+                <input type="search" class="topbar-search-input" id="topbar-search-input" placeholder="Search customers..." autocomplete="off">
+                <div class="topbar-search-results" id="topbar-search-results" hidden></div>
+            </div>
+        <?php endif; ?>
+    </div>
 
     <div class="user-menu">
 
