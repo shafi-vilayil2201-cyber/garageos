@@ -14,6 +14,16 @@ $initial = strtoupper(substr($user['name'], 0, 1));
         </button>
     </div>
 
+    <?php if (user_can($user, 'customers.view')): ?>
+        <div class="topbar-search" id="topbar-search">
+            <button type="button" class="topbar-search-trigger" id="topbar-search-trigger" aria-label="Search customers" aria-expanded="false">
+                <?= icon('search', 18) ?>
+            </button>
+            <input type="search" class="topbar-search-input" id="topbar-search-input" placeholder="Search customers..." autocomplete="off">
+            <div class="topbar-search-results" id="topbar-search-results" hidden></div>
+        </div>
+    <?php endif; ?>
+
     <div class="user-menu">
 
         <div class="user-menu-name">
@@ -47,3 +57,6 @@ $initial = strtoupper(substr($user['name'], 0, 1));
 </header>
 
 <script src="/js/user-menu.js"></script>
+<?php if (user_can($user, 'customers.view')): ?>
+    <script src="/js/topbar-search.js"></script>
+<?php endif; ?>

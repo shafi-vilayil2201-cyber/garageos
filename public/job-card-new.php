@@ -23,6 +23,51 @@ $branchId = $user['branch_id'];
 
 $error = null;
 
+// Jumping in from a customer's history page (public/customer.php) skips the
+// search-a-vehicle step entirely, since the customer is already known —
+// see the plan at /Users/shafivilayil/.claude/plans/partitioned-whistling-nova.md.
+// This is deliberately kept separate from vehicle_intake_form()/VehicleIntake.php
+// (shared with appointment-new.php) rather than adding a third mode there.
+$shortcutCustomerId = (int) ($_GET['customer_id'] ?? 0);
+$shortcutVehicleId = (int) ($_GET['vehicle_id'] ?? 0);
+$shortcutCustomer = null;
+$shortcutVehicles = [];
+$shortcutSelectedVehicle = null;
+
+if ($shortcutCustomerId) {
+
+    $statement = $pdo->prepare("SELECT id, name, phone FROM customers WHERE id = :id AND organization_id = :organization_id");
+    $statement->execute(['id' => $shortcutCustomerId, 'organization_id' => $organizationId]);
+    $shortcutCustomer = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$shortcutCustomer) {
+        header('Location: /customers.php');
+        exit;
+    }
+
+    $statement = $pdo->prepare("
+        SELECT id, registration_no, make, model, year
+        FROM vehicles
+        WHERE customer_id = :customer_id AND organization_id = :organization_id
+        ORDER BY created_at DESC
+    ");
+    $statement->execute(['customer_id' => $shortcutCustomerId, 'organization_id' => $organizationId]);
+    $shortcutVehicles = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($shortcutVehicleId) {
+        foreach ($shortcutVehicles as $vehicle) {
+            if ((int) $vehicle['id'] === $shortcutVehicleId) {
+                $shortcutSelectedVehicle = $vehicle;
+                break;
+            }
+        }
+    }
+
+    if (!$shortcutSelectedVehicle && count($shortcutVehicles) === 1) {
+        $shortcutSelectedVehicle = $shortcutVehicles[0];
+    }
+}
+
 function next_job_no(PDO $pdo, int $branchId): string
 {
     $statement = $pdo->prepare("
@@ -250,30 +295,127 @@ $extraFields = '
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">New Job Card</h1>
-                    <p class="page-description">Look up the vehicle, or add a new customer and vehicle right here.</p>
-                </div>
-            </div>
+            <?php if ($shortcutCustomer): ?>
 
-            <div class="card" style="max-width: 640px;">
-                <div class="card-header">
-                    <div class="card-header-title">
-                        <span class="icon-badge"><?= icon('search', 15) ?></span>
-                        Find the vehicle
+                <a href="/customer.php?id=<?= (int) $shortcutCustomer['id'] ?>" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to <?= htmlspecialchars($shortcutCustomer['name']) ?></a>
+
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">New Job Card</h1>
+                        <p class="page-description">For <?= htmlspecialchars($shortcutCustomer['name']) ?> (<?= htmlspecialchars($shortcutCustomer['phone']) ?>)</p>
                     </div>
                 </div>
-                <div class="card-body">
 
-                    <?php if ($error): ?>
-                        <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                    <?php endif; ?>
+                <?php if ($error): ?>
+                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
 
-                    <?= vehicle_intake_form('jobcard', '/job-card-new.php', $extraFields, 'check', 'Create job card') ?>
+                <?php if ($shortcutSelectedVehicle): ?>
 
+                    <div class="card" style="max-width: 640px;">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('car', 15) ?></span>
+                                Vehicle
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="/job-card-new.php">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="vehicle_id" value="<?= (int) $shortcutSelectedVehicle['id'] ?>">
+                                <input type="hidden" name="customer_id" value="<?= (int) $shortcutCustomer['id'] ?>">
+
+                                <div class="selected-summary" style="margin-bottom:16px;">
+                                    <span class="icon-badge"><?= icon('car', 16) ?></span>
+                                    <div>
+                                        <strong><?= htmlspecialchars($shortcutSelectedVehicle['registration_no']) ?></strong>
+                                        <div class="result-meta">
+                                            <?= htmlspecialchars($shortcutSelectedVehicle['make'] . ' ' . $shortcutSelectedVehicle['model']) ?><?= $shortcutSelectedVehicle['year'] ? ' · ' . htmlspecialchars($shortcutSelectedVehicle['year']) : '' ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <?php if (count($shortcutVehicles) > 1): ?>
+                                    <p class="result-meta" style="margin-bottom:16px;">
+                                        Not the right vehicle? <a href="/job-card-new.php?customer_id=<?= (int) $shortcutCustomer['id'] ?>" class="link-action" style="display:inline;">Choose a different one</a>
+                                    </p>
+                                <?php endif; ?>
+
+                                <?= $extraFields ?>
+
+                                <div class="form-actions">
+                                    <button type="submit" class="button"><?= icon('check', 16) ?> Create job card</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                <?php elseif (count($shortcutVehicles) > 1): ?>
+
+                    <div class="card" style="max-width: 640px;">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <span class="icon-badge"><?= icon('car', 15) ?></span>
+                                Which vehicle?
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <?php foreach ($shortcutVehicles as $vehicle): ?>
+                                <a href="/job-card-new.php?customer_id=<?= (int) $shortcutCustomer['id'] ?>&vehicle_id=<?= (int) $vehicle['id'] ?>" class="search-result" style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                                    <span class="icon-badge"><?= icon('car', 16) ?></span>
+                                    <div>
+                                        <strong><?= htmlspecialchars($vehicle['registration_no']) ?></strong>
+                                        <div class="result-meta">
+                                            <?= htmlspecialchars($vehicle['make'] . ' ' . $vehicle['model']) ?><?= $vehicle['year'] ? ' · ' . htmlspecialchars($vehicle['year']) : '' ?>
+                                        </div>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                <?php else: ?>
+
+                    <div class="card" style="max-width: 640px;">
+                        <div class="card-body">
+                            <div class="empty-state">
+                                <?= icon('car', 28) ?>
+                                <?= htmlspecialchars($shortcutCustomer['name']) ?> has no vehicles on file yet.
+                                <a href="/vehicles.php?customer_id=<?= (int) $shortcutCustomer['id'] ?>" class="button secondary"><?= icon('plus', 16) ?> Add a vehicle</a>
+                            </div>
+                        </div>
+                    </div>
+
+                <?php endif; ?>
+
+            <?php else: ?>
+
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">New Job Card</h1>
+                        <p class="page-description">Look up the vehicle, or add a new customer and vehicle right here.</p>
+                    </div>
                 </div>
-            </div>
+
+                <div class="card" style="max-width: 640px;">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('search', 15) ?></span>
+                            Find the vehicle
+                        </div>
+                    </div>
+                    <div class="card-body">
+
+                        <?php if ($error): ?>
+                            <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                        <?php endif; ?>
+
+                        <?= vehicle_intake_form('jobcard', '/job-card-new.php', $extraFields, 'check', 'Create job card') ?>
+
+                    </div>
+                </div>
+
+            <?php endif; ?>
 
         </section>
 
@@ -281,7 +423,9 @@ $extraFields = '
 
 </div>
 
-<script src="/js/vehicle-intake.js"></script>
-<script>initVehicleIntake('jobcard');</script>
+<?php if (!$shortcutCustomer): ?>
+    <script src="/js/vehicle-intake.js"></script>
+    <script>initVehicleIntake('jobcard');</script>
+<?php endif; ?>
 </body>
 </html>

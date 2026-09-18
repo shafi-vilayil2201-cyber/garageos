@@ -225,7 +225,7 @@ $topbarTitle = 'Customers';
                                 <?php foreach ($customers as $customer): ?>
                                     <tr>
                                         <td>
-                                            <strong><?= htmlspecialchars($customer['name']) ?></strong>
+                                            <a href="/customer.php?id=<?= (int) $customer['id'] ?>" class="table-link"><strong><?= htmlspecialchars($customer['name']) ?></strong></a>
                                             <div class="result-meta"><?= htmlspecialchars($customer['code']) ?></div>
                                         </td>
                                         <td><?= htmlspecialchars($customer['phone']) ?></td>
@@ -405,7 +405,7 @@ $topbarTitle = 'Customers';
             renderRow: (customer, escapeHtml) => `
                 <tr>
                     <td>
-                        <strong>${escapeHtml(customer.name)}</strong>
+                        <a href="/customer.php?id=${customer.id}" class="table-link"><strong>${escapeHtml(customer.name)}</strong></a>
                         <div class="result-meta">${escapeHtml(customer.code)}</div>
                     </td>
                     <td>${escapeHtml(customer.phone)}</td>
