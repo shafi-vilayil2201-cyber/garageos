@@ -197,16 +197,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Not enough stock to remove that much.');
                 }
 
-                $statement = $pdo->prepare("
-                    UPDATE inventory
-                    SET quantity = quantity " . ($direction === 'in' ? '+' : '-') . " :quantity, updated_at = CURRENT_TIMESTAMP
-                    WHERE part_id = :part_id AND branch_id = :branch_id
-                ");
-                $statement->execute([
-                    'quantity' => $quantity,
-                    'part_id' => $adjustPartId,
-                    'branch_id' => $branchId
-                ]);
+                if ($direction === 'in') {
+                    $statement = $pdo->prepare("
+                        INSERT INTO inventory (part_id, branch_id, quantity)
+                        VALUES (:part_id, :branch_id, :quantity)
+                        ON CONFLICT (part_id, branch_id)
+                        DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity, updated_at = CURRENT_TIMESTAMP
+                    ");
+                    $statement->execute([
+                        'quantity' => $quantity,
+                        'part_id' => $adjustPartId,
+                        'branch_id' => $branchId
+                    ]);
+                } else {
+                    $statement = $pdo->prepare("
+                        UPDATE inventory
+                        SET quantity = quantity - :quantity, updated_at = CURRENT_TIMESTAMP
+                        WHERE part_id = :part_id AND branch_id = :branch_id
+                    ");
+                    $statement->execute([
+                        'quantity' => $quantity,
+                        'part_id' => $adjustPartId,
+                        'branch_id' => $branchId
+                    ]);
+                }
 
                 $statement = $pdo->prepare("
                     INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, created_by)

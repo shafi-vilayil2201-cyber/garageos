@@ -111,40 +111,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        $serviceId = (int) ($_POST['service_id'] ?? 0);
+        $serviceId = (int) ($_POST['service_id'] ?? 0) ?: null;
+        $customName = trim($_POST['custom_name'] ?? '');
+        $customPrice = $_POST['custom_price'] ?? '';
         $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
 
-        $statement = $pdo->prepare("SELECT standard_price FROM services WHERE id = :id AND organization_id = :organization_id");
-        $statement->execute(['id' => $serviceId, 'organization_id' => $organizationId]);
-        $price = $statement->fetchColumn();
+        if ($serviceId) {
+            // Preset service selected — validate it exists
+            $statement = $pdo->prepare("SELECT name, standard_price FROM services WHERE id = :id AND organization_id = :organization_id");
+            $statement->execute(['id' => $serviceId, 'organization_id' => $organizationId]);
+            $catalogService = $statement->fetch(PDO::FETCH_ASSOC);
 
-        if ($price === false) {
-            $error = 'Select a valid service before adding it.';
-            $errorAction = 'add_service';
+            if (!$catalogService) {
+                $error = 'Select a valid service before adding it.';
+                $errorAction = 'add_service';
+            } else {
+                // Use the user-entered price if provided, otherwise fall back to standard price
+                $price = ($customPrice !== '') ? (float) $customPrice : (float) $catalogService['standard_price'];
+                $addedServiceName = $catalogService['name'];
+
+                $statement = $pdo->prepare("
+                    INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_price)
+                    VALUES (:job_card_id, :service_id, :technician_id, :price, :custom_price)
+                ");
+                $statement->execute([
+                    'job_card_id' => $jobCardId,
+                    'service_id' => $serviceId,
+                    'technician_id' => $technicianId,
+                    'price' => $price,
+                    'custom_price' => $price
+                ]);
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card_item', $jobCardId,
+                    "Added service '$addedServiceName' to job card {$jobCard['job_no']}" . ($price != $catalogService['standard_price'] ? " (price adjusted to ₹$price)" : '')
+                );
+
+                header('Location: /job-card.php?id=' . $jobCardId);
+                exit;
+            }
+        } elseif ($customName !== '') {
+            // Custom service — name and price entered manually
+            $price = ($customPrice !== '') ? (float) $customPrice : 0;
+
+            if ($price <= 0) {
+                $error = 'Enter a valid price for the custom service.';
+                $errorAction = 'add_service';
+            } else {
+                $statement = $pdo->prepare("
+                    INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_name, custom_price)
+                    VALUES (:job_card_id, NULL, :technician_id, :price, :custom_name, :custom_price)
+                ");
+                $statement->execute([
+                    'job_card_id' => $jobCardId,
+                    'technician_id' => $technicianId,
+                    'price' => $price,
+                    'custom_name' => $customName,
+                    'custom_price' => $price
+                ]);
+
+                log_audit_event(
+                    $pdo, $user, 'create', 'job_card_item', $jobCardId,
+                    "Added custom service '$customName' (₹$price) to job card {$jobCard['job_no']}"
+                );
+
+                header('Location: /job-card.php?id=' . $jobCardId);
+                exit;
+            }
         } else {
-
-            $statement = $pdo->prepare("
-                INSERT INTO job_card_items (job_card_id, service_id, technician_id, price)
-                VALUES (:job_card_id, :service_id, :technician_id, :price)
-            ");
-            $statement->execute([
-                'job_card_id' => $jobCardId,
-                'service_id' => $serviceId,
-                'technician_id' => $technicianId,
-                'price' => $price
-            ]);
-
-            $statement = $pdo->prepare("SELECT name FROM services WHERE id = :id");
-            $statement->execute(['id' => $serviceId]);
-            $addedServiceName = $statement->fetchColumn();
-
-            log_audit_event(
-                $pdo, $user, 'create', 'job_card_item', $jobCardId,
-                "Added service '$addedServiceName' to job card {$jobCard['job_no']}"
-            );
-
-            header('Location: /job-card.php?id=' . $jobCardId);
-            exit;
+            $error = 'Enter a service name or select one from the suggestions.';
+            $errorAction = 'add_service';
         }
 
     } elseif ($action === 'add_part') {
@@ -245,9 +281,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $statement = $pdo->prepare("
-            SELECT s.name, jci.price - jci.discount AS total, s.tax_rate, s.sac_code
+            SELECT COALESCE(jci.custom_name, s.name) AS name,
+                   jci.price - jci.discount AS total,
+                   COALESCE(s.tax_rate, 0) AS tax_rate,
+                   s.sac_code
             FROM job_card_items jci
-            INNER JOIN services s ON s.id = jci.service_id
+            LEFT JOIN services s ON s.id = jci.service_id
             WHERE jci.job_card_id = :job_card_id
         ");
         $statement->execute(['job_card_id' => $jobCardId]);
@@ -493,9 +532,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $statement = $pdo->prepare("
-    SELECT jci.id, s.name, jci.price, jci.discount, jci.status, u.name AS technician_name
+    SELECT jci.id, COALESCE(jci.custom_name, s.name) AS name, jci.price, jci.discount, jci.status, u.name AS technician_name
     FROM job_card_items jci
-    INNER JOIN services s ON s.id = jci.service_id
+    LEFT JOIN services s ON s.id = jci.service_id
     LEFT JOIN users u ON u.id = jci.technician_id
     WHERE jci.job_card_id = :job_card_id
     ORDER BY jci.created_at
@@ -836,20 +875,23 @@ $topbarTitle = $jobCard['job_no'];
                 <?php if ($errorAction === 'add_service' && $error): ?>
                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
-                <form method="POST" action="" class="stack">
+                <form method="POST" action="" class="stack" id="add-service-form">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="add_service">
-                    <div class="form-field">
-                        <label for="service_id">Service</label>
-                        <select name="service_id" id="service_id" required>
-                            <?php foreach ($services as $service): ?>
-                                <option value="<?= (int) $service['id'] ?>"><?= htmlspecialchars($service['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                    <input type="hidden" name="service_id" id="selected_service_id" value="">
+                    <input type="hidden" name="custom_name" id="selected_custom_name" value="">
+                    <div class="form-field" style="position:relative;">
+                        <label for="service-search">Service</label>
+                        <input type="text" id="service-search" placeholder="Type to search or enter a custom service..." autocomplete="off">
+                        <div id="service-results" class="autocomplete-results"></div>
                     </div>
                     <div class="form-field">
-                        <label for="technician_id">Technician</label>
-                        <select name="technician_id" id="technician_id">
+                        <label for="service_custom_price">Amount (₹)</label>
+                        <input type="number" name="custom_price" id="service_custom_price" min="0" step="0.01" placeholder="Enter amount" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="service_technician_id">Technician</label>
+                        <select name="technician_id" id="service_technician_id">
                             <option value="">Unassigned</option>
                             <?php foreach ($technicians as $technician): ?>
                                 <option value="<?= (int) $technician['id'] ?>"><?= htmlspecialchars($technician['name']) ?></option>
@@ -863,6 +905,7 @@ $topbarTitle = $jobCard['job_no'];
             </div>
         </div>
     </div>
+
 
     <div class="modal-backdrop<?= $errorAction === 'add_part' ? ' open' : '' ?>" id="add-part-modal">
         <div class="modal">

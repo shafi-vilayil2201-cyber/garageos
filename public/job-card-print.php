@@ -39,9 +39,9 @@ if (!$jobCard) {
 }
 
 $statement = $pdo->prepare("
-    SELECT s.name, jci.price, jci.discount, u.name AS technician_name
+    SELECT COALESCE(jci.custom_name, s.name) AS name, jci.price, jci.discount, u.name AS technician_name
     FROM job_card_items jci
-    INNER JOIN services s ON s.id = jci.service_id
+    LEFT JOIN services s ON s.id = jci.service_id
     LEFT JOIN users u ON u.id = jci.technician_id
     WHERE jci.job_card_id = :job_card_id
     ORDER BY jci.created_at
