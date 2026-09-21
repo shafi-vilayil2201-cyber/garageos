@@ -520,7 +520,7 @@ cd ~/garageos && git pull && ./scripts/deploy.sh
 `deploy.sh` rsyncs the code to `/var/www/garageos/current`, **excluding `.env`, `.git` and `public/uploads`** (an earlier hand-typed `rsync --delete` once wiped uploaded logos — the script exists so that can't recur), fixes ownership, runs pending migrations **as `www-data`**, and restarts php-fpm. Schema changes ship as new numbered migrations; the deploy applies them automatically.
 
 ### 12.4 Backups
-`scripts/install-backup.sh` (run once) installs rclone, generates a local encryption passphrase, walks through connecting Google Drive, and schedules a **nightly systemd timer**. `backup-garageos.sh` dumps the database, compresses and **encrypts** it, uploads it to Drive, and keeps a 3-day local fallback. **Before any destructive database operation, take a fresh backup first** (`pg_dump`).
+`scripts/install-backup.sh` (run once) installs rclone, generates a local encryption passphrase, walks through connecting Google Drive, and schedules a **nightly systemd timer**. `backup-garageos.sh` dumps the database, compresses and **encrypts** it, uploads it to Drive, and keeps a 3-day local fallback. **Before any destructive database operation, take a fresh backup first** (`pg_dump`). The tested restore procedure is in [backup-restore-runbook.md](backup-restore-runbook.md).
 
 ### 12.5 Resetting test data
 `scripts/reset-transactional-data.sql` clears all transactional records (job cards, invoices, payments, customers, vehicles, purchases, inventory, attendance, payroll, expenses, audit logs) **while preserving** the organisation, logins, roles/permissions and the parts/services/suppliers catalogue. It runs inside a transaction, prints row counts, and leaves `COMMIT`/`ROLLBACK` to the operator. Run it interactively, after a backup.
@@ -580,7 +580,7 @@ cd ~/garageos && git pull && ./scripts/deploy.sh
 
 ### 14.3 Known issues
 1. **Keep `onboard-client.php` in sync with permissions that migrations add.** On a brand-new install, migrations run *before* `onboard-client.php` creates the roles, so a migration that grants a new permission to "existing Owner roles" reaches nobody. This bit `audit.view` (migration `040`): fixed on 2026-09-21 by adding it to `onboard-client.php`'s permission list (Owner gets it automatically; the Manager role now explicitly excludes it). Verified on a scratch database: after a fresh migrate + onboard, only the Owner holds `audit.view`. **Any future permission added by a migration needs the same one-line addition there.**
-2. **Backup restore has not been rehearsed** on a clean server; do this before relying on it.
+2. **Backup restore was rehearsed on 2026-09-21** (decrypted the latest Drive backup and loaded it into a scratch database; counts matched live) — see [backup-restore-runbook.md](backup-restore-runbook.md). Still open: backups don't alert if an upload fails; the log must be checked by hand.
 3. **Two real, independent installs** haven't been used to verify end-to-end isolation.
 
 ### 14.4 Roadmap
