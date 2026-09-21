@@ -152,7 +152,8 @@ try {
         ['Manage payroll', 'payroll.manage'],
         ['View own attendance', 'attendance.view_own'],
         ['View finance', 'finance.view'],
-        ['Manage finance', 'finance.manage']
+        ['Manage finance', 'finance.manage'],
+        ['View audit logs', 'audit.view']
     ];
 
     $permissionIds = [];
@@ -179,8 +180,8 @@ try {
         ],
         'MANAGER' => [
             'name' => 'Manager',
-            'description' => 'Full access except organization settings and user management',
-            'permissions' => array_diff(array_keys($permissionIds), ['settings.manage', 'users.manage'])
+            'description' => 'Full access except organization settings, user management and the audit log',
+            'permissions' => array_diff(array_keys($permissionIds), ['settings.manage', 'users.manage', 'audit.view'])
         ],
         'ADVISOR' => [
             'name' => 'Service Advisor',
