@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $email = trim($_POST['email'] ?? '');
     $address = trim($_POST['address'] ?? '');
     $currency = trim($_POST['currency'] ?? '');
+    $publicPageUrl = trim($_POST['public_page_url'] ?? '');
     $taxNumber = trim($_POST['tax_number'] ?? '');
     $defaultTaxRate = $_POST['default_tax_rate'] ?? '';
     $state = trim($_POST['state'] ?? '');
@@ -53,6 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $error = 'Choose a valid state.';
     } elseif ($serviceIntervalKm <= 0 || $serviceIntervalMonths <= 0) {
         $error = 'Service interval must be a positive number of km and months.';
+    } elseif ($publicPageUrl !== '' && !preg_match('#^https?://#i', $publicPageUrl)) {
+        $error = 'Public page URL must start with http:// or https://.';
     } elseif ($logoResult && $logoResult['error']) {
         $error = $logoResult['error'];
     } else {
@@ -70,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $statement = $pdo->prepare("
             UPDATE organizations
             SET name = :name, phone = :phone, email = :email, address = :address, currency = :currency,
+                public_page_url = :public_page_url,
                 tax_number = :tax_number, default_tax_rate = :default_tax_rate, state = :state,
                 service_interval_km = :service_interval_km, service_interval_months = :service_interval_months,
                 logo_url = :logo_url, updated_at = CURRENT_TIMESTAMP
@@ -81,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             'email' => $email ?: null,
             'address' => $address ?: null,
             'currency' => $currency,
+            'public_page_url' => $publicPageUrl ?: null,
             'tax_number' => $taxNumber ?: null,
             'default_tax_rate' => $defaultTaxRate,
             'state' => $state ?: null,
@@ -193,6 +198,11 @@ $topbarTitle = 'Settings';
                                         <div class="form-field">
                                             <label>Currency</label>
                                             <input type="text" name="currency" value="<?= htmlspecialchars($organization['currency']) ?>" maxlength="10" required>
+                                        </div>
+                                        <div class="form-field">
+                                            <label>Public page URL</label>
+                                            <input type="url" name="public_page_url" value="<?= htmlspecialchars($organization['public_page_url'] ?? '') ?>" placeholder="https://your-workshop-site.example.com/admin/login" maxlength="500">
+                                            <p class="result-meta" style="margin-top:6px;">Shows a "Public Page" link in the account menu, opening in a new tab. Leave blank to hide it.</p>
                                         </div>
                                     </div>
                                 </div>

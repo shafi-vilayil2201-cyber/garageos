@@ -45,6 +45,9 @@ $initial = strtoupper(substr($user['name'], 0, 1));
                 <?php if (user_can($user, 'audit.view')): ?>
                     <a href="/audit-logs.php" class="user-menu-item"><?= icon('clipboard-list', 15) ?> Audit Logs</a>
                 <?php endif; ?>
+                <?php if (!empty($user['organization_public_page_url'])): ?>
+                    <a href="<?= htmlspecialchars($user['organization_public_page_url']) ?>" target="_blank" rel="noopener" class="user-menu-item"><?= icon('building', 15) ?> Public Page</a>
+                <?php endif; ?>
                 <div class="user-menu-divider"></div>
                 <a href="/logout.php" class="user-menu-item user-menu-item-danger"><?= icon('logout', 15) ?> Logout</a>
             </div>
