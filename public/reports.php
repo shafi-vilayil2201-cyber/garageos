@@ -59,7 +59,7 @@ $statement = $pdo->prepare("
 
         UNION ALL
 
-        SELECT jcp.technician_id, jcp.labour_charge AS revenue
+        SELECT jcp.technician_id, (jcp.labour_charge * jcp.labour_quantity) AS revenue
         FROM job_card_parts jcp
         INNER JOIN job_cards jc ON jc.id = jcp.job_card_id
         WHERE jc.organization_id = :organization_id2 AND jcp.technician_id IS NOT NULL AND jcp.labour_charge > 0

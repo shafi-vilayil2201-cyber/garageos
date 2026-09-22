@@ -190,9 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $partId = (int) ($_POST['part_id'] ?? 0);
         $quantity = (float) ($_POST['quantity'] ?? 0);
         $labourCharge = (float) ($_POST['labour_charge'] ?? 0);
+        $labourQuantity = (float) ($_POST['labour_quantity'] ?? 1);
         $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
 
-        if ($partId && $quantity > 0 && $labourCharge >= 0) {
+        if ($partId && $quantity > 0 && $labourCharge >= 0 && $labourQuantity > 0) {
 
             $pdo->beginTransaction();
 
@@ -214,8 +215,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $unitPrice = $statement->fetchColumn();
 
                 $statement = $pdo->prepare("
-                    INSERT INTO job_card_parts (job_card_id, part_id, quantity, unit_price, technician_id, labour_charge)
-                    VALUES (:job_card_id, :part_id, :quantity, :unit_price, :technician_id, :labour_charge)
+                    INSERT INTO job_card_parts (job_card_id, part_id, quantity, unit_price, technician_id, labour_charge, labour_quantity)
+                    VALUES (:job_card_id, :part_id, :quantity, :unit_price, :technician_id, :labour_charge, :labour_quantity)
                 ");
                 $statement->execute([
                     'job_card_id' => $jobCardId,
@@ -223,7 +224,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
                     'technician_id' => $technicianId,
-                    'labour_charge' => $labourCharge
+                    'labour_charge' => $labourCharge,
+                    'labour_quantity' => $labourQuantity
                 ]);
 
                 $statement = $pdo->prepare("
@@ -252,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_audit_event(
                     $pdo, $user, 'create', 'job_card_part', $jobCardId,
                     "Added part '$addedPartName' (x{$quantity}) to job card {$jobCard['job_no']}"
+                    . ($labourCharge > 0 ? ", labour ₹{$labourCharge} × {$labourQuantity}" : '')
                 );
 
                 $pdo->commit();
@@ -293,7 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $serviceLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
         $statement = $pdo->prepare("
-            SELECT p.name, jcp.quantity, jcp.unit_price, p.tax_rate, p.hsn_code, jcp.labour_charge
+            SELECT p.name, jcp.quantity, jcp.unit_price, p.tax_rate, p.hsn_code, jcp.labour_charge, jcp.labour_quantity
             FROM job_card_parts jcp
             INNER JOIN parts p ON p.id = jcp.part_id
             WHERE jcp.job_card_id = :job_card_id
@@ -354,21 +357,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ];
 
                     $labourCharge = (float) $line['labour_charge'];
+                    $labourQuantity = (float) $line['labour_quantity'];
 
                     if ($labourCharge > 0) {
 
-                        $labourTax = $labourCharge * ($orgDefaultTaxRate / 100);
-                        $subtotal += $labourCharge;
+                        $labourLineTotal = $labourCharge * $labourQuantity;
+                        $labourTax = $labourLineTotal * ($orgDefaultTaxRate / 100);
+                        $subtotal += $labourLineTotal;
                         $taxAmount += $labourTax;
 
                         $lineItems[] = [
                             'item_type' => 'labour',
                             'description' => 'Labour — ' . $line['name'],
-                            'quantity' => 1,
+                            'quantity' => $labourQuantity,
                             'unit_price' => $labourCharge,
                             'tax_rate' => $orgDefaultTaxRate,
                             'hsn_sac_code' => null,
-                            'total' => $labourCharge + $labourTax
+                            'total' => $labourLineTotal + $labourTax
                         ];
                     }
                 }
@@ -543,7 +548,7 @@ $statement->execute(['job_card_id' => $jobCardId]);
 $serviceLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $statement = $pdo->prepare("
-    SELECT jcp.id, p.name, jcp.quantity, jcp.unit_price, jcp.labour_charge, u.name AS technician_name
+    SELECT jcp.id, p.name, jcp.quantity, jcp.unit_price, jcp.labour_charge, jcp.labour_quantity, u.name AS technician_name
     FROM job_card_parts jcp
     INNER JOIN parts p ON p.id = jcp.part_id
     LEFT JOIN users u ON u.id = jcp.technician_id
@@ -554,7 +559,7 @@ $statement->execute(['job_card_id' => $jobCardId]);
 $partLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $serviceLines))
-    + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'], $partLines));
+    + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'] * $l['labour_quantity'], $partLines));
 
 $statement = $pdo->prepare("SELECT id, name FROM services WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
@@ -728,13 +733,14 @@ $topbarTitle = $jobCard['job_no'];
                                                 <?php endif; ?>
                                             </tr>
                                             <?php if ($line['labour_charge'] > 0): ?>
+                                                <?php $labourQty = (float) $line['labour_quantity']; ?>
                                                 <tr class="part-labour-row">
                                                     <td colspan="<?= $canRemoveLines ? 5 : 4 ?>">
                                                         <span class="part-labour-label">
                                                             <?= icon('wrench', 12) ?>
-                                                            Labour<?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?>
+                                                            Labour<?= $labourQty != 1 ? ' ×' . rtrim(rtrim(number_format($labourQty, 2), '0'), '.') : '' ?><?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?>
                                                         </span>
-                                                        <span class="num">₹<?= number_format($line['labour_charge'], 2) ?></span>
+                                                        <span class="num">₹<?= number_format($line['labour_charge'] * $labourQty, 2) ?></span>
                                                     </td>
                                                 </tr>
                                             <?php endif; ?>
@@ -945,18 +951,25 @@ $topbarTitle = $jobCard['job_no'];
 
                     <div class="form-grid">
                         <div class="form-field">
-                            <label for="part_labour_charge">Labour charge (₹)</label>
+                            <label for="part_labour_charge">Labour rate (₹)</label>
                             <input type="number" name="labour_charge" id="part_labour_charge" min="0" step="0.01" value="0">
                         </div>
                         <div class="form-field">
-                            <label for="part_technician_id">Technician</label>
-                            <select name="technician_id" id="part_technician_id">
-                                <option value="">Unassigned</option>
-                                <?php foreach ($technicians as $technician): ?>
-                                    <option value="<?= (int) $technician['id'] ?>"><?= htmlspecialchars($technician['name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label for="part_labour_quantity">Labour qty</label>
+                            <input type="number" name="labour_quantity" id="part_labour_quantity" min="0.01" step="0.01" value="1">
                         </div>
+                    </div>
+
+                    <p class="result-meta" id="part_labour_total_preview" style="margin:-6px 0 14px;"></p>
+
+                    <div class="form-field">
+                        <label for="part_technician_id">Technician</label>
+                        <select name="technician_id" id="part_technician_id">
+                            <option value="">Unassigned</option>
+                            <?php foreach ($technicians as $technician): ?>
+                                <option value="<?= (int) $technician['id'] ?>"><?= htmlspecialchars($technician['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="actions">

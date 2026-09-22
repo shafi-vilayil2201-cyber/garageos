@@ -50,7 +50,7 @@ $statement->execute(['job_card_id' => $jobCardId]);
 $serviceLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $statement = $pdo->prepare("
-    SELECT p.name, jcp.quantity, jcp.unit_price, jcp.labour_charge, u.name AS technician_name
+    SELECT p.name, jcp.quantity, jcp.unit_price, jcp.labour_charge, jcp.labour_quantity, u.name AS technician_name
     FROM job_card_parts jcp
     INNER JOIN parts p ON p.id = jcp.part_id
     LEFT JOIN users u ON u.id = jcp.technician_id
@@ -61,7 +61,7 @@ $statement->execute(['job_card_id' => $jobCardId]);
 $partLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $serviceLines))
-    + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'], $partLines));
+    + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'] * $l['labour_quantity'], $partLines));
 
 ?>
 <!DOCTYPE html>
@@ -170,9 +170,10 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
                         <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
                     </tr>
                     <?php if ($line['labour_charge'] > 0): ?>
+                        <?php $labourQty = (float) $line['labour_quantity']; ?>
                         <tr class="labour-line">
                             <td colspan="4">
-                                Labour<?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?> — ₹<?= number_format($line['labour_charge'], 2) ?>
+                                Labour<?= $labourQty != 1 ? ' ×' . rtrim(rtrim(number_format($labourQty, 2), '0'), '.') : '' ?><?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?> — ₹<?= number_format($line['labour_charge'] * $labourQty, 2) ?>
                             </td>
                         </tr>
                     <?php endif; ?>

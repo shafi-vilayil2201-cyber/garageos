@@ -116,14 +116,45 @@ function selectPart(part)
 
     document.getElementById('part_quantity').max = part.stock_quantity;
 
-    // Labour charge/technician are per-addition, not per-part — reset them
-    // so a value left over from adding a different part doesn't carry over.
+    // Labour charge/quantity/technician are per-addition, not per-part —
+    // reset them so a value left over from adding a different part
+    // doesn't carry over.
     document.getElementById('part_labour_charge').value = 0;
+    document.getElementById('part_labour_quantity').value = 1;
     document.getElementById('part_technician_id').value = '';
+    updateLabourTotalPreview();
 
     partResults.innerHTML = '';
     addPartForm.style.display = 'flex';
 }
+
+
+// A typo-catcher only — the server is still the sole source of truth on
+// submit (see job-card.php's add_part handler), same as every other
+// calculation in this app. This just lets staff see rate x qty before
+// they click Add, instead of only finding out after the row is saved.
+function updateLabourTotalPreview()
+{
+    const rateInput = document.getElementById('part_labour_charge');
+    const qtyInput = document.getElementById('part_labour_quantity');
+    const preview = document.getElementById('part_labour_total_preview');
+
+    if (!rateInput || !qtyInput || !preview)
+    {
+        return;
+    }
+
+    const rate = Number(rateInput.value) || 0;
+    const qty = Number(qtyInput.value) || 0;
+
+    preview.textContent = rate > 0 && qty > 0
+        ? `= ₹${(rate * qty).toFixed(2)} total`
+        : '';
+}
+
+
+document.getElementById('part_labour_charge')?.addEventListener('input', updateLabourTotalPreview);
+document.getElementById('part_labour_quantity')?.addEventListener('input', updateLabourTotalPreview);
 
 
 function escapeHtml(value)
