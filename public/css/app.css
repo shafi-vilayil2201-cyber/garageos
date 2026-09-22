@@ -575,6 +575,16 @@ textarea:focus-visible,
     gap: 16px;
 }
 
+/* For a header that's just a title + action, with no description line
+   underneath — vertically centers the two against each other instead of
+   flex-start (which only mattered for lining a button up against a
+   taller title+description block) and reclaims some of the margin that
+   description line's own line-height used to need. */
+.page-header-tight {
+    margin-bottom: 16px;
+    align-items: center;
+}
+
 .page-title {
     margin: 0;
     font-size: 28px;
@@ -1271,7 +1281,7 @@ table.data-table {
     grid-template-columns: repeat(5, minmax(220px, 1fr));
     gap: 16px;
     margin-top: 24px;
-    align-items: start;
+    align-items: stretch;
 }
 
 .kanban-column {
@@ -1279,21 +1289,38 @@ table.data-table {
     border-radius: var(--radius);
     border-top: 3px solid transparent;
     padding: 14px;
-    min-height: 200px;
+    height: calc(100vh - 275px);
+    min-height: 480px;
+    box-sizing: border-box;
     transition: box-shadow 0.15s ease, opacity 0.15s ease;
     display: flex;
     flex-direction: column;
-    /* Independent per-column scroll (desktop/tablet only — see the
-       mobile override below) so the header with its count/total stays
-       put while a long column scrolls on its own, instead of the whole
-       page scrolling and carrying the other columns' headers away. */
-    max-height: calc(100vh - 230px);
 }
 
 .kanban-column-cards {
     min-height: 0;
     overflow-y: auto;
     flex: 1;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.16) transparent;
+}
+
+.kanban-column-cards::-webkit-scrollbar {
+    width: 5px;
+}
+
+.kanban-column-cards::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.kanban-column-cards::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 4px;
+}
+
+.kanban-column-cards::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.28);
 }
 
 /* One accent colour per stage — carried by both the column's top edge
@@ -1430,7 +1457,7 @@ body.kanban-touch-dragging {
 
 .kanban-card-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
 }
@@ -1439,6 +1466,15 @@ body.kanban-touch-dragging {
     font-size: 11.5px;
     color: var(--muted);
     font-weight: 600;
+    line-height: 1.3;
+}
+
+.kanban-card-top-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    flex-shrink: 0;
 }
 
 .kanban-card-vehicle {
@@ -1458,13 +1494,16 @@ body.kanban-touch-dragging {
     font-weight: 700;
     color: var(--text);
     white-space: nowrap;
+    line-height: 1.3;
 }
 
 .kanban-card-due {
-    margin-top: 4px;
+    margin-top: 2px;
     font-size: 11px;
     font-weight: 700;
     color: #b45309;
+    white-space: nowrap;
+    line-height: 1.2;
 }
 
 .kanban-card-due-overdue {
@@ -2117,6 +2156,8 @@ body.kanban-touch-dragging {
        an internal per-column scroll region here would just be a second,
        fighting scroll area inside the page's own. */
     .kanban-column {
+        height: auto;
+        min-height: 200px;
         max-height: none;
     }
 

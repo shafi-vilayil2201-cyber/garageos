@@ -212,16 +212,8 @@ $topbarTitle = 'Job Cards';
 
         <section class="page">
 
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">Job Cards</h1>
-                    <p class="page-description">
-                        Every vehicle currently moving through the workshop.
-                        <?php if ($canManageJobCards && !empty($jobCards)): ?>
-                            Drag a card forward to move it along — it can't go back a stage.
-                        <?php endif; ?>
-                    </p>
-                </div>
+            <div class="page-header page-header-tight">
+                <h1 class="page-title">Job Cards</h1>
 
                 <?php if ($canManageJobCards): ?>
                     <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
@@ -265,17 +257,19 @@ $topbarTitle = 'Job Cards';
                                             <div class="kanban-card card-<?= htmlspecialchars($jobCard['status']) ?>">
                                                 <div class="kanban-card-top">
                                                     <span class="kanban-card-job-no"><?= htmlspecialchars($jobCard['job_no']) ?></span>
-                                                    <?php if ($jobCard['status'] === 'on_hold'): ?>
-                                                        <span class="badge badge-on_hold"><?= icon('pause', 11) ?> On hold</span>
-                                                    <?php elseif ($jobCard['amount'] > 0): ?>
-                                                        <span class="kanban-card-amount">₹<?= number_format($jobCard['amount'], 0) ?></span>
-                                                    <?php endif; ?>
-                                                </div>
-                                                <?php if ($dueBadge): ?>
-                                                    <div class="kanban-card-due <?= $dueBadge['overdue'] ? 'kanban-card-due-overdue' : '' ?>">
-                                                        <?= htmlspecialchars($dueBadge['text']) ?>
+                                                    <div class="kanban-card-top-right">
+                                                        <?php if ($jobCard['status'] === 'on_hold'): ?>
+                                                            <span class="badge badge-on_hold"><?= icon('pause', 11) ?> On hold</span>
+                                                        <?php elseif ($jobCard['amount'] > 0): ?>
+                                                            <span class="kanban-card-amount">₹<?= number_format($jobCard['amount'], 0) ?></span>
+                                                        <?php endif; ?>
+                                                        <?php if ($dueBadge): ?>
+                                                            <div class="kanban-card-due <?= $dueBadge['overdue'] ? 'kanban-card-due-overdue' : '' ?>">
+                                                                <?= htmlspecialchars($dueBadge['text']) ?>
+                                                            </div>
+                                                        <?php endif; ?>
                                                     </div>
-                                                <?php endif; ?>
+                                                </div>
                                                 <div class="kanban-card-vehicle">
                                                     <?= htmlspecialchars($jobCard['registration_no']) ?>
                                                 </div>
