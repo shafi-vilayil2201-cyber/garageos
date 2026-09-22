@@ -5,6 +5,7 @@ require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -45,6 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $reorderLevel = (float) ($_POST['reorder_level'] ?? 0);
         $taxRate = (float) ($_POST['tax_rate'] ?? 0);
         $hsnCode = trim($_POST['hsn_code'] ?? '');
+        $unit = $_POST['unit'] ?? 'pcs';
+        $unit = part_unit_is_valid($unit) ? $unit : 'pcs';
 
         if ($name === '' || $sku === '') {
             $error = 'Name and SKU are required.';
@@ -55,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UPDATE parts
                     SET name = :name, sku = :sku, cost_price = :cost_price,
                         selling_price = :selling_price, reorder_level = :reorder_level,
-                        tax_rate = :tax_rate, hsn_code = :hsn_code, updated_at = CURRENT_TIMESTAMP
+                        tax_rate = :tax_rate, hsn_code = :hsn_code, unit = :unit, updated_at = CURRENT_TIMESTAMP
                     WHERE id = :id AND organization_id = :organization_id
                 ");
                 $statement->execute([
@@ -66,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'reorder_level' => $reorderLevel,
                     'tax_rate' => $taxRate,
                     'hsn_code' => $hsnCode ?: null,
+                    'unit' => $unit,
                     'id' => $editingPartId,
                     'organization_id' => $organizationId
                 ]);
@@ -93,6 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $reorderLevel = (float) ($_POST['reorder_level'] ?? 0);
         $taxRate = (float) ($_POST['tax_rate'] ?? 0);
         $hsnCode = trim($_POST['hsn_code'] ?? '');
+        $unit = $_POST['unit'] ?? 'pcs';
+        $unit = part_unit_is_valid($unit) ? $unit : 'pcs';
 
         if ($name === '' || $sku === '') {
             $error = 'Name and SKU are required.';
@@ -103,8 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $statement = $pdo->prepare("
-                    INSERT INTO parts (organization_id, name, sku, cost_price, selling_price, reorder_level, tax_rate, hsn_code)
-                    VALUES (:organization_id, :name, :sku, :cost_price, :selling_price, :reorder_level, :tax_rate, :hsn_code)
+                    INSERT INTO parts (organization_id, name, sku, cost_price, selling_price, reorder_level, tax_rate, hsn_code, unit)
+                    VALUES (:organization_id, :name, :sku, :cost_price, :selling_price, :reorder_level, :tax_rate, :hsn_code, :unit)
                     RETURNING id
                 ");
                 $statement->execute([
@@ -115,7 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'selling_price' => $sellingPrice,
                     'reorder_level' => $reorderLevel,
                     'tax_rate' => $taxRate,
-                    'hsn_code' => $hsnCode ?: null
+                    'hsn_code' => $hsnCode ?: null,
+                    'unit' => $unit
                 ]);
                 $partId = $statement->fetchColumn();
 
@@ -174,8 +181,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'damage' => ['direction' => 'out', 'reason' => 'damage'],
         ];
 
+        $statement = $pdo->prepare("SELECT unit FROM parts WHERE id = :id AND organization_id = :organization_id");
+        $statement->execute(['id' => $adjustPartId, 'organization_id' => $organizationId]);
+        $adjustPartUnit = $statement->fetchColumn() ?: 'pcs';
+
         if ($quantity <= 0 || !isset($types[$type])) {
             $error = 'Choose a reason and enter a quantity greater than zero.';
+            $errorAction = 'adjust_stock';
+        } elseif (part_unit_is_whole($adjustPartUnit) && fmod($quantity, 1) !== 0.0) {
+            $error = 'Quantity must be a whole number for this part.';
             $errorAction = 'adjust_stock';
         } else {
 
@@ -270,7 +284,7 @@ $totalParts = (int) $statement->fetchColumn();
 $page = paginate_page($totalParts);
 
 $statement = $pdo->prepare("
-    SELECT p.id, p.name, p.sku, p.selling_price, p.reorder_level, p.tax_rate, p.hsn_code,
+    SELECT p.id, p.name, p.sku, p.selling_price, p.reorder_level, p.tax_rate, p.hsn_code, p.unit,
            COALESCE(i.quantity, 0) AS stock_quantity
     FROM parts p
     LEFT JOIN inventory i ON i.part_id = p.id AND i.branch_id = :branch_id
@@ -289,7 +303,7 @@ $editingPart = null;
 
 if ($editingPartId) {
     $statement = $pdo->prepare("
-        SELECT id, name, sku, cost_price, selling_price, reorder_level, tax_rate, hsn_code
+        SELECT id, name, sku, cost_price, selling_price, reorder_level, tax_rate, hsn_code, unit
         FROM parts
         WHERE id = :id AND organization_id = :organization_id
     ");
@@ -306,7 +320,7 @@ $adjustingPart = null;
 
 if ($adjustingPartId) {
     $statement = $pdo->prepare("
-        SELECT p.id, p.name, COALESCE(i.quantity, 0) AS stock_quantity
+        SELECT p.id, p.name, p.unit, COALESCE(i.quantity, 0) AS stock_quantity
         FROM parts p
         LEFT JOIN inventory i ON i.part_id = p.id AND i.branch_id = :branch_id
         WHERE p.id = :id AND p.organization_id = :organization_id
@@ -396,7 +410,7 @@ $topbarTitle = 'Parts';
                                         <td class="num">
                                             <span class="badge <?= $low ? 'badge-on_hold' : 'badge-ready' ?>">
                                                 <?php if ($low): ?><?= icon('alert-triangle', 12) ?><?php endif; ?>
-                                                <?= rtrim(rtrim(number_format($part['stock_quantity'], 2), '0'), '.') ?>
+                                                <?= rtrim(rtrim(number_format($part['stock_quantity'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($part['unit'])) ?>
                                                 <?= $low ? ' — reorder' : '' ?>
                                             </span>
                                         </td>
@@ -452,6 +466,12 @@ $topbarTitle = 'Parts';
                         <div class="form-field">
                             <label>SKU</label>
                             <input type="text" name="sku" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Unit</label>
+                            <select name="unit">
+                                <?= part_unit_options('pcs') ?>
+                            </select>
                         </div>
                         <div class="form-field">
                             <label>Cost price</label>
@@ -518,6 +538,12 @@ $topbarTitle = 'Parts';
                                 <input type="text" name="sku" value="<?= htmlspecialchars($editingPart['sku']) ?>" required>
                             </div>
                             <div class="form-field">
+                                <label>Unit</label>
+                                <select name="unit">
+                                    <?= part_unit_options($editingPart['unit']) ?>
+                                </select>
+                            </div>
+                            <div class="form-field">
                                 <label>Cost price</label>
                                 <input type="number" name="cost_price" step="0.01" min="0" value="<?= htmlspecialchars($editingPart['cost_price']) ?>">
                             </div>
@@ -566,9 +592,10 @@ $topbarTitle = 'Parts';
                 <?php endif; ?>
 
                 <?php if ($adjustingPart): ?>
+                    <?php $adjustingPartWhole = part_unit_is_whole($adjustingPart['unit']); ?>
                     <p class="page-description">
                         <strong><?= htmlspecialchars($adjustingPart['name']) ?></strong> —
-                        currently <?= rtrim(rtrim(number_format($adjustingPart['stock_quantity'], 2), '0'), '.') ?> in stock.
+                        currently <?= rtrim(rtrim(number_format($adjustingPart['stock_quantity'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($adjustingPart['unit'])) ?> in stock.
                     </p>
                     <form method="POST" action="">
                         <?= csrf_field() ?>
@@ -585,8 +612,12 @@ $topbarTitle = 'Parts';
                                 </select>
                             </div>
                             <div class="form-field">
-                                <label>Quantity</label>
-                                <input type="number" name="quantity" step="0.01" min="0.01" required>
+                                <label>Quantity (<?= htmlspecialchars(part_unit_short($adjustingPart['unit'])) ?>)</label>
+                                <?php if ($adjustingPartWhole): ?>
+                                    <input type="number" name="quantity" step="1" min="1" required>
+                                <?php else: ?>
+                                    <input type="number" name="quantity" step="0.01" min="0.01" required>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="form-actions">
@@ -639,7 +670,7 @@ $topbarTitle = 'Parts';
                         <td class="num">${Number(part.tax_rate).toFixed(0)}%</td>
                         <td class="num">
                             <span class="badge ${low ? 'badge-on_hold' : 'badge-ready'}">
-                                ${low ? warningIcon : ''}${trimTrailingZeros(part.stock_quantity)}${low ? ' — reorder' : ''}
+                                ${low ? warningIcon : ''}${trimTrailingZeros(part.stock_quantity)} ${escapeHtml(part.unit_short)}${low ? ' — reorder' : ''}
                             </span>
                         </td>
                         <td>

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -73,12 +74,12 @@ $technicianStats = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 // Top parts used, all time
 $statement = $pdo->prepare("
-    SELECT p.name, SUM(jcp.quantity) AS quantity_used, SUM(jcp.quantity * jcp.unit_price) AS revenue
+    SELECT p.name, p.unit, SUM(jcp.quantity) AS quantity_used, SUM(jcp.quantity * jcp.unit_price) AS revenue
     FROM job_card_parts jcp
     INNER JOIN job_cards jc ON jc.id = jcp.job_card_id
     INNER JOIN parts p ON p.id = jcp.part_id
     WHERE jc.organization_id = :organization_id
-    GROUP BY p.name
+    GROUP BY p.name, p.unit
     ORDER BY quantity_used DESC
     LIMIT 10
 ");
@@ -87,7 +88,7 @@ $topParts = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 // Low stock parts
 $statement = $pdo->prepare("
-    SELECT p.name, p.sku, i.quantity, p.reorder_level
+    SELECT p.name, p.sku, p.unit, i.quantity, p.reorder_level
     FROM inventory i
     INNER JOIN parts p ON p.id = i.part_id
     WHERE p.organization_id = :organization_id
@@ -191,7 +192,7 @@ $topbarTitle = 'Reports';
                                                 <div class="result-meta"><?= htmlspecialchars($part['sku']) ?></div>
                                             </td>
                                             <td class="num">
-                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?><?= rtrim(rtrim(number_format($part['quantity'], 2), '0'), '.') ?></span>
+                                                <span class="badge badge-on_hold"><?= icon('alert-triangle', 12) ?><?= rtrim(rtrim(number_format($part['quantity'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($part['unit'])) ?></span>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -251,7 +252,7 @@ $topbarTitle = 'Reports';
                                     <?php foreach ($topParts as $part): ?>
                                         <tr>
                                             <td><?= htmlspecialchars($part['name']) ?></td>
-                                            <td class="num"><?= rtrim(rtrim(number_format($part['quantity_used'], 2), '0'), '.') ?></td>
+                                            <td class="num"><?= rtrim(rtrim(number_format($part['quantity_used'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($part['unit'])) ?></td>
                                             <td class="num">₹<?= number_format($part['revenue'], 2) ?></td>
                                         </tr>
                                     <?php endforeach; ?>

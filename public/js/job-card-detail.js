@@ -74,7 +74,7 @@ async function searchParts()
                     <div class="result-meta">SKU: ${escapeHtml(part.sku)} · ₹${Number(part.selling_price).toFixed(2)}</div>
                 </div>
                 <div class="result-meta">
-                    ${Number(part.stock_quantity)} in stock
+                    ${Number(part.stock_quantity)} ${escapeHtml(part.unit_short)} in stock
                 </div>
             `;
 
@@ -112,9 +112,27 @@ function selectPart(part)
         `${part.name} — ₹${Number(part.selling_price).toFixed(2)}`;
 
     document.getElementById('selected_part_stock').textContent =
-        `${Number(part.stock_quantity)} in stock`;
+        `${Number(part.stock_quantity)} ${part.unit_short} in stock`;
 
-    document.getElementById('part_quantity').max = part.stock_quantity;
+    const quantityInput = document.getElementById('part_quantity');
+
+    quantityInput.max = part.stock_quantity;
+
+    // Whole-number parts (pcs/set/pair/box) can't take a fractional
+    // quantity — see part_unit_is_whole() in app/Domain/PartUnit.php,
+    // the same rule the server enforces on submit. Measured parts
+    // (litre/ml/kg/g) keep the finer 0.01 step so 0.5L etc. still work.
+    if (part.unit_is_whole)
+    {
+        quantityInput.step = '1';
+        quantityInput.min = '1';
+    } else
+    {
+        quantityInput.step = '0.01';
+        quantityInput.min = '0.01';
+    }
+
+    document.getElementById('part_quantity_label').textContent = `Qty (${part.unit_short})`;
 
     // Labour charge/quantity/technician are per-addition, not per-part —
     // reset them so a value left over from adding a different part

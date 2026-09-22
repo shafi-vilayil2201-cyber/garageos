@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -210,9 +211,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Not enough stock for this part.');
                 }
 
-                $statement = $pdo->prepare("SELECT selling_price FROM parts WHERE id = :id");
+                $statement = $pdo->prepare("SELECT selling_price, unit FROM parts WHERE id = :id");
                 $statement->execute(['id' => $partId]);
-                $unitPrice = $statement->fetchColumn();
+                $partRow = $statement->fetch(PDO::FETCH_ASSOC);
+                $unitPrice = $partRow['selling_price'];
+
+                if (part_unit_is_whole($partRow['unit']) && fmod($quantity, 1) !== 0.0) {
+                    throw new RuntimeException('Quantity must be a whole number for this part.');
+                }
 
                 $statement = $pdo->prepare("
                     INSERT INTO job_card_parts (job_card_id, part_id, quantity, unit_price, technician_id, labour_charge, labour_quantity)
@@ -250,10 +256,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement = $pdo->prepare("SELECT name FROM parts WHERE id = :id");
                 $statement->execute(['id' => $partId]);
                 $addedPartName = $statement->fetchColumn();
+                $addedPartUnit = part_unit_short($partRow['unit']);
 
                 log_audit_event(
                     $pdo, $user, 'create', 'job_card_part', $jobCardId,
-                    "Added part '$addedPartName' (x{$quantity}) to job card {$jobCard['job_no']}"
+                    "Added part '$addedPartName' (x{$quantity} {$addedPartUnit}) to job card {$jobCard['job_no']}"
                     . ($labourCharge > 0 ? ", labour ₹{$labourCharge} × {$labourQuantity}" : '')
                 );
 
@@ -548,7 +555,7 @@ $statement->execute(['job_card_id' => $jobCardId]);
 $serviceLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $statement = $pdo->prepare("
-    SELECT jcp.id, p.name, jcp.quantity, jcp.unit_price, jcp.labour_charge, jcp.labour_quantity, u.name AS technician_name
+    SELECT jcp.id, p.name, p.unit, jcp.quantity, jcp.unit_price, jcp.labour_charge, jcp.labour_quantity, u.name AS technician_name
     FROM job_card_parts jcp
     INNER JOIN parts p ON p.id = jcp.part_id
     LEFT JOIN users u ON u.id = jcp.technician_id
@@ -718,7 +725,7 @@ $topbarTitle = $jobCard['job_no'];
                                         <?php foreach ($partLines as $line): ?>
                                             <tr>
                                                 <td><?= htmlspecialchars($line['name']) ?></td>
-                                                <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
+                                                <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($line['unit'])) ?></td>
                                                 <td class="num">₹<?= number_format($line['unit_price'], 2) ?></td>
                                                 <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
                                                 <?php if ($canRemoveLines): ?>
@@ -944,7 +951,7 @@ $topbarTitle = $jobCard['job_no'];
                             </div>
                         </div>
                         <div class="form-field" style="width:100px;">
-                            <label>Qty</label>
+                            <label id="part_quantity_label">Qty</label>
                             <input type="number" name="quantity" id="part_quantity" min="0.01" step="0.01" value="1" required>
                         </div>
                     </div>

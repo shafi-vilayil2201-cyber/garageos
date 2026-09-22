@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -171,9 +172,14 @@ $statement = $pdo->prepare("SELECT id, name FROM suppliers WHERE organization_id
 $statement->execute(['organization_id' => $organizationId]);
 $suppliers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
-$statement = $pdo->prepare("SELECT id, name, sku, cost_price FROM parts WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
+$statement = $pdo->prepare("SELECT id, name, sku, cost_price, unit FROM parts WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
 $parts = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($parts as &$part) {
+    $part['unit_short'] = part_unit_short($part['unit']);
+}
+unset($part);
 
 $activeNav = 'purchases';
 $topbarTitle = 'New Purchase';

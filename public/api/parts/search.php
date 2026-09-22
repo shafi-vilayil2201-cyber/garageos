@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../../../app/Auth/Auth.php';
+require_once __DIR__ . '/../../../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../../../config/database.php';
 
@@ -39,6 +40,7 @@ $statement = $pdo->prepare("
         p.reorder_level,
         p.tax_rate,
         p.hsn_code,
+        p.unit,
         COALESCE(i.quantity, 0) AS stock_quantity
     FROM parts p
     LEFT JOIN inventory i
@@ -67,6 +69,16 @@ $statement->execute([
 ]);
 
 $parts = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+// Computed server-side so every consumer of this endpoint (job-card
+// add-part search, the Parts page's own live search) gets the same
+// short label and whole-number rule without re-implementing the
+// PART_UNITS lookup in JS.
+foreach ($parts as &$part) {
+    $part['unit_short'] = part_unit_short($part['unit']);
+    $part['unit_is_whole'] = part_unit_is_whole($part['unit']);
+}
+unset($part);
 
 echo json_encode([
     'parts' => $parts

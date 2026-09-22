@@ -9,7 +9,7 @@ let rowCount = 0;
 function partOptions()
 {
     return window.GARAGEOS_PARTS.map(part =>
-        `<option value="${part.id}" data-cost="${part.cost_price}">${escapeHtml(part.name)} (${escapeHtml(part.sku)})</option>`
+        `<option value="${part.id}" data-cost="${part.cost_price}" data-unit="${escapeHtml(part.unit_short)}">${escapeHtml(part.name)} (${escapeHtml(part.sku)})</option>`
     ).join('');
 }
 
@@ -28,7 +28,8 @@ function addLine()
             </select>
         </td>
         <td style="width:100px;">
-            <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
+            <input type="number" name="quantity[]" class="quantity-input" min="0.01" step="0.01" value="1" required>
+            <div class="result-meta unit-hint"></div>
         </td>
         <td style="width:130px;">
             <input type="number" name="unit_cost[]" class="cost-input" min="0" step="0.01" value="0" required>
@@ -42,16 +43,20 @@ function addLine()
 
     const select = row.querySelector('.part-select');
     const costInput = row.querySelector('.cost-input');
+    const unitHint = row.querySelector('.unit-hint');
 
     select.addEventListener('change', () =>
     {
         const selectedOption = select.options[select.selectedIndex];
         const cost = selectedOption.getAttribute('data-cost');
+        const unit = selectedOption.getAttribute('data-unit');
 
         if (cost !== null)
         {
             costInput.value = cost;
         }
+
+        unitHint.textContent = unit || '';
     });
 
     row.querySelector('.remove-line').addEventListener('click', () =>
