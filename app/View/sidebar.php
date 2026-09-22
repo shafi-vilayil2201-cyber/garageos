@@ -12,9 +12,10 @@ function nav_class(string $key, string $activeNav): string
 function nav_link(string $href, string $key, string $activeNav, string $iconName, string $label): void
 {
     printf(
-        '<a href="%s" class="%s"><span class="nav-icon">%s</span><span>%s</span></a>',
+        '<a href="%s" class="%s" aria-label="%s"><span class="nav-icon">%s</span><span>%s</span></a>',
         htmlspecialchars($href),
         nav_class($key, $activeNav),
+        htmlspecialchars($label),
         icon($iconName, 20),
         htmlspecialchars($label)
     );
@@ -46,12 +47,36 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
 // markup below is parsed, so the correct tier applies from first
 // paint instead of flashing the wrong one.
 (function () {
+    var isForceMobile = false;
+
     try {
         if (window.screen && window.screen.width <= 767) {
             document.documentElement.classList.add('force-mobile');
+            isForceMobile = true;
         }
     } catch (error) {
         // Not worth failing over — worst case, the normal @media tiers apply.
+    }
+
+    // The icon-only rail (see the tablet/desktop media query in app.css)
+    // is collapsed by default — opt out via the sidebar's own toggle,
+    // not in. Applied synchronously and this early, same as force-mobile
+    // above, so the sidebar never flashes wide-then-narrow on first
+    // paint; responsive-nav.js (deferred to DOMContentLoaded) only wires
+    // up the toggle button itself and persists future clicks. .app
+    // already exists as a DOM node here even though this script runs
+    // before </aside> — the including page opens <div class="app"> and
+    // then requires this file, so the browser's streaming HTML parser
+    // has already created that element by the time this executes.
+    try {
+        var app = document.querySelector('.app');
+        var preference = localStorage.getItem('garageos-sidebar-collapsed');
+
+        if (app && !isForceMobile && preference !== '0') {
+            app.classList.add('sidebar-collapsed');
+        }
+    } catch (error) {
+        // Storage unavailable — falls back to expanded, same as before.
     }
 })();
 </script>
@@ -63,6 +88,10 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
     <div class="brand">
         <?php if (!empty($user['organization_logo_url'])): ?>
             <img class="brand-logo" src="<?= htmlspecialchars($user['organization_logo_url']) ?>" alt="<?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?>">
+        <?php else: ?>
+            <div class="brand-logo brand-logo-fallback">
+                <?= icon('warehouse', 20) ?>
+            </div>
         <?php endif; ?>
         <div class="brand-text">
             <div class="brand-name"><?= htmlspecialchars($user['organization_name'] ?? 'GarageOS') ?></div>
@@ -71,7 +100,7 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
     </div>
 
     <button type="button" class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-label="Collapse sidebar">
-        <?= icon('chevron-left', 18) ?>
+        <span class="nav-icon"><?= icon('chevron-left', 18) ?></span>
         <span>Collapse</span>
     </button>
 
@@ -146,7 +175,7 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
 
                 <div class="nav-group">
                     <div class="nav-group-header">
-                        <a href="/finance.php" class="<?= nav_class('finance_overview', $activeNav) ?>">
+                        <a href="/finance.php" class="<?= nav_class('finance_overview', $activeNav) ?>" aria-label="Finance">
                             <span class="nav-icon"><?= icon('wallet', 20) ?></span>
                             <span>Finance</span>
                         </a>
@@ -185,5 +214,9 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
     </div>
 
 </aside>
+
+<div class="sidebar-tooltip" id="sidebar-tooltip"></div>
+
+<div class="sidebar-flyout" id="sidebar-flyout" hidden></div>
 
 <script src="/js/responsive-nav.js"></script>

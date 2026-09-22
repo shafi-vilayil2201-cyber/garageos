@@ -48,6 +48,25 @@
     }
 
 
+    // Column header total (see job-cards.php) — kept as a data-amount
+    // integer on the element itself so repeated moves don't drift from
+    // re-parsing a formatted "₹1,234" string.
+    function updateTotal(status, delta)
+    {
+        const el = document.getElementById(`kanban-total-${status}`);
+
+        if (!el)
+        {
+            return;
+        }
+
+        const next = Math.max(0, parseInt(el.dataset.amount || '0', 10) + delta);
+
+        el.dataset.amount = String(next);
+        el.textContent = `₹${next.toLocaleString('en-US')}`;
+    }
+
+
     // Shared by the desktop mouse drop handler and the touch pointerup
     // handler below — one place that knows how to move a card in the DOM,
     // call the API, and revert on failure.
@@ -62,13 +81,18 @@
         }
 
         const cardsHolder = toColumn.querySelector('.kanban-column-cards');
+        const wrap = link.closest('.kanban-card-wrap') || link;
 
-        cardsHolder.insertBefore(link, cardsHolder.firstChild);
+        cardsHolder.insertBefore(wrap, cardsHolder.firstChild);
 
         if (fromColumn !== toColumn)
         {
+            const amount = parseInt(link.dataset.amount || '0', 10);
+
             updateCount(fromColumn.dataset.status, -1);
             updateCount(toStatus, 1);
+            updateTotal(fromStatus, -amount);
+            updateTotal(toStatus, amount);
         }
 
         try
@@ -107,12 +131,16 @@
             showToast(error.message || 'Could not move that job card. Reverting.');
 
             const originalHolder = fromColumn.querySelector('.kanban-column-cards');
-            originalHolder.insertBefore(link, originalHolder.firstChild);
+            originalHolder.insertBefore(wrap, originalHolder.firstChild);
 
             if (fromColumn !== toColumn)
             {
+                const amount = parseInt(link.dataset.amount || '0', 10);
+
                 updateCount(fromColumn.dataset.status, 1);
                 updateCount(toStatus, -1);
+                updateTotal(fromStatus, amount);
+                updateTotal(toStatus, -amount);
             }
         }
     }
@@ -464,4 +492,85 @@
 
     document.addEventListener('pointerup', finishPointer);
     document.addEventListener('pointercancel', finishPointer);
+
+
+    // Per-card print menu — delegated on the board since every card has
+    // its own trigger/menu pair; see user-menu.js for the single-instance
+    // version of this same open/close/outside-click/Escape pattern.
+    let openPrintMenu = null;
+
+    function closePrintMenu()
+    {
+        if (openPrintMenu)
+        {
+            openPrintMenu.menu.hidden = true;
+            openPrintMenu.trigger.setAttribute('aria-expanded', 'false');
+            openPrintMenu = null;
+        }
+    }
+
+    board.addEventListener('click', event =>
+    {
+        const trigger = event.target.closest('[data-print-trigger]');
+
+        if (trigger)
+        {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const menu = trigger.nextElementSibling;
+            const wasOpen = openPrintMenu && openPrintMenu.trigger === trigger;
+
+            closePrintMenu();
+
+            if (!wasOpen)
+            {
+                menu.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+                openPrintMenu = { trigger, menu };
+            }
+
+            return;
+        }
+
+        closePrintMenu();
+    });
+
+    document.addEventListener('click', event =>
+    {
+        if (openPrintMenu && !board.contains(event.target))
+        {
+            closePrintMenu();
+        }
+    });
+
+    document.addEventListener('keydown', event =>
+    {
+        if (event.key === 'Escape' && openPrintMenu)
+        {
+            closePrintMenu();
+        }
+    });
+
+
+    // Quick-edit — one shared modal (see job-cards.php) populated from
+    // whichever card's pencil icon was clicked, rather than rendering a
+    // separate modal per card.
+    board.addEventListener('click', event =>
+    {
+        const trigger = event.target.closest('[data-edit-trigger]');
+
+        if (!trigger)
+        {
+            return;
+        }
+
+        document.getElementById('quick-edit-job-card-id').value = trigger.dataset.jobCardId;
+        document.getElementById('quick-edit-job-no').textContent = trigger.dataset.jobNo;
+        document.getElementById('quick-edit-odometer').value = trigger.dataset.odometerIn || '';
+        document.getElementById('quick-edit-complaint').value = trigger.dataset.customerComplaint || '';
+        document.getElementById('quick-edit-promised-at').value = trigger.dataset.promisedAt || '';
+
+        openModal('quick-edit-modal');
+    });
 })();

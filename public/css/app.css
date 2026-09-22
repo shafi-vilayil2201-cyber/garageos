@@ -96,6 +96,8 @@ textarea:focus-visible,
     flex-direction: column;
     overflow-y: auto;
     scrollbar-width: none;
+    transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -111,74 +113,137 @@ textarea:focus-visible,
     font-size: 12px;
     color: #6b665e;
     letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.15s ease;
 }
 
 .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 13px 24px;
+    padding: 0 13px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
 }
 
-.brand-logo {
+.brand-logo,
+.brand-logo-fallback {
+    width: 38px;
+    height: 38px;
     flex-shrink: 0;
-    max-width: 44px;
-    max-height: 44px;
     object-fit: contain;
-    border-radius: 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.brand-logo-fallback {
+    background: var(--sidebar-active);
+    color: var(--primary);
 }
 
 /* min-width:0 lets the name actually wrap/ellipsize inside a flex
    row instead of forcing the row wider than the sidebar. */
 .brand-text {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.15s ease;
 }
 
 .brand-name {
     color: #ffffff;
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: -0.3px;
-    line-height: 1.25;
+    line-height: 1.2;
 }
 
 .brand-subtitle {
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
     color: #a39d94;
 }
 
 .nav-section {
-    margin-top: 17px;
+    margin-top: 14px;
+}
+
+.nav-section:first-child,
+.nav-section:first-of-type {
+    margin-top: 0;
 }
 
 .nav-label {
-    padding: 0 13px 7px;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    padding: 0 13px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    margin-bottom: 4px;
+    font-size: 11.5px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--sidebar-muted);
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.15s ease;
 }
 
 .nav-item {
     display: flex;
     align-items: center;
     gap: 13px;
-    padding: 8px 13px;
-    margin-bottom: 1px;
+    padding: 0 13px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    margin-bottom: 2px;
     border-radius: 9px;
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 500;
     color: var(--sidebar-text);
     border-left: 3px solid transparent;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
 
 .nav-item .nav-icon {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    flex-shrink: 0;
     color: var(--sidebar-muted);
     transition: color 0.15s ease;
+}
+
+.nav-icon svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.nav-item span:last-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .nav-item:hover {
@@ -208,11 +273,17 @@ textarea:focus-visible,
 .nav-group-header {
     display: flex;
     align-items: center;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    margin-bottom: 2px;
+    box-sizing: border-box;
 }
 
 .nav-group-header .nav-item {
     flex: 1;
     min-width: 0;
+    margin-bottom: 0;
 }
 
 .nav-group-toggle {
@@ -257,22 +328,41 @@ textarea:focus-visible,
     font-size: 14.5px;
 }
 
-/* Tablet-only manual collapse toggle — hidden everywhere else; shown
-   by the tablet media query below. */
+/* Manual collapse toggle — hidden on mobile (the drawer doesn't need
+   it); shown from 768px up by the media query below. */
 .sidebar-collapse-toggle {
     display: none;
     align-items: center;
-    gap: 9px;
+    gap: 13px;
     width: 100%;
-    margin: 4px 0 8px;
-    padding: 9px 13px;
+    margin: 0 0 14px;
+    padding: 0 13px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
     border: 1px solid var(--sidebar-active);
+    border-left: 3px solid transparent;
     border-radius: 9px;
     background: transparent;
     color: var(--sidebar-muted);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
+    box-sizing: border-box;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-collapse-toggle .nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-collapse-toggle:hover {
@@ -297,6 +387,7 @@ textarea:focus-visible,
        causing the whole page to scroll horizontally instead of just
        the overflowing element. */
     min-width: 0;
+    transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Top bar */
@@ -1180,6 +1271,7 @@ table.data-table {
     grid-template-columns: repeat(5, minmax(220px, 1fr));
     gap: 16px;
     margin-top: 24px;
+    align-items: start;
 }
 
 .kanban-column {
@@ -1189,10 +1281,19 @@ table.data-table {
     padding: 14px;
     min-height: 200px;
     transition: box-shadow 0.15s ease, opacity 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    /* Independent per-column scroll (desktop/tablet only — see the
+       mobile override below) so the header with its count/total stays
+       put while a long column scrolls on its own, instead of the whole
+       page scrolling and carrying the other columns' headers away. */
+    max-height: calc(100vh - 230px);
 }
 
 .kanban-column-cards {
-    min-height: 60px;
+    min-height: 0;
+    overflow-y: auto;
+    flex: 1;
 }
 
 /* One accent colour per stage — carried by both the column's top edge
@@ -1222,6 +1323,7 @@ table.data-table {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-shrink: 0;
 }
 
 .kanban-column-label {
@@ -1234,12 +1336,30 @@ table.data-table {
     color: #a39d8f;
 }
 
-.kanban-card-link {
-    display: block;
+.kanban-column-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.kanban-card-link[hidden] {
+.kanban-column-total {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.kanban-card-wrap {
+    position: relative;
+    margin-bottom: 10px;
+    border-radius: 9px;
+    box-shadow: var(--shadow);
+}
+
+.kanban-card-wrap[hidden] {
     display: none;
+}
+
+.kanban-card-link {
+    display: block;
 }
 
 .kanban-card-link[draggable="true"] {
@@ -1260,6 +1380,10 @@ table.data-table {
     opacity: 0.4;
 }
 
+.kanban-card-wrap:has(.kanban-card-link.dragging) .kanban-card-footer {
+    opacity: 0.4;
+}
+
 /* The floating clone that follows the finger during a touch drag — the
    original card (above) just dims via .dragging in place until drop. */
 .kanban-card-ghost {
@@ -1269,6 +1393,12 @@ table.data-table {
     pointer-events: none;
     transform: scale(1.03);
     box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+    /* The ghost is a clone of the card link only (no footer comes along
+       for the drag), whose .kanban-card child now has square bottom
+       corners to butt against the footer — clipping to a full radius
+       here keeps the dragged clone looking like a complete card. */
+    border-radius: 9px;
+    overflow: hidden;
 }
 
 body.kanban-touch-dragging {
@@ -1278,23 +1408,25 @@ body.kanban-touch-dragging {
 .kanban-card {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-bottom: none;
     border-left: 4px solid var(--border);
-    border-radius: 9px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    box-shadow: var(--shadow);
+    border-radius: 9px 9px 0 0;
+    padding: 12px 14px 8px;
     transition: opacity 0.15s ease;
 }
 
 /* Card colour matches the actual status, not just the column it sits
    in — an on_hold card visually lives in the In Progress column but
-   is tinted distinctly so a paused job never looks like active work. */
-.kanban-card.card-received { border-left-color: #4338ca; background: #eef0fd; }
-.kanban-card.card-in_progress { border-left-color: #b45309; background: #fef8ec; }
-.kanban-card.card-on_hold { border-left-color: #b91c1c; background: #fdeeee; }
-.kanban-card.card-quality_check { border-left-color: #6d28d9; background: #f5f2fc; }
-.kanban-card.card-ready { border-left-color: #15803d; background: #eefbf1; }
-.kanban-card.card-delivered { border-left-color: #78716c; background: #f2f1ef; }
+   is tinted distinctly so a paused job never looks like active work.
+   The footer below (job-cards.php) carries the same card-<status>
+   class so the print/edit row reads as part of the same card, not a
+   separate strip sitting under it. */
+.kanban-card.card-received, .kanban-card-footer.card-received { border-left-color: #4338ca; background: #eef0fd; }
+.kanban-card.card-in_progress, .kanban-card-footer.card-in_progress { border-left-color: #b45309; background: #fef8ec; }
+.kanban-card.card-on_hold, .kanban-card-footer.card-on_hold { border-left-color: #b91c1c; background: #fdeeee; }
+.kanban-card.card-quality_check, .kanban-card-footer.card-quality_check { border-left-color: #6d28d9; background: #f5f2fc; }
+.kanban-card.card-ready, .kanban-card-footer.card-ready { border-left-color: #15803d; background: #eefbf1; }
+.kanban-card.card-delivered, .kanban-card-footer.card-delivered { border-left-color: #78716c; background: #f2f1ef; }
 
 .kanban-card-top {
     display: flex;
@@ -1319,6 +1451,73 @@ body.kanban-touch-dragging {
     margin-top: 2px;
     font-size: 12.5px;
     color: var(--muted);
+}
+
+.kanban-card-amount {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.kanban-card-due {
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #b45309;
+}
+
+.kanban-card-due-overdue {
+    color: #b91c1c;
+}
+
+/* Footer sits below the card link as a plain sibling, not nested inside
+   the <a> — a <button>/<a> nested in an anchor is invalid HTML and
+   browsers handle it inconsistently, so the print/edit triggers live
+   outside kanban-card-link entirely (see job-cards.php). Its border and
+   status tint (above) pick up exactly where .kanban-card's leave off —
+   border-bottom:none up top, border-top:none down here — so together
+   they read as one continuous bordered card, not a card with a
+   separate strip floating under it. */
+.kanban-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-left: 4px solid var(--border);
+    border-radius: 0 0 9px 9px;
+    padding: 2px 10px 6px;
+}
+
+.kanban-card-print {
+    position: relative;
+    margin-left: auto;
+}
+
+.kanban-card-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.kanban-card-icon-button:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+
+.kanban-card-print-menu {
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 170px;
 }
 
 .kanban-toast {
@@ -1692,44 +1891,142 @@ body.kanban-touch-dragging {
     }
 }
 
-/* Tablet: sidebar stays exactly like desktop by default — only the
-   collapse toggle and the .sidebar-collapsed effect exist in this
-   range, so resizing past it (either direction) always lands back on
-   a clean, correct state with no manual class to fight. */
-@media (min-width: 768px) and (max-width: 1023px) {
+/* Tablet and desktop: an icon-only rail is available from 768px up —
+   collapsing it (see the toggle button, persisted in localStorage by
+   responsive-nav.js) frees real width for pages that need it, like the
+   job-cards board's five columns. Below 768px the sidebar becomes the
+   off-canvas drawer instead (see the mobile block further down), where
+   this collapsed rail concept doesn't apply. */
+@media (min-width: 768px) {
     .sidebar-collapse-toggle {
         display: flex;
     }
 
+    /* Left padding matches the expanded sidebar (16px), keeping every icon's
+       exact horizontal X and vertical Y position 100% identical between
+       opened and collapsed states without any shift. */
     .app.sidebar-collapsed .sidebar {
         width: 76px;
-        padding: 22px 9px;
+        padding: 22px 10px 22px 16px;
     }
 
     .app.sidebar-collapsed .brand-name,
     .app.sidebar-collapsed .brand-subtitle,
-    .app.sidebar-collapsed .nav-label,
-    .app.sidebar-collapsed .nav-item span:last-child,
+    .app.sidebar-collapsed .brand-text,
     .app.sidebar-collapsed .sidebar-footer,
-    .app.sidebar-collapsed .sidebar-collapse-toggle span,
+    .app.sidebar-collapsed .sidebar-collapse-toggle span:last-child,
+    .app.sidebar-collapsed .nav-item span:last-child,
     .app.sidebar-collapsed .nav-group-toggle,
     .app.sidebar-collapsed .nav-subitems {
         display: none;
     }
 
-    .app.sidebar-collapsed .brand {
-        padding-left: 10px;
+    /* Section label keeps its exact height and spacing to prevent vertical
+       jumping of all subsequent icons. In collapsed state, intermediate
+       sections show a subtle divider line to distinguish groups. */
+    .app.sidebar-collapsed .nav-section:first-of-type .nav-label {
+        opacity: 0;
+        pointer-events: none;
+        user-select: none;
+        visibility: hidden;
     }
 
-    .app.sidebar-collapsed .brand-logo {
-        max-width: 28px;
-        max-height: 28px;
+    .app.sidebar-collapsed .nav-section:not(:first-of-type) .nav-label {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: none;
+        user-select: none;
+        font-size: 0;
+        color: transparent;
+        padding: 0 4px;
+        justify-content: center;
+    }
+
+    .app.sidebar-collapsed .nav-section:not(:first-of-type) .nav-label::after {
+        content: '';
+        display: block;
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 1px;
+    }
+
+    /* Flip the collapse toggle chevron when closed */
+    .app.sidebar-collapsed .sidebar-collapse-toggle .nav-icon {
+        transform: rotate(180deg);
     }
 
     .app.sidebar-collapsed .main {
         margin-left: 76px;
         width: calc(100% - 76px);
     }
+
+}
+
+/* Collapsed-rail tooltip — a single shared element (see sidebar.php),
+   positioned by responsive-nav.js on hover rather than as a CSS
+   ::after on the nav item itself. It has to live outside .sidebar's
+   own DOM: .sidebar sets overflow-y:auto for its scrollbar, and per
+   the CSS overflow spec that forces overflow-x to auto too, which
+   would clip any tooltip positioned to poke out past the collapsed
+   76px rail. Fixed positioning + a body-level element sidesteps that
+   entirely. */
+.sidebar-tooltip {
+    position: fixed;
+    z-index: 300;
+    background: var(--sidebar);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 7px 11px;
+    border-radius: 7px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+.sidebar-tooltip.visible {
+    opacity: 1;
+}
+
+/* Collapsed-rail flyout for a nav group (Finance) — populated with real
+   cloned .nav-item nodes by responsive-nav.js, so it needs no link/hover
+   styling of its own beyond the dark "floating piece of the sidebar"
+   shell; .nav-item's own rules (app.css, "Sidebar" section) already
+   handle everything inside it. Fixed positioning for the same clipping
+   reason as .sidebar-tooltip above. */
+.sidebar-flyout {
+    position: fixed;
+    z-index: 250;
+    min-width: 190px;
+    background: var(--sidebar);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-flyout[hidden] {
+    display: none;
+}
+
+/* Overrides .app.sidebar-collapsed .nav-subitems' display:none — the
+   flyout is a clone of that same element (see openSidebarFlyout in
+   responsive-nav.js) and is still a DOM descendant of .app while the
+   rail is collapsed, so without this it would inherit "hidden" from a
+   rule meant for the rail itself, not this floating copy of it. */
+.sidebar-flyout .nav-subitems {
+    display: flex !important;
+    padding-left: 0;
+}
+
+/* Same override, for the label text next to each cloned icon — also
+   caught by .app.sidebar-collapsed .nav-item span:last-child's
+   display:none, which exists to hide labels on the rail itself, not on
+   a flyout meant to show full rows. */
+.sidebar-flyout .nav-item span:last-child {
+    display: inline !important;
 }
 
 /* Mobile: the sidebar becomes a hidden off-canvas drawer (full width,
@@ -1814,6 +2111,17 @@ body.kanban-touch-dragging {
     .stats,
     .kanban {
         grid-template-columns: 1fr;
+    }
+
+    /* Columns stack full-width above, so the whole page scrolls again —
+       an internal per-column scroll region here would just be a second,
+       fighting scroll area inside the page's own. */
+    .kanban-column {
+        max-height: none;
+    }
+
+    .kanban-column-cards {
+        overflow-y: visible;
     }
 
     .form-actions {
