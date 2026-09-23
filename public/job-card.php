@@ -5,6 +5,8 @@ require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/PartUnit.php';
+require_once __DIR__ . '/../app/Domain/Accessory.php';
+require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -568,6 +570,14 @@ $partLines = $statement->fetchAll(PDO::FETCH_ASSOC);
 $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $serviceLines))
     + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'] * $l['labour_quantity'], $partLines));
 
+$statement = $pdo->prepare("SELECT accessory_key FROM job_card_accessories WHERE job_card_id = :job_card_id");
+$statement->execute(['job_card_id' => $jobCardId]);
+$checkedAccessoryKeys = $statement->fetchAll(PDO::FETCH_COLUMN);
+
+$statement = $pdo->prepare("SELECT part_key, damage_type, x, y FROM job_card_damage_marks WHERE job_card_id = :job_card_id ORDER BY id");
+$statement->execute(['job_card_id' => $jobCardId]);
+$damageMarks = $statement->fetchAll(PDO::FETCH_ASSOC);
+
 $statement = $pdo->prepare("SELECT id, name FROM services WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
 $services = $statement->fetchAll(PDO::FETCH_ASSOC);
@@ -767,6 +777,37 @@ $topbarTitle = $jobCard['job_no'];
                                 </div>
                             </div>
                             <div class="card-body"><?= nl2br(htmlspecialchars($jobCard['customer_complaint'])) ?></div>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($checkedAccessoryKeys)): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('check-circle', 15) ?></span>
+                                    Accessories present at intake
+                                </div>
+                            </div>
+                            <div class="card-body"><?= accessory_checklist_display($checkedAccessoryKeys) ?></div>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($damageMarks) || !empty($jobCard['damage_image_url'])): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
+                                    Vehicle condition at intake
+                                </div>
+                            </div>
+                            <div class="card-body" style="text-align:center;">
+                                <?php if (!empty($jobCard['damage_image_url'])): ?>
+                                    <div style="max-width:220px; margin:0 auto 12px;">
+                                        <?= damage_image_display($jobCard['damage_image_url']) ?>
+                                    </div>
+                                <?php endif; ?>
+                                <?= damage_marks_display($damageMarks) ?>
+                            </div>
                         </div>
                     <?php endif; ?>
 

@@ -201,6 +201,56 @@ body {
     white-space: pre-line;
 }
 
+/* Accessories checklist and damage diagram — same classes/markup as
+   app.css's read-only variants (see app/View/JobCardIntakeExtras.php,
+   app/Domain/Accessory.php), duplicated here since this print sheet
+   doesn't load app.css at all. */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 16px;
+}
+
+.checkbox-grid-item {
+    font-size: 11.5px;
+}
+
+.checkbox-grid-readonly .checkbox-grid-item {
+    color: #a39d94;
+}
+
+.checkbox-grid-readonly .checkbox-grid-item.checked {
+    color: #1c1a17;
+    font-weight: 600;
+}
+
+.damage-image-readonly {
+    width: 100%;
+    max-width: 200px;
+    display: block;
+    margin: 0 auto;
+}
+
+.damage-mark-list {
+    display: grid;
+    gap: 3px;
+    margin-top: 8px;
+    text-align: left;
+}
+
+.damage-mark-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #e5e3dd;
+    padding: 4px 0;
+    font-size: 11px;
+}
+
+.damage-mark-item span {
+    color: #6b6660;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;

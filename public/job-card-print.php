@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Domain/Accessory.php';
+require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -59,6 +61,14 @@ $statement = $pdo->prepare("
 ");
 $statement->execute(['job_card_id' => $jobCardId]);
 $partLines = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$statement = $pdo->prepare("SELECT accessory_key FROM job_card_accessories WHERE job_card_id = :job_card_id");
+$statement->execute(['job_card_id' => $jobCardId]);
+$checkedAccessoryKeys = $statement->fetchAll(PDO::FETCH_COLUMN);
+
+$statement = $pdo->prepare("SELECT part_key, damage_type, x, y FROM job_card_damage_marks WHERE job_card_id = :job_card_id ORDER BY id");
+$statement->execute(['job_card_id' => $jobCardId]);
+$damageMarks = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $serviceLines))
     + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'] * $l['labour_quantity'], $partLines));
@@ -138,6 +148,32 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
         <div class="section">
             <h2>Customer complaint / request</h2>
             <div class="section-box"><?= htmlspecialchars($jobCard['customer_complaint']) ?></div>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!empty($checkedAccessoryKeys) || !empty($damageMarks) || !empty($jobCard['damage_image_url'])): ?>
+        <div class="info-grid">
+            <?php if (!empty($checkedAccessoryKeys)): ?>
+                <div class="info-block">
+                    <h2>Accessories present</h2>
+                    <?= accessory_checklist_display($checkedAccessoryKeys) ?>
+                </div>
+            <?php endif; ?>
+            <?php if (!empty($jobCard['damage_image_url'])): ?>
+                <div class="info-block" style="text-align:center;">
+                    <h2>Vehicle condition</h2>
+                    <div style="max-width:200px; margin:0 auto;">
+                        <?= damage_image_display($jobCard['damage_image_url']) ?>
+                    </div>
+                    <?= damage_marks_display($damageMarks) ?>
+                </div>
+            <?php endif; ?>
+            <?php if (empty($jobCard['damage_image_url']) && !empty($damageMarks)): ?>
+                <div class="info-block">
+                    <h2>Vehicle condition</h2>
+                    <?= damage_marks_display($damageMarks) ?>
+                </div>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 

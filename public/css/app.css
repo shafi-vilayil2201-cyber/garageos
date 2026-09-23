@@ -1117,6 +1117,241 @@ table.data-table {
     border-color: var(--primary);
 }
 
+/* Customer Voice — repeatable numbered complaint rows, see
+   public/js/customer-voice-list.js. */
+.customer-voice-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.customer-voice-row .customer-voice-index {
+    flex-shrink: 0;
+    width: 22px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: right;
+}
+
+.customer-voice-row input {
+    flex: 1;
+}
+
+.customer-voice-row .remove-customer-voice {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 6px;
+}
+
+.customer-voice-row .remove-customer-voice:hover {
+    color: var(--danger);
+}
+
+/* Accessories checklist — the first real checkbox grid in the app
+   (previously the only checkbox anywhere was a single inline-styled
+   one in Settings), used both for ticking items at intake and for the
+   read-only "what was present" display on the job card/print pages. */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+}
+
+.checkbox-grid-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+}
+
+.checkbox-grid-item input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.checkbox-grid-readonly .checkbox-grid-item {
+    color: var(--muted);
+}
+
+.checkbox-grid-readonly .checkbox-grid-item.checked {
+    color: var(--text);
+    font-weight: 500;
+}
+
+@media (max-width: 480px) {
+    .checkbox-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* SVG vehicle-condition hit map — paths sit directly over the source image
+   in its native 560 x 879 coordinate system. */
+.damage-diagram-wrap {
+    position: relative;
+    width: min(100%, 440px);
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.damage-image-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 560 / 879;
+    background: #fff;
+}
+
+.damage-diagram-image,
+.damage-map {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.damage-map {
+    overflow: visible;
+}
+
+.damage-region {
+    fill: rgba(255, 255, 255, 0.01);
+    stroke: transparent;
+    stroke-width: 3;
+    cursor: pointer;
+    outline: none;
+    transition: fill 120ms ease, stroke 120ms ease;
+}
+
+.damage-region:hover,
+.damage-region:focus-visible {
+    fill: rgba(13, 148, 136, 0.18);
+    stroke: #0d9488;
+}
+
+.damage-region.selected {
+    fill: rgba(13, 148, 136, 0.12);
+    stroke: #0d9488;
+}
+
+.damage-orientation {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px 0;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.damage-image-readonly {
+    width: 100%;
+    max-width: 360px;
+    display: block;
+    margin: 0 auto;
+}
+
+.damage-mark-picker {
+    position: absolute;
+    width: 168px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 6px;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+}
+
+.damage-mark-picker[hidden] {
+    display: none;
+}
+
+.damage-picker-title {
+    padding: 3px 4px 6px;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.damage-picker-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.damage-mark-picker button {
+    flex: 1;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-sunken);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.damage-mark-picker button:hover {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+}
+
+.damage-mark-picker button span {
+    font-size: 9px;
+    font-weight: 500;
+}
+
+.damage-selection-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.damage-selection {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--damage-color);
+    border-radius: 5px;
+    background: var(--surface-sunken);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.damage-selection strong {
+    color: var(--damage-color);
+    font-size: 10px;
+}
+
+.damage-selection:hover {
+    border-color: var(--damage-color);
+}
+
+.damage-mark-list {
+    display: grid;
+    gap: 6px;
+}
+
+.damage-mark-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    padding: 5px 0;
+    font-size: 12px;
+}
+
+.damage-mark-item span {
+    color: var(--muted);
+}
+
 .form-actions {
     margin-top: 24px;
     display: flex;
@@ -1851,6 +2086,13 @@ body.kanban-touch-dragging {
     max-width: 640px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
     margin: auto 0;
+}
+
+/* For a modal whose content genuinely needs more room — the job-card
+   intake modal, once it grew a checklist and a diagram alongside its
+   original fields — rather than every modal paying for that width. */
+.modal-wide {
+    max-width: 860px;
 }
 
 .modal-header {

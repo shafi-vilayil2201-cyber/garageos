@@ -80,6 +80,14 @@ function vehicle_intake_form(
                     <input type="tel" id="<?= $prefix ?>-new_customer_phone" name="new_customer_phone">
                 </div>
                 <div class="form-field">
+                    <label for="<?= $prefix ?>-new_customer_email">Customer email (optional)</label>
+                    <input type="email" id="<?= $prefix ?>-new_customer_email" name="new_customer_email">
+                </div>
+                <div class="form-field">
+                    <label for="<?= $prefix ?>-new_customer_address">Customer address (optional)</label>
+                    <input type="text" id="<?= $prefix ?>-new_customer_address" name="new_customer_address">
+                </div>
+                <div class="form-field">
                     <label for="<?= $prefix ?>-new_registration_no">Registration number</label>
                     <input type="text" id="<?= $prefix ?>-new_registration_no" name="new_registration_no" placeholder="KL-14-AB-1234">
                 </div>
@@ -104,6 +112,14 @@ function vehicle_intake_form(
                 <div class="form-field">
                     <label for="<?= $prefix ?>-new_year">Year (optional)</label>
                     <input type="number" id="<?= $prefix ?>-new_year" name="new_year" min="1980" max="2100">
+                </div>
+                <div class="form-field">
+                    <label for="<?= $prefix ?>-new_color">Color (optional)</label>
+                    <input type="text" id="<?= $prefix ?>-new_color" name="new_color" placeholder="White">
+                </div>
+                <div class="form-field">
+                    <label for="<?= $prefix ?>-new_vin">VIN (optional)</label>
+                    <input type="text" id="<?= $prefix ?>-new_vin" name="new_vin">
                 </div>
             </div>
         </div>

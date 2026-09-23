@@ -3,8 +3,10 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/Accessory.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -64,18 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'quick
 }
 
 if ($canManageJobCards) {
-    $jobCardExtraFields = '
-        <div class="form-grid single">
-            <div class="form-field">
-                <label for="jobcard-odometer_in">Odometer reading (km)</label>
-                <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
-            </div>
-            <div class="form-field">
-                <label for="jobcard-customer_complaint">Customer complaint / request</label>
-                <textarea id="jobcard-customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
-            </div>
-        </div>
-    ';
+    $jobCardExtraFields = job_card_intake_extras();
 }
 
 // Amount and invoice presence are pulled in via pre-aggregated subqueries
@@ -329,7 +320,7 @@ $topbarTitle = 'Job Cards';
 <?php if ($canManageJobCards): ?>
 
     <div class="modal-backdrop" id="jobcard-modal">
-        <div class="modal">
+        <div class="modal modal-wide">
             <div class="modal-header">
                 <div class="modal-header-title">
                     <span class="icon-badge"><?= icon('job-card', 16) ?></span>
@@ -383,7 +374,13 @@ $topbarTitle = 'Job Cards';
 
     <script src="/js/modal.js"></script>
     <script src="/js/vehicle-intake.js"></script>
-    <script>initVehicleIntake('jobcard');</script>
+    <script src="/js/customer-voice-list.js"></script>
+    <script src="/js/damage-diagram.js"></script>
+    <script>
+        initVehicleIntake('jobcard');
+        initCustomerVoiceList('jobcard');
+        initDamageDiagram('jobcard');
+    </script>
 
 <?php endif; ?>
 

@@ -3,7 +3,10 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/Accessory.php';
+require_once __DIR__ . '/../app/Domain/DamageImage.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -86,11 +89,11 @@ function create_job_card(PDO $pdo, array $fields): int
     $statement = $pdo->prepare("
         INSERT INTO job_cards (
             organization_id, branch_id, job_no, customer_id, vehicle_id,
-            advisor_id, status, customer_complaint, odometer_in, promised_at
+            advisor_id, status, customer_complaint, odometer_in, promised_at, advance_amount
         )
         VALUES (
             :organization_id, :branch_id, :job_no, :customer_id, :vehicle_id,
-            :advisor_id, 'received', :customer_complaint, :odometer_in, :promised_at
+            :advisor_id, 'received', :customer_complaint, :odometer_in, :promised_at, :advance_amount
         )
         RETURNING id
     ");
@@ -99,14 +102,137 @@ function create_job_card(PDO $pdo, array $fields): int
     return (int) $statement->fetchColumn();
 }
 
+// Turns the repeatable "Customer Voice" rows into the single numbered
+// string job_cards.customer_complaint already stores — every existing
+// reader of that column (print page, quick-edit modal, audit log) keeps
+// working unchanged; only how staff type it in has improved.
+function join_customer_voice(array $entries): ?string
+{
+    $lines = [];
+    $seq = 1;
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+
+        if ($entry !== '') {
+            $lines[] = "{$seq}. {$entry}";
+            $seq++;
+        }
+    }
+
+    return $lines ? implode("\n", $lines) : null;
+}
+
+function insert_accessories(PDO $pdo, int $jobCardId, array $keys): void
+{
+    $validKeys = array_values(array_unique(array_filter($keys, 'accessory_is_valid')));
+
+    if (!$validKeys) {
+        return;
+    }
+
+    $statement = $pdo->prepare("
+        INSERT INTO job_card_accessories (job_card_id, accessory_key)
+        VALUES (:job_card_id, :accessory_key)
+    ");
+
+    foreach ($validKeys as $key) {
+        $statement->execute(['job_card_id' => $jobCardId, 'accessory_key' => $key]);
+    }
+}
+
+function attach_damage_image(PDO $pdo, int $jobCardId, ?string $dataUrl): void
+{
+    $damageImageUrl = save_damage_image($jobCardId, $dataUrl);
+
+    if (!$damageImageUrl) {
+        return;
+    }
+
+    $statement = $pdo->prepare("
+        UPDATE job_cards
+        SET damage_image_url = :damage_image_url, updated_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+    ");
+    $statement->execute(['damage_image_url' => $damageImageUrl, 'id' => $jobCardId]);
+}
+
+function parse_damage_marks(?string $json): array
+{
+    $decoded = json_decode($json ?: '', true);
+
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $marks = [];
+    $seen = [];
+
+    foreach ($decoded as $mark) {
+        if (!is_array($mark)) {
+            continue;
+        }
+
+        $partKey = (string) ($mark['part_key'] ?? '');
+        $damageType = (string) ($mark['damage_type'] ?? '');
+        $x = (float) ($mark['x'] ?? -1);
+        $y = (float) ($mark['y'] ?? -1);
+        $uniqueKey = $partKey . ':' . $damageType;
+
+        if (!vehicle_damage_part_is_valid($partKey)
+            || !vehicle_damage_type_is_valid($damageType)
+            || $x < 0 || $x > 560
+            || $y < 0 || $y > 879
+            || isset($seen[$uniqueKey])) {
+            continue;
+        }
+
+        $seen[$uniqueKey] = true;
+        $marks[] = [
+            'part_key' => $partKey,
+            'damage_type' => $damageType,
+            'x' => round($x, 2),
+            'y' => round($y, 2),
+        ];
+    }
+
+    return $marks;
+}
+
+function insert_damage_marks(PDO $pdo, int $jobCardId, array $marks): void
+{
+    if (!$marks) {
+        return;
+    }
+
+    $statement = $pdo->prepare("
+        INSERT INTO job_card_damage_marks (job_card_id, part_key, damage_type, x, y)
+        VALUES (:job_card_id, :part_key, :damage_type, :x, :y)
+    ");
+
+    foreach ($marks as $mark) {
+        $statement->execute([
+            'job_card_id' => $jobCardId,
+            'part_key' => $mark['part_key'],
+            'damage_type' => $mark['damage_type'],
+            'x' => $mark['x'],
+            'y' => $mark['y'],
+        ]);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
 
     $mode = $_POST['mode'] ?? 'existing';
-    $complaint = trim($_POST['customer_complaint'] ?? '');
+    $complaint = join_customer_voice($_POST['customer_voice'] ?? []);
     $odometerIn = trim($_POST['odometer_in'] ?? '');
     $promisedAt = trim($_POST['promised_at'] ?? '');
+    $advanceAmount = trim($_POST['advance_amount'] ?? '');
+    $accessoryKeys = $_POST['accessories'] ?? [];
+    $damageImageData = $_POST['damage_image_data'] ?? null;
+    $damageMarks = parse_damage_marks($_POST['damage_marks_json'] ?? null);
 
     if ($mode === 'new') {
 
@@ -115,11 +241,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // advisor away to a separate screen and back.
         $customerName = trim($_POST['new_customer_name'] ?? '');
         $customerPhone = trim($_POST['new_customer_phone'] ?? '');
+        $customerEmail = trim($_POST['new_customer_email'] ?? '');
+        $customerAddress = trim($_POST['new_customer_address'] ?? '');
         $registrationNo = strtoupper(trim($_POST['new_registration_no'] ?? ''));
         $make = trim($_POST['new_make'] ?? '');
         $model = trim($_POST['new_model'] ?? '');
         $year = trim($_POST['new_year'] ?? '');
         $fuelType = $_POST['new_fuel_type'] ?? 'petrol';
+        $color = trim($_POST['new_color'] ?? '');
+        $vin = trim($_POST['new_vin'] ?? '');
 
         if ($customerName === '' || $customerPhone === '' || $registrationNo === '' || $make === '' || $model === '') {
             $error = 'Customer name, phone, registration number, make and model are all required.';
@@ -146,22 +276,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $customerCode = 'CUST-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
                     $statement = $pdo->prepare("
-                        INSERT INTO customers (organization_id, name, code, phone)
-                        VALUES (:organization_id, :name, :code, :phone)
+                        INSERT INTO customers (organization_id, name, code, phone, email, address)
+                        VALUES (:organization_id, :name, :code, :phone, :email, :address)
                         RETURNING id
                     ");
                     $statement->execute([
                         'organization_id' => $organizationId,
                         'name' => $customerName,
                         'code' => $customerCode,
-                        'phone' => $customerPhone
+                        'phone' => $customerPhone,
+                        'email' => $customerEmail ?: null,
+                        'address' => $customerAddress ?: null
                     ]);
                     $customerId = $statement->fetchColumn();
                 }
 
                 $statement = $pdo->prepare("
-                    INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
-                    VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
+                    INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type, color, vin)
+                    VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type, :color, :vin)
                     RETURNING id
                 ");
                 $statement->execute([
@@ -171,7 +303,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'make' => $make,
                     'model' => $model,
                     'year' => $year ?: null,
-                    'fuel_type' => $fuelType
+                    'fuel_type' => $fuelType,
+                    'color' => $color ?: null,
+                    'vin' => $vin ?: null
                 ]);
                 $vehicleId = $statement->fetchColumn();
 
@@ -184,10 +318,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'customer_id' => $customerId,
                     'vehicle_id' => $vehicleId,
                     'advisor_id' => $user['id'],
-                    'customer_complaint' => $complaint ?: null,
+                    'customer_complaint' => $complaint,
                     'odometer_in' => $odometerIn ?: null,
-                    'promised_at' => $promisedAt ?: null
+                    'promised_at' => $promisedAt ?: null,
+                    'advance_amount' => $advanceAmount ?: null
                 ]);
+
+                insert_accessories($pdo, $jobCardId, $accessoryKeys);
+                insert_damage_marks($pdo, $jobCardId, $damageMarks);
+                attach_damage_image($pdo, $jobCardId, $damageImageData);
 
                 log_audit_event(
                     $pdo, $user, 'create', 'job_card', $jobCardId,
@@ -216,37 +355,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Search for a vehicle and select it before creating the job card.';
         } else {
 
-            $jobNo = next_job_no($pdo, $branchId);
+            $pdo->beginTransaction();
 
-            $jobCardId = create_job_card($pdo, [
-                'organization_id' => $organizationId,
-                'branch_id' => $branchId,
-                'job_no' => $jobNo,
-                'customer_id' => $customerId,
-                'vehicle_id' => $vehicleId,
-                'advisor_id' => $user['id'],
-                'customer_complaint' => $complaint ?: null,
-                'odometer_in' => $odometerIn ?: null,
-                'promised_at' => $promisedAt ?: null
-            ]);
+            try {
+                $jobNo = next_job_no($pdo, $branchId);
 
-            $statement = $pdo->prepare("
-                SELECT c.name AS customer_name, v.registration_no
-                FROM customers c, vehicles v
-                WHERE c.id = :customer_id AND v.id = :vehicle_id
-            ");
-            $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
-            $jobCardFor = $statement->fetch(PDO::FETCH_ASSOC);
+                $jobCardId = create_job_card($pdo, [
+                    'organization_id' => $organizationId,
+                    'branch_id' => $branchId,
+                    'job_no' => $jobNo,
+                    'customer_id' => $customerId,
+                    'vehicle_id' => $vehicleId,
+                    'advisor_id' => $user['id'],
+                    'customer_complaint' => $complaint,
+                    'odometer_in' => $odometerIn ?: null,
+                    'promised_at' => $promisedAt ?: null,
+                    'advance_amount' => $advanceAmount ?: null
+                ]);
 
-            if ($jobCardFor) {
-                log_audit_event(
-                    $pdo, $user, 'create', 'job_card', $jobCardId,
-                    "Opened job card $jobNo for {$jobCardFor['customer_name']} — {$jobCardFor['registration_no']}"
-                );
+                insert_accessories($pdo, $jobCardId, $accessoryKeys);
+                insert_damage_marks($pdo, $jobCardId, $damageMarks);
+                attach_damage_image($pdo, $jobCardId, $damageImageData);
+
+                $statement = $pdo->prepare("
+                    SELECT c.name AS customer_name, v.registration_no
+                    FROM customers c, vehicles v
+                    WHERE c.id = :customer_id AND v.id = :vehicle_id
+                ");
+                $statement->execute(['customer_id' => $customerId, 'vehicle_id' => $vehicleId]);
+                $jobCardFor = $statement->fetch(PDO::FETCH_ASSOC);
+
+                if ($jobCardFor) {
+                    log_audit_event(
+                        $pdo, $user, 'create', 'job_card', $jobCardId,
+                        "Opened job card $jobNo for {$jobCardFor['customer_name']} — {$jobCardFor['registration_no']}"
+                    );
+                }
+
+                $pdo->commit();
+
+                header('Location: /job-card.php?id=' . $jobCardId);
+                exit;
+
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = 'Could not create the job card. Please try again.';
             }
-
-            header('Location: /job-card.php?id=' . $jobCardId);
-            exit;
         }
     }
 }
@@ -254,22 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $activeNav = 'job_cards';
 $topbarTitle = 'New Job Card';
 
-$extraFields = '
-    <div class="form-grid single">
-        <div class="form-field">
-            <label for="jobcard-odometer_in">Odometer reading (km)</label>
-            <input type="number" id="jobcard-odometer_in" name="odometer_in" min="0">
-        </div>
-        <div class="form-field">
-            <label for="jobcard-promised_at">Promised delivery (optional)</label>
-            <input type="datetime-local" id="jobcard-promised_at" name="promised_at">
-        </div>
-        <div class="form-field">
-            <label for="jobcard-customer_complaint">Customer complaint / request</label>
-            <textarea id="jobcard-customer_complaint" name="customer_complaint" placeholder="e.g. Engine noise, brakes feel soft..."></textarea>
-        </div>
-    </div>
-';
+$extraFields = job_card_intake_extras();
 
 ?>
 <!DOCTYPE html>
@@ -427,5 +566,11 @@ $extraFields = '
     <script src="/js/vehicle-intake.js"></script>
     <script>initVehicleIntake('jobcard');</script>
 <?php endif; ?>
+<script src="/js/customer-voice-list.js"></script>
+<script src="/js/damage-diagram.js"></script>
+<script>
+    initCustomerVoiceList('jobcard');
+    initDamageDiagram('jobcard');
+</script>
 </body>
 </html>
