@@ -37,6 +37,8 @@ function icon(string $name, int $size = 18): string
         'message' => '<path d="M20.5 11.5a8 8 0 0 1-8.4 8 8.4 8.4 0 0 1-3.6-.8L3.5 20l1.3-4.5a8.4 8.4 0 0 1-.8-3.6 8 8 0 0 1 8-8h.2a8 8 0 0 1 7.8 7.8z"/>',
         'pause' => '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
         'arrow-left' => '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18.5 4.5 12 11 5.5"/>',
+        'arrow-right' => '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 5.5 19.5 12 13 18.5"/>',
+        'info' => '<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r="0.15" fill="currentColor" stroke-width="1.4"/>',
         'chevron-left' => '<polyline points="15 18 9 12 15 6"/>',
         'chevron-right' => '<polyline points="9 18 15 12 9 6"/>',
         'wrench' => '<path d="M14.7 6.3a4 4 0 0 0-5.4 5l-7 7 2.4 2.4 7-7a4 4 0 0 0 5-5.4l-2.7 2.7-2.4-2.4z"/>',

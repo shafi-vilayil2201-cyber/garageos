@@ -38,6 +38,41 @@ function accessory_is_valid(string $key): bool
     return isset(ACCESSORIES[$key]);
 }
 
+// Shared by intake (job-card-new.php) and the "Add/Edit accessories"
+// flow on job-card.php — the same function handles both a first-time
+// save and a later correction, always replacing whatever's there rather
+// than appending to it (a technician fixing a mis-tick isn't adding a
+// second record). accessories_recorded_at is set only the first time;
+// every save after that stamps accessories_updated_at instead, so the
+// two dates displayed together show both when this was originally
+// captured and whether — and when — it was corrected since.
+function save_accessories(PDO $pdo, int $jobCardId, array $keys): void
+{
+    $validKeys = array_values(array_unique(array_filter($keys, 'accessory_is_valid')));
+
+    $pdo->prepare("DELETE FROM job_card_accessories WHERE job_card_id = :job_card_id")
+        ->execute(['job_card_id' => $jobCardId]);
+
+    $statement = $pdo->prepare("
+        INSERT INTO job_card_accessories (job_card_id, accessory_key)
+        VALUES (:job_card_id, :accessory_key)
+    ");
+
+    foreach ($validKeys as $key) {
+        $statement->execute(['job_card_id' => $jobCardId, 'accessory_key' => $key]);
+    }
+
+    $statement = $pdo->prepare("SELECT accessories_recorded_at FROM job_cards WHERE id = :id");
+    $statement->execute(['id' => $jobCardId]);
+    $column = $statement->fetchColumn() ? 'accessories_updated_at' : 'accessories_recorded_at';
+
+    $pdo->prepare("
+        UPDATE job_cards
+        SET {$column} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+    ")->execute(['id' => $jobCardId]);
+}
+
 // Renders the fixed checklist as a 2-column grid of checkboxes, each
 // named accessories[] — used at intake, where $checkedKeys is empty
 // (nothing ticked yet).

@@ -123,104 +123,6 @@ function join_customer_voice(array $entries): ?string
     return $lines ? implode("\n", $lines) : null;
 }
 
-function insert_accessories(PDO $pdo, int $jobCardId, array $keys): void
-{
-    $validKeys = array_values(array_unique(array_filter($keys, 'accessory_is_valid')));
-
-    if (!$validKeys) {
-        return;
-    }
-
-    $statement = $pdo->prepare("
-        INSERT INTO job_card_accessories (job_card_id, accessory_key)
-        VALUES (:job_card_id, :accessory_key)
-    ");
-
-    foreach ($validKeys as $key) {
-        $statement->execute(['job_card_id' => $jobCardId, 'accessory_key' => $key]);
-    }
-}
-
-function attach_damage_image(PDO $pdo, int $jobCardId, ?string $dataUrl): void
-{
-    $damageImageUrl = save_damage_image($jobCardId, $dataUrl);
-
-    if (!$damageImageUrl) {
-        return;
-    }
-
-    $statement = $pdo->prepare("
-        UPDATE job_cards
-        SET damage_image_url = :damage_image_url, updated_at = CURRENT_TIMESTAMP
-        WHERE id = :id
-    ");
-    $statement->execute(['damage_image_url' => $damageImageUrl, 'id' => $jobCardId]);
-}
-
-function parse_damage_marks(?string $json): array
-{
-    $decoded = json_decode($json ?: '', true);
-
-    if (!is_array($decoded)) {
-        return [];
-    }
-
-    $marks = [];
-    $seen = [];
-
-    foreach ($decoded as $mark) {
-        if (!is_array($mark)) {
-            continue;
-        }
-
-        $partKey = (string) ($mark['part_key'] ?? '');
-        $damageType = (string) ($mark['damage_type'] ?? '');
-        $x = (float) ($mark['x'] ?? -1);
-        $y = (float) ($mark['y'] ?? -1);
-        $uniqueKey = $partKey . ':' . $damageType;
-
-        if (!vehicle_damage_part_is_valid($partKey)
-            || !vehicle_damage_type_is_valid($damageType)
-            || $x < 0 || $x > 560
-            || $y < 0 || $y > 879
-            || isset($seen[$uniqueKey])) {
-            continue;
-        }
-
-        $seen[$uniqueKey] = true;
-        $marks[] = [
-            'part_key' => $partKey,
-            'damage_type' => $damageType,
-            'x' => round($x, 2),
-            'y' => round($y, 2),
-        ];
-    }
-
-    return $marks;
-}
-
-function insert_damage_marks(PDO $pdo, int $jobCardId, array $marks): void
-{
-    if (!$marks) {
-        return;
-    }
-
-    $statement = $pdo->prepare("
-        INSERT INTO job_card_damage_marks (job_card_id, part_key, damage_type, x, y)
-        VALUES (:job_card_id, :part_key, :damage_type, :x, :y)
-    ");
-
-    foreach ($marks as $mark) {
-        $statement->execute([
-            'job_card_id' => $jobCardId,
-            'part_key' => $mark['part_key'],
-            'damage_type' => $mark['damage_type'],
-            'x' => $mark['x'],
-            'y' => $mark['y'],
-        ]);
-    }
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
@@ -232,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $advanceAmount = trim($_POST['advance_amount'] ?? '');
     $accessoryKeys = $_POST['accessories'] ?? [];
     $damageImageData = $_POST['damage_image_data'] ?? null;
-    $damageMarks = parse_damage_marks($_POST['damage_marks_json'] ?? null);
+    $damageMarksJson = $_POST['damage_marks_json'] ?? null;
 
     if ($mode === 'new') {
 
@@ -324,9 +226,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'advance_amount' => $advanceAmount ?: null
                 ]);
 
-                insert_accessories($pdo, $jobCardId, $accessoryKeys);
-                insert_damage_marks($pdo, $jobCardId, $damageMarks);
-                attach_damage_image($pdo, $jobCardId, $damageImageData);
+                save_accessories($pdo, $jobCardId, $accessoryKeys);
+                save_vehicle_damage($pdo, $jobCardId, $damageMarksJson, $damageImageData);
 
                 log_audit_event(
                     $pdo, $user, 'create', 'job_card', $jobCardId,
@@ -373,9 +274,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'advance_amount' => $advanceAmount ?: null
                 ]);
 
-                insert_accessories($pdo, $jobCardId, $accessoryKeys);
-                insert_damage_marks($pdo, $jobCardId, $damageMarks);
-                attach_damage_image($pdo, $jobCardId, $damageImageData);
+                save_accessories($pdo, $jobCardId, $accessoryKeys);
+                save_vehicle_damage($pdo, $jobCardId, $damageMarksJson, $damageImageData);
 
                 $statement = $pdo->prepare("
                     SELECT c.name AS customer_name, v.registration_no
@@ -549,7 +449,7 @@ $extraFields = job_card_intake_extras();
                             <div class="form-error"><?= htmlspecialchars($error) ?></div>
                         <?php endif; ?>
 
-                        <?= vehicle_intake_form('jobcard', '/job-card-new.php', $extraFields, 'check', 'Create job card') ?>
+                        <?= vehicle_intake_form('jobcard', '/job-card-new.php', $extraFields, 'check', 'Create job card', ['Vehicle', 'Job details', 'Condition']) ?>
 
                     </div>
                 </div>
@@ -564,7 +464,11 @@ $extraFields = job_card_intake_extras();
 
 <?php if (!$shortcutCustomer): ?>
     <script src="/js/vehicle-intake.js"></script>
-    <script>initVehicleIntake('jobcard');</script>
+    <script src="/js/job-card-wizard.js"></script>
+    <script>
+        initVehicleIntake('jobcard');
+        initJobCardWizard('jobcard');
+    </script>
 <?php endif; ?>
 <script src="/js/customer-voice-list.js"></script>
 <script src="/js/damage-diagram.js"></script>

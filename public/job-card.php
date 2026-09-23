@@ -110,6 +110,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
 
+    } elseif ($action === 'update_accessories') {
+
+        require_permission($user, 'job_cards.manage');
+
+        save_accessories($pdo, $jobCardId, $_POST['accessories'] ?? []);
+
+        log_audit_event(
+            $pdo, $user, 'update', 'job_card', $jobCardId,
+            "Recorded accessories present for {$jobCard['job_no']}"
+        );
+
+        header('Location: /job-card.php?id=' . $jobCardId);
+        exit;
+
+    } elseif ($action === 'update_damage') {
+
+        require_permission($user, 'job_cards.manage');
+
+        save_vehicle_damage($pdo, $jobCardId, $_POST['damage_marks_json'] ?? null, $_POST['damage_image_data'] ?? null);
+
+        log_audit_event(
+            $pdo, $user, 'update', 'job_card', $jobCardId,
+            "Recorded vehicle condition for {$jobCard['job_no']}"
+        );
+
+        header('Location: /job-card.php?id=' . $jobCardId);
+        exit;
+
     } elseif ($action === 'add_service') {
 
         require_permission($user, 'job_cards.manage');
@@ -785,10 +813,29 @@ $topbarTitle = $jobCard['job_no'];
                             <div class="card-header">
                                 <div class="card-header-title">
                                     <span class="icon-badge"><?= icon('check-circle', 15) ?></span>
-                                    Accessories present at intake
+                                    Accessories present
+                                </div>
+                                <?php if ($canManageJobCards): ?>
+                                    <button type="button" class="card-header-icon-button" onclick="openModal('add-accessories-modal')" title="Edit accessories"><?= icon('edit', 14) ?></button>
+                                <?php endif; ?>
+                            </div>
+                            <div class="card-body">
+                                <?= accessory_checklist_display($checkedAccessoryKeys) ?>
+                                <?= recorded_at_label($jobCard['accessories_recorded_at'], $jobCard['accessories_updated_at']) ?>
+                            </div>
+                        </div>
+                    <?php elseif ($canManageJobCards): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('check-circle', 15) ?></span>
+                                    Accessories present
                                 </div>
                             </div>
-                            <div class="card-body"><?= accessory_checklist_display($checkedAccessoryKeys) ?></div>
+                            <div class="card-body">
+                                <p class="result-meta" style="margin-bottom:12px;">Not recorded yet.</p>
+                                <button type="button" class="button secondary sm" onclick="openModal('add-accessories-modal')"><?= icon('plus', 14) ?> Add accessories</button>
+                            </div>
                         </div>
                     <?php endif; ?>
 
@@ -797,8 +844,11 @@ $topbarTitle = $jobCard['job_no'];
                             <div class="card-header">
                                 <div class="card-header-title">
                                     <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
-                                    Vehicle condition at intake
+                                    Vehicle condition
                                 </div>
+                                <?php if ($canManageJobCards): ?>
+                                    <button type="button" class="card-header-icon-button" onclick="openModal('add-damage-modal')" title="Edit vehicle condition"><?= icon('edit', 14) ?></button>
+                                <?php endif; ?>
                             </div>
                             <div class="card-body" style="text-align:center;">
                                 <?php if (!empty($jobCard['damage_image_url'])): ?>
@@ -807,6 +857,20 @@ $topbarTitle = $jobCard['job_no'];
                                     </div>
                                 <?php endif; ?>
                                 <?= damage_marks_display($damageMarks) ?>
+                                <?= recorded_at_label($jobCard['damage_recorded_at'], $jobCard['damage_updated_at']) ?>
+                            </div>
+                        </div>
+                    <?php elseif ($canManageJobCards): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
+                                    Vehicle condition
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <p class="result-meta" style="margin-bottom:12px;">Not recorded yet.</p>
+                                <button type="button" class="button secondary sm" onclick="openModal('add-damage-modal')"><?= icon('plus', 14) ?> Add vehicle condition</button>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -1028,8 +1092,54 @@ $topbarTitle = $jobCard['job_no'];
         </div>
     </div>
 
+    <div class="modal-backdrop" id="add-accessories-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('check-circle', 16) ?></span>
+                    <?= !empty($checkedAccessoryKeys) ? 'Edit Accessories' : 'Add Accessories' ?>
+                </div>
+                <button type="button" class="modal-close" data-close-modal="add-accessories-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" class="stack">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="update_accessories">
+                    <?= accessory_intake_block($checkedAccessoryKeys) ?>
+                    <div class="actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save accessories</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="add-damage-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('alert-triangle', 16) ?></span>
+                    <?= !empty($damageMarks) ? 'Edit Vehicle Condition' : 'Add Vehicle Condition' ?>
+                </div>
+                <button type="button" class="modal-close" data-close-modal="add-damage-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" class="stack">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="update_damage">
+                    <?= damage_intake_block('adddamage', $damageMarks) ?>
+                    <div class="actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save condition</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/modal.js"></script>
     <script src="/js/job-card-detail.js"></script>
+    <script src="/js/damage-diagram.js"></script>
+    <script>initDamageDiagram('adddamage');</script>
 
 <?php endif; ?>
 

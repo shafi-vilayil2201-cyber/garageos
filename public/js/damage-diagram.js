@@ -10,42 +10,74 @@ function initDamageDiagram(prefix)
     };
 
     const PARTS = [
-        { key: 'rear_bumper', label: 'Rear bumper', group: 'Rear', d: 'M164 40 Q280 30 396 40 L408 87 Q404 104 389 106 L171 106 Q156 103 152 87 Z', x: 280, y: 72 },
-        { key: 'trunk', label: 'Trunk', group: 'Rear', d: 'M164 107 L396 107 L389 222 Q352 236 280 237 Q208 236 171 222 Z', x: 280, y: 166 },
-        { key: 'rear_windshield', label: 'Rear windshield', group: 'Rear', d: 'M180 226 Q280 201 380 226 L382 319 Q280 346 178 319 Z', x: 280, y: 278 },
+        { key: 'front_bumper', label: 'Front bumper', group: 'Front', d: 'M164 40 Q280 30 396 40 L408 87 Q404 104 389 106 L171 106 Q156 103 152 87 Z', x: 280, y: 72 },
+        { key: 'bonnet', label: 'Bonnet', group: 'Front', d: 'M164 107 L396 107 L389 222 Q352 236 280 237 Q208 236 171 222 Z', x: 280, y: 166 },
+        { key: 'windshield', label: 'Windshield', group: 'Front', d: 'M180 226 Q280 201 380 226 L382 319 Q280 346 178 319 Z', x: 280, y: 278 },
         { key: 'roof', label: 'Roof', group: 'Roof', d: 'M178 326 Q280 350 382 326 L382 548 Q280 570 178 548 Z', x: 280, y: 438 },
-        { key: 'windshield', label: 'Windshield', group: 'Front', d: 'M178 554 Q280 578 382 554 L390 624 Q280 654 170 624 Z', x: 280, y: 603 },
-        { key: 'bonnet', label: 'Bonnet', group: 'Front', d: 'M170 635 Q280 665 390 635 L397 702 L163 702 Z', x: 280, y: 670 },
-        { key: 'front_bumper', label: 'Front bumper', group: 'Front', d: 'M164 705 L396 705 L401 728 Q414 746 411 775 Q407 797 390 800 L170 800 Q153 797 149 775 Q146 746 159 728 Z', x: 280, y: 756 },
-        { key: 'front_left_headlight', label: 'Front left headlight', group: 'Front', d: 'M164 676 Q178 665 197 671 L202 701 L166 701 Z', x: 183, y: 687 },
-        { key: 'front_right_headlight', label: 'Front right headlight', group: 'Front', d: 'M396 676 Q382 665 363 671 L358 701 L394 701 Z', x: 377, y: 687 },
-        { key: 'front_grille', label: 'Front grille', group: 'Front', d: 'M205 706 L355 706 L365 725 L195 725 Z', x: 280, y: 716 },
+        { key: 'rear_windshield', label: 'Rear windshield', group: 'Rear', d: 'M178 554 Q280 578 382 554 L390 624 Q280 654 170 624 Z', x: 280, y: 603 },
+        { key: 'trunk', label: 'Trunk', group: 'Rear', d: 'M170 635 Q280 665 390 635 L397 702 L163 702 Z', x: 280, y: 670 },
+        { key: 'rear_bumper', label: 'Rear bumper', group: 'Rear', d: 'M164 705 L396 705 L401 728 Q414 746 411 775 Q407 797 390 800 L170 800 Q153 797 149 775 Q146 746 159 728 Z', x: 280, y: 756 },
+        { key: 'rear_left_tail_light', label: 'Rear left tail light', group: 'Rear', d: 'M164 676 Q178 665 197 671 L202 701 L166 701 Z', x: 183, y: 687 },
+        { key: 'rear_right_tail_light', label: 'Rear right tail light', group: 'Rear', d: 'M396 676 Q382 665 363 671 L358 701 L394 701 Z', x: 377, y: 687 },
+        { key: 'front_grille', label: 'Front grille', group: 'Front', d: 'M190 49 Q190 45 195 45 H365 Q370 45 370 50 V59 Q370 64 365 64 H195 Q190 64 190 59 Z', x: 280, y: 54 },
+        { key: 'front_left_headlight', label: 'Front left headlight', group: 'Front', d: 'M166 112 L205 112 L205 139 L166 139 Z', x: 185, y: 125 },
+        { key: 'front_right_headlight', label: 'Front right headlight', group: 'Front', d: 'M394 112 L355 112 L355 139 L394 139 Z', x: 375, y: 125 },
 
-        { key: 'rear_left_quarter_panel', label: 'Rear left quarter panel', group: 'Rear', d: 'M39 106 Q69 94 99 105 L126 122 L132 177 L119 178 Q107 153 80 153 L40 163 Z M40 255 L119 255 Q129 239 132 223 L132 280 L105 289 L40 276 Z', x: 92, y: 128 },
-        { key: 'rear_right_quarter_panel', label: 'Rear right quarter panel', group: 'Rear', d: 'M521 106 Q491 94 461 105 L434 122 L428 177 L441 178 Q453 153 480 153 L520 163 Z M520 255 L441 255 Q431 239 428 223 L428 280 L455 289 L520 276 Z', x: 468, y: 128 },
-        { key: 'rear_left_door', label: 'Rear left door', group: 'Side', d: 'M132 280 L158 282 Q174 300 182 328 L182 404 L132 405 Z', x: 155, y: 350 },
-        { key: 'rear_right_door', label: 'Rear right door', group: 'Side', d: 'M428 280 L402 282 Q386 300 378 328 L378 404 L428 405 Z', x: 405, y: 350 },
-        { key: 'front_left_door', label: 'Front left door', group: 'Side', d: 'M132 414 L182 414 L182 514 Q174 535 158 553 L132 553 Z', x: 155, y: 478 },
-        { key: 'front_right_door', label: 'Front right door', group: 'Side', d: 'M428 414 L378 414 L378 514 Q386 535 402 553 L428 553 Z', x: 405, y: 478 },
-        { key: 'front_left_fender', label: 'Front left fender', group: 'Front', d: 'M32 503 L96 504 Q119 515 132 554 L132 686 Q118 698 99 696 L99 677 Q118 667 118 642 L111 606 Q101 580 79 570 L32 563 Z', x: 72, y: 640 },
-        { key: 'front_right_fender', label: 'Front right fender', group: 'Front', d: 'M528 503 L464 504 Q441 515 428 554 L428 686 Q442 698 461 696 L461 677 Q442 667 442 642 L449 606 Q459 580 481 570 L528 563 Z', x: 488, y: 640 },
-        { key: 'front_left_mirror', label: 'Front left mirror', group: 'Front', d: 'M169 300 Q181 295 190 309 L193 329 Q188 342 176 339 L168 329 Z', x: 180, y: 320 },
-        { key: 'front_right_mirror', label: 'Front right mirror', group: 'Front', d: 'M391 300 Q379 295 370 309 L367 329 Q372 342 384 339 L392 329 Z', x: 380, y: 320 },
-        { key: 'left_side_skirt', label: 'Left side skirt', group: 'Side', d: 'M101 400 L132 402 L132 554 L101 558 L108 535 L114 510 L114 435 Z', x: 116, y: 480 },
-        { key: 'right_side_skirt', label: 'Right side skirt', group: 'Side', d: 'M459 400 L428 402 L428 554 L459 558 L452 535 L446 510 L446 435 Z', x: 444, y: 480 },
+        { key: 'front_left_fender', label: 'Front left fender', group: 'Front', d: 'M39 106 Q69 94 99 105 L126 122 L132 177 L119 178 Q107 153 80 153 L40 163 Z M40 255 L119 255 Q129 239 132 223 L132 280 L105 279 L40 276 Z', x: 92, y: 128 },
+        { key: 'front_right_fender', label: 'Front right fender', group: 'Front', d: 'M521 106 Q491 94 461 105 L434 122 L428 177 L441 178 Q453 153 480 153 L520 163 Z M520 255 L441 255 Q431 239 428 223 L428 280 L455 279 L520 276 Z', x: 468, y: 128 },
+        // Door-metal rectangles follow the green reference boxes in the
+        // source artwork's native 560 x 879 coordinate system.
+        { key: 'front_left_door_metal', label: 'Front left door metal', group: 'Side', d: 'M54 282 H106 V396 H54 Z', x: 80, y: 339 },
+        { key: 'front_right_door_metal', label: 'Front right door metal', group: 'Side', d: 'M506 282 H454 V396 H506 Z', x: 480, y: 339 },
+        { key: 'rear_left_door_metal', label: 'Rear left door metal', group: 'Side', d: 'M54 405 H106 V493 H54 Z', x: 80, y: 449 },
+        { key: 'rear_right_door_metal', label: 'Rear right door metal', group: 'Side', d: 'M506 405 H454 V493 H506 Z', x: 480, y: 449 },
+        // Door glass — traced against the real window shading, then
+        // deliberately inset ~10px on every side. The true window fills
+        // most of the door's visible height (confirmed by a full grid
+        // scan: a pixel-accurate trace left door-metal clickable only in
+        // a thin strip near the bottom — every click anywhere near or on
+        // the window would land on glass, making metal feel unreachable
+        // even though it technically existed). The inset gives metal a
+        // real, comfortable frame all the way around the window instead
+        // of ceding it almost the entire door.
+        { key: 'front_left_door_glass', label: 'Front left door glass', group: 'Side', d: 'M144 328 L151 327 L172 360 L172 383 L150 390 L144 386 Z', x: 155, y: 360 },
+        { key: 'front_right_door_glass', label: 'Front right door glass', group: 'Side', d: 'M416 328 L409 327 L388 360 L388 383 L410 390 L416 386 Z', x: 405, y: 360 },
+        { key: 'rear_left_door_glass', label: 'Rear left door glass', group: 'Side', d: 'M145 428 L172 428 L172 478 L148 492 L145 485 Z', x: 155, y: 460 },
+        { key: 'rear_right_door_glass', label: 'Rear right door glass', group: 'Side', d: 'M415 428 L388 428 L388 478 L412 492 L415 485 Z', x: 405, y: 460 },
+        { key: 'rear_left_quarter_panel', label: 'Rear left quarter panel', group: 'Rear', d: 'M32 503 L96 504 Q119 515 132 554 L132 686 Q118 698 99 696 L99 677 Q118 667 118 642 L111 606 Q101 580 79 570 L32 563 Z', x: 72, y: 640 },
+        { key: 'rear_right_quarter_panel', label: 'Rear right quarter panel', group: 'Rear', d: 'M528 503 L464 504 Q441 515 428 554 L428 686 Q442 698 461 696 L461 677 Q442 667 442 642 L449 606 Q459 580 481 570 L528 563 Z', x: 488, y: 640 },
+        // Mirrors — tightened to a small ellipse matching the actual oval
+        // decoration in the artwork (~23x23px). The previous paddle shape
+        // was ~24x40px, tall enough to swallow real door-metal area both
+        // above and below the real mirror, so clicks near the top of the
+        // front door kept resolving to "mirror" instead of the door.
+        { key: 'front_left_mirror', label: 'Front left mirror', group: 'Front', d: 'M171 320 A10 11 0 1 1 191 319.9 A10 11 0 1 1 171 320 Z', x: 181, y: 320 },
+        { key: 'front_right_mirror', label: 'Front right mirror', group: 'Front', d: 'M369 320 A10 11 0 1 1 389 319.9 A10 11 0 1 1 369 320 Z', x: 379, y: 320 },
+        // Side skirts / rocker panels follow the green reference strips:
+        // one long body section below the doors, between the wheel arches.
+        { key: 'left_side_skirt', label: 'Left side skirt', group: 'Side', d: 'M34 258 H51 V503 H34 Z', x: 42.5, y: 380 },
+        { key: 'right_side_skirt', label: 'Right side skirt', group: 'Side', d: 'M526 258 H509 V503 H526 Z', x: 517.5, y: 380 },
         { key: 'fuel_door', label: 'Fuel door', group: 'Side', d: 'M105 266 Q116 260 126 266 L126 287 Q116 293 105 287 Z', x: 116, y: 276 },
-        { key: 'rear_left_wheel', label: 'Rear left wheel', group: 'Rear', d: 'M64 164 A45 45 0 1 1 63.9 254 A45 45 0 1 1 64 164 Z', x: 64, y: 209 },
-        { key: 'rear_right_wheel', label: 'Rear right wheel', group: 'Rear', d: 'M496 164 A45 45 0 1 1 495.9 254 A45 45 0 1 1 496 164 Z', x: 496, y: 209 },
-        { key: 'front_left_wheel', label: 'Front left wheel', group: 'Front', d: 'M64 512 A45 45 0 1 1 63.9 602 A45 45 0 1 1 64 512 Z', x: 64, y: 557 },
-        { key: 'front_right_wheel', label: 'Front right wheel', group: 'Front', d: 'M496 512 A45 45 0 1 1 495.9 602 A45 45 0 1 1 496 512 Z', x: 496, y: 557 },
-        { key: 'rear_left_tail_light', label: 'Rear left tail light', group: 'Rear', d: 'M166 112 L205 112 L205 139 L166 139 Z', x: 185, y: 125 },
-        { key: 'rear_right_tail_light', label: 'Rear right tail light', group: 'Rear', d: 'M394 112 L355 112 L355 139 L394 139 Z', x: 375, y: 125 },
-        { key: 'rear_hatch', label: 'Rear hatch / tailgate', group: 'Rear', d: 'M207 109 L353 109 L360 218 Q280 231 200 218 Z', x: 280, y: 165 }
+        { key: 'front_left_wheel', label: 'Front left wheel', group: 'Front', d: 'M64 161 A48 48 0 1 1 63.9 257 A48 48 0 1 1 64 161 Z', x: 64, y: 209 },
+        { key: 'front_right_wheel', label: 'Front right wheel', group: 'Front', d: 'M496 161 A48 48 0 1 1 495.9 257 A48 48 0 1 1 496 161 Z', x: 496, y: 209 },
+        // Rear wheel circles are inset to the visible tire ring so their
+        // selectable boundary does not spill into the adjacent body panel.
+        { key: 'rear_left_wheel', label: 'Rear left wheel', group: 'Rear', d: 'M55 508 A45 45 0 1 1 54.9 598 A45 45 0 1 1 55 508 Z', x: 55, y: 553 },
+        { key: 'rear_right_wheel', label: 'Rear right wheel', group: 'Rear', d: 'M505 508 A45 45 0 1 1 504.9 598 A45 45 0 1 1 505 508 Z', x: 505, y: 553 },
+
+        // Door handles — small ovals traced from the artwork, listed last
+        // so they render on top of (and take click priority over) the
+        // door-metal regions they visually sit inside.
+        { key: 'front_left_door_handle', label: 'Front left door handle', group: 'Side', d: 'M112,367.5 A9,14.5 0 1 1 130,367.4 A9,14.5 0 1 1 112,367.5 Z', x: 121, y: 367.5 },
+        { key: 'front_right_door_handle', label: 'Front right door handle', group: 'Side', d: 'M430,367.5 A9,14.5 0 1 1 448,367.4 A9,14.5 0 1 1 430,367.5 Z', x: 439, y: 367.5 },
+        { key: 'rear_left_door_handle', label: 'Rear left door handle', group: 'Side', d: 'M112.5,495 A8.5,12 0 1 1 129.5,494.9 A8.5,12 0 1 1 112.5,495 Z', x: 121, y: 495 },
+        { key: 'rear_right_door_handle', label: 'Rear right door handle', group: 'Side', d: 'M430.5,495 A8.5,12 0 1 1 447.5,494.9 A8.5,12 0 1 1 430.5,495 Z', x: 439, y: 495 }
     ];
 
     const el = id => document.getElementById(`${prefix}-${id}`);
+    const wrap = el('damage-diagram-wrap');
     const map = el('damage-map');
-    const stage = document.querySelector(`#${prefix}-damage-diagram-wrap .damage-image-stage`);
+    const stage = wrap ? wrap.querySelector('.damage-image-stage') : null;
     const image = stage ? stage.querySelector('.damage-diagram-image') : null;
     const picker = el('damage-picker');
     const pickerTitle = el('damage-picker-title');
@@ -54,14 +86,36 @@ function initDamageDiagram(prefix)
     const marksInput = el('damage-marks-json');
     const form = stage ? stage.closest('form') : null;
 
-    if (!map || !stage || !image || !picker || !pickerTitle || !selectionList || !imageDataInput || !marksInput)
+    if (!wrap || !map || !stage || !image || !picker || !pickerTitle || !selectionList || !imageDataInput || !marksInput)
     {
         return;
     }
 
     let selectedPart = null;
     let pendingPoint = null;
+
+    // Seeded when this is an edit rather than a first-time add — see
+    // damage_intake_block() in JobCardIntakeExtras.php. Malformed or
+    // missing seed data just means "nothing to pre-fill", not an error.
     let marks = [];
+
+    try
+    {
+        const seeded = JSON.parse(wrap.dataset.existingMarks || '[]');
+
+        if (Array.isArray(seeded))
+        {
+            marks = seeded.filter(mark => mark
+                && typeof mark.part_key === 'string'
+                && typeof mark.damage_type === 'string'
+                && typeof mark.x === 'number'
+                && typeof mark.y === 'number');
+        }
+    }
+    catch (error)
+    {
+        marks = [];
+    }
 
     function partByKey(key)
     {

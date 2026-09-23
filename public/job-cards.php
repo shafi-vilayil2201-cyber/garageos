@@ -329,7 +329,7 @@ $topbarTitle = 'Job Cards';
                 <button type="button" class="modal-close" data-close-modal="jobcard-modal" aria-label="Close"><?= icon('x', 18) ?></button>
             </div>
             <div class="modal-body">
-                <?= vehicle_intake_form('jobcard', '/job-card-new.php', $jobCardExtraFields, 'check', 'Create job card') ?>
+                <?= vehicle_intake_form('jobcard', '/job-card-new.php', $jobCardExtraFields, 'check', 'Create job card', ['Vehicle', 'Job details', 'Condition']) ?>
             </div>
         </div>
     </div>
@@ -376,10 +376,12 @@ $topbarTitle = 'Job Cards';
     <script src="/js/vehicle-intake.js"></script>
     <script src="/js/customer-voice-list.js"></script>
     <script src="/js/damage-diagram.js"></script>
+    <script src="/js/job-card-wizard.js"></script>
     <script>
         initVehicleIntake('jobcard');
         initCustomerVoiceList('jobcard');
         initDamageDiagram('jobcard');
+        initJobCardWizard('jobcard');
     </script>
 
 <?php endif; ?>

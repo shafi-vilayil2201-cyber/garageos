@@ -157,6 +157,7 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
                 <div class="info-block">
                     <h2>Accessories present</h2>
                     <?= accessory_checklist_display($checkedAccessoryKeys) ?>
+                    <?= recorded_at_label($jobCard['accessories_recorded_at'], $jobCard['accessories_updated_at']) ?>
                 </div>
             <?php endif; ?>
             <?php if (!empty($jobCard['damage_image_url'])): ?>
@@ -166,12 +167,14 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
                         <?= damage_image_display($jobCard['damage_image_url']) ?>
                     </div>
                     <?= damage_marks_display($damageMarks) ?>
+                    <?= recorded_at_label($jobCard['damage_recorded_at'], $jobCard['damage_updated_at']) ?>
                 </div>
             <?php endif; ?>
             <?php if (empty($jobCard['damage_image_url']) && !empty($damageMarks)): ?>
                 <div class="info-block">
                     <h2>Vehicle condition</h2>
                     <?= damage_marks_display($damageMarks) ?>
+                    <?= recorded_at_label($jobCard['damage_recorded_at'], $jobCard['damage_updated_at']) ?>
                 </div>
             <?php endif; ?>
         </div>

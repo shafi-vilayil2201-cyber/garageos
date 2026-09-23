@@ -1352,6 +1352,135 @@ table.data-table {
     color: var(--muted);
 }
 
+.recorded-at-label {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.recorded-at-updated {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+/* A small icon-only button in a .card-header, right-aligned by that
+   element's own justify-content: space-between — same visual treatment
+   as .kanban-card-icon-button, kept separate since this isn't kanban-
+   specific. */
+.card-header-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.card-header-icon-button:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+
+/* Job-card intake wizard — see public/js/job-card-wizard.js. The step
+   fragments themselves ([data-step]) need no styling of their own; JS
+   toggles `hidden` on them directly. */
+.wizard-progress {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+}
+
+.wizard-progress-step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid var(--border);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    transition: border-color 150ms ease, color 150ms ease;
+}
+
+.wizard-progress-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    font-size: 11.5px;
+}
+
+.wizard-progress-step.active,
+.wizard-progress-step.done {
+    border-color: var(--primary);
+    color: var(--text);
+}
+
+.wizard-progress-step.active .wizard-progress-dot,
+.wizard-progress-step.done .wizard-progress-dot {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #ffffff;
+}
+
+.wizard-progress-label {
+    display: none;
+}
+
+@media (min-width: 480px) {
+    .wizard-progress-label {
+        display: inline;
+    }
+}
+
+.wizard-nav {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wizard-nav-spacer {
+    flex: 1;
+}
+
+.wizard-nav button[hidden] {
+    display: none;
+}
+
+.wizard-step-error {
+    width: 100%;
+    margin-bottom: 4px;
+    color: var(--danger);
+    font-size: 12.5px;
+}
+
+.wizard-skip-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.wizard-skip-note svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--muted);
+}
+
 .form-actions {
     margin-top: 24px;
     display: flex;
