@@ -52,6 +52,11 @@ $payments = $statement->fetchAll(PDO::FETCH_ASSOC);
 $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
 $isInterState = gst_is_inter_state($invoice['organization_state'], $invoice['customer_state']);
 
+// See public/invoice.php for the same computation — tax_amount is the
+// sum of every line's tax, which can never be negative, so == 0 always
+// means every line was billed at 0%.
+$hasGst = (float) $invoice['tax_amount'] > 0.009;
+
 $statusLabels = [
     'paid' => 'Paid',
     'partial' => 'Partially paid',
@@ -95,7 +100,7 @@ $statusLabels = [
                 <?php if ($invoice['organization_phone']): ?>
                     Phone: <?= htmlspecialchars($invoice['organization_phone']) ?><br>
                 <?php endif; ?>
-                <?php if ($invoice['organization_tax_number']): ?>
+                <?php if ($invoice['organization_tax_number'] && $hasGst): ?>
                     <?= htmlspecialchars($invoice['organization_tax_label']) ?>: <?= htmlspecialchars($invoice['organization_tax_number']) ?>
                 <?php endif; ?>
             </div>
@@ -132,14 +137,14 @@ $statusLabels = [
 
     <div class="section">
         <table>
-            <tr><th>Description</th><th>HSN/SAC</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">GST</th><th class="num">Total</th></tr>
+            <tr><th>Description</th><th>HSN/SAC</th><th class="num">Qty</th><th class="num">Unit price</th><?php if ($hasGst): ?><th class="num">GST</th><?php endif; ?><th class="num">Total</th></tr>
             <?php foreach ($items as $item): ?>
                 <tr>
                     <td><?= htmlspecialchars($item['description']) ?></td>
                     <td><?= htmlspecialchars($item['hsn_sac_code'] ?? '—') ?></td>
                     <td class="num"><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
                     <td class="num">₹<?= number_format($item['unit_price'], 2) ?></td>
-                    <td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td>
+                    <?php if ($hasGst): ?><td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td><?php endif; ?>
                     <td class="num">₹<?= number_format($item['total'], 2) ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -150,17 +155,19 @@ $statusLabels = [
         <div class="totals-row">
             <span>Subtotal</span><span class="num">₹<?= number_format($invoice['subtotal'], 2) ?></span>
         </div>
-        <?php if ($isInterState): ?>
-            <div class="totals-row">
-                <span>IGST</span><span class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></span>
-            </div>
-        <?php else: ?>
-            <div class="totals-row">
-                <span>CGST</span><span class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></span>
-            </div>
-            <div class="totals-row">
-                <span>SGST</span><span class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></span>
-            </div>
+        <?php if ($hasGst): ?>
+            <?php if ($isInterState): ?>
+                <div class="totals-row">
+                    <span>IGST</span><span class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></span>
+                </div>
+            <?php else: ?>
+                <div class="totals-row">
+                    <span>CGST</span><span class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></span>
+                </div>
+                <div class="totals-row">
+                    <span>SGST</span><span class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></span>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
         <div class="totals-row totals-grand">
             <span>Total</span><span class="num">₹<?= number_format($invoice['total'], 2) ?></span>
@@ -175,7 +182,7 @@ $statusLabels = [
         <?php endif; ?>
     </div>
 
-    <?php if (!$invoice['organization_state'] || !$invoice['customer_state']): ?>
+    <?php if ($hasGst && (!$invoice['organization_state'] || !$invoice['customer_state'])): ?>
         <p class="tax-note">
             GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? "your organization's" : "this customer's" ?> state isn't set, so this couldn't be verified.
         </p>

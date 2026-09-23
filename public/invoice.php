@@ -205,6 +205,13 @@ $payments = $statement->fetchAll(PDO::FETCH_ASSOC);
 $balanceDue = (float) $invoice['total'] - (float) $invoice['amount_paid'];
 $isInterState = gst_is_inter_state($invoice['organization_state'], $invoice['customer_state']);
 
+// A per-line tax amount can never be negative, so tax_amount == 0 is
+// guaranteed to mean every line was billed at 0% — there's no mixed-rate
+// case where this could be wrong. Drives every GST-related element on
+// this page: the org's GST number, the GST column, and the CGST/SGST/
+// IGST rows all disappear together when an invoice genuinely has none.
+$hasGst = (float) $invoice['tax_amount'] > 0.009;
+
 $invoiceStatusIcons = [
     'unpaid' => 'alert-triangle',
     'partial' => 'wallet',
@@ -319,7 +326,7 @@ if ($hasWhatsappNumber) {
                             Tax Invoice — <?= htmlspecialchars($invoice['organization_name']) ?>
                         </div>
                         <div style="font-weight:400; color:var(--muted); font-size:12.5px;">
-                            <?php if ($invoice['organization_tax_number']): ?>
+                            <?php if ($invoice['organization_tax_number'] && $hasGst): ?>
                                 <?= htmlspecialchars($invoice['organization_tax_label']) ?>IN: <?= htmlspecialchars($invoice['organization_tax_number']) ?> ·
                             <?php endif; ?>
                             Billed to <?= htmlspecialchars($invoice['customer_name']) ?>
@@ -331,14 +338,14 @@ if ($hasWhatsappNumber) {
                     <div class="card-body" style="padding:0;">
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit price</th><th>GST</th><th>Total</th></tr>
+                                <tr><th>Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit price</th><?php if ($hasGst): ?><th>GST</th><?php endif; ?><th>Total</th></tr>
                                 <?php foreach ($items as $item): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($item['description']) ?></td>
                                         <td><?= htmlspecialchars($item['hsn_sac_code'] ?? '—') ?></td>
                                         <td class="num"><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
                                         <td class="num">₹<?= number_format($item['unit_price'], 2) ?></td>
-                                        <td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td>
+                                        <?php if ($hasGst): ?><td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td><?php endif; ?>
                                         <td class="num">₹<?= number_format($item['total'], 2) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -348,22 +355,24 @@ if ($hasWhatsappNumber) {
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
                                 <span>Subtotal</span><strong class="num">₹<?= number_format($invoice['subtotal'], 2) ?></strong>
                             </div>
-                            <?php if ($isInterState): ?>
-                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                    <span>IGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
-                                </div>
-                            <?php else: ?>
-                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                    <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                                </div>
-                                <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                    <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                                </div>
+                            <?php if ($hasGst): ?>
+                                <?php if ($isInterState): ?>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                        <span>IGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                        <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                    </div>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
+                                        <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <div class="summary-row" style="display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); margin-top:6px; font-size:18px;">
                                 <span>Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
                             </div>
-                            <?php if (!$invoice['organization_state'] || !$invoice['customer_state']): ?>
+                            <?php if ($hasGst && (!$invoice['organization_state'] || !$invoice['customer_state'])): ?>
                                 <p class="result-meta" style="margin-top:10px;">
                                     GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? 'your organization\'s' : 'this customer\'s' ?> state isn't set, so this couldn't be verified. Set it in <?= !$invoice['organization_state'] ? '<a href="/settings.php">Settings</a>' : '<a href="/customers.php?edit=' . (int) $invoice['customer_id'] . '">Customers</a>' ?> to switch to IGST automatically for inter-state sales.
                                 </p>
