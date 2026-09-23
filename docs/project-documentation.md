@@ -1,6 +1,6 @@
 # GarageOS — Project Documentation
 
-*A workshop & garage management system. Each customer runs their own independent instance on a cloud server they own, accessed from any browser on any device.*
+*A Garage Management System (GMS) — the industry term for auto repair shop management software, the same category as Autorox, GaragePlug, Shopmonkey, Tekmetric and Mitchell1 Manager SE. Each customer runs their own independent instance on a cloud server they own, accessed from any browser on any device.*
 
 `v0.2` · `2026-09-21` · Plain PHP 8.4 + PostgreSQL · Sister project: RetailOS · Author: shafivilayil2201@gmail.com
 
@@ -40,6 +40,11 @@ Its defining choices:
 - **Browser-only clients.** A shop PC, a phone and a tablet are all just browsers pointed at the customer's HTTPS domain. Nothing is installed on any device.
 - **Deliberately simple engineering.** Plain PHP, plain SQL, no framework, no build step, no JavaScript framework. One file per screen. This is a conscious trade for developer speed and ease of onboarding a new client, not an oversight.
 - **Time-to-value over feature count.** A service advisor should be raising job cards within ten minutes of first login.
+
+**What kind of product this is.** GarageOS is a **Garage Management System (GMS)** — sometimes called Auto Repair Shop Management Software, or Workshop Management System in the Indian/APAC market. That is the correct industry category, not "POS" or "an OS":
+- **Not a POS.** A point-of-sale system means scan-item → take-payment → print-receipt for retail. Invoicing is the *last* step of GarageOS's actual unit of work, the job card — which also covers vehicle intake, technician assignment, parts consumption against a specific repair, and status tracking through to delivery. A POS has no concept of any of that.
+- **Not literally an "OS".** The name follows the same convention as Salesforce or HubSpot naming themselves after the thing they manage — it is not a technical claim to be an operating system.
+- **Closer to a vertical SaaS/ERP.** GarageOS bundles operations (job cards), inventory & procurement (parts, purchases, suppliers), finance (invoicing, GST, P&L, dues) and HR (attendance, payroll) into one system — the defining trait of an ERP, just scoped to a single vertical (auto repair) rather than being horizontal like SAP or Oracle.
 
 ---
 
