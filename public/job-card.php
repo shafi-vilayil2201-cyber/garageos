@@ -33,7 +33,7 @@ $statement = $pdo->prepare("
     FROM job_cards jc
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
-    WHERE jc.id = :id AND jc.organization_id = :organization_id
+    WHERE jc.id = :id AND jc.organization_id = :organization_id AND jc.deleted_at IS NULL
 ");
 $statement->execute(['id' => $jobCardId, 'organization_id' => $organizationId]);
 $jobCard = $statement->fetch(PDO::FETCH_ASSOC);
@@ -570,6 +570,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
+
+    } elseif ($action === 'delete_job_card') {
+
+        require_permission($user, 'job_cards.manage');
+
+        $deleteError = soft_delete_job_card($pdo, $jobCard, $user, (bool) $invoice);
+
+        if ($deleteError) {
+            $error = $deleteError;
+            $errorAction = 'delete_job_card';
+        } else {
+            header('Location: /customer.php?id=' . (int) $jobCard['customer_id'] . '&deleted=' . urlencode($jobCard['job_no']));
+            exit;
+        }
     }
 }
 
@@ -967,6 +981,31 @@ $topbarTitle = $jobCard['job_no'];
                             <p class="stat-meta">Before tax — generate the invoice for the final amount.</p>
                         </div>
                     </div>
+
+                    <?php if ($canManageJobCards): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
+                                    Delete job card
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <?php if ($errorAction === 'delete_job_card' && $error): ?>
+                                    <div class="form-error" style="margin-bottom:12px;"><?= htmlspecialchars($error) ?></div>
+                                <?php endif; ?>
+                                <p class="result-meta" style="margin-bottom:12px;">
+                                    Removes <?= htmlspecialchars($jobCard['job_no']) ?> from the active board. It isn't erased —
+                                    it stays on <?= htmlspecialchars($jobCard['customer_name']) ?>'s profile and the Owner can restore it.
+                                </p>
+                                <form method="POST" action="" onsubmit="return confirm('Delete job card <?= htmlspecialchars(addslashes($jobCard['job_no'])) ?>? It can be restored later from the customer\'s profile.');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="delete_job_card">
+                                    <button type="submit" class="button danger"><?= icon('x', 16) ?> Delete job card</button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endif; ?>
 
                 </div>
 

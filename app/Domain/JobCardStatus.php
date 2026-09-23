@@ -87,3 +87,49 @@ function apply_job_card_status(PDO $pdo, array $jobCard, string $newStatus, int 
         'vehicle_id' => $jobCard['vehicle_id']
     ]);
 }
+
+// Soft delete — hides the job card from the kanban board, dashboard
+// counts and reminders without destroying it; it stays visible (and
+// restorable) from the customer's own profile, not a separate admin
+// area. Blocked once an invoice exists, matching the app's existing
+// rule that nothing about an invoiced job card can change after
+// billing (see $canRemoveLines in job-card.php) — returns an error
+// string instead of throwing, so the caller can show it inline the
+// same way every other business-rule rejection in this app works.
+function soft_delete_job_card(PDO $pdo, array $jobCard, array $user, bool $hasInvoice): ?string
+{
+    if ($hasInvoice) {
+        return 'This job card has an invoice and cannot be deleted — cancel or void the invoice first.';
+    }
+
+    $statement = $pdo->prepare("
+        UPDATE job_cards
+        SET deleted_at = CURRENT_TIMESTAMP, deleted_by = :deleted_by, updated_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+    ");
+    $statement->execute(['deleted_by' => $user['id'], 'id' => $jobCard['id']]);
+
+    log_audit_event(
+        $pdo, $user, 'delete', 'job_card', $jobCard['id'],
+        "Deleted job card {$jobCard['job_no']}"
+    );
+
+    return null;
+}
+
+// Owner-only at the call site (job_cards.restore permission) — see the
+// migration for why restoring is more restricted than deleting.
+function restore_job_card(PDO $pdo, array $jobCard, array $user): void
+{
+    $statement = $pdo->prepare("
+        UPDATE job_cards
+        SET deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+    ");
+    $statement->execute(['id' => $jobCard['id']]);
+
+    log_audit_event(
+        $pdo, $user, 'update', 'job_card', $jobCard['id'],
+        "Restored job card {$jobCard['job_no']}"
+    );
+}

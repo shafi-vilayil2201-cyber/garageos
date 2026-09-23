@@ -89,7 +89,9 @@ $statement = $pdo->prepare("
     SELECT jc.vehicle_id, v.customer_id, jc.created_at::date AS date, jc.odometer_in AS odometer
     FROM job_cards jc
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
-    WHERE jc.organization_id = :organization_id AND jc.odometer_in IS NOT NULL
+    WHERE jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
+      AND jc.odometer_in IS NOT NULL
     ORDER BY jc.vehicle_id, jc.created_at
 ");
 $statement->execute(['organization_id' => $organizationId]);
@@ -141,6 +143,7 @@ $statement = $pdo->prepare("
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
     WHERE jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
       AND jc.promised_at IS NOT NULL
       AND jc.promised_at < CURRENT_TIMESTAMP
       AND jc.status NOT IN ('delivered', 'cancelled')
@@ -160,6 +163,7 @@ $statement = $pdo->prepare("
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
     WHERE jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
       AND jc.promised_at IS NOT NULL
       AND jc.promised_at >= CURRENT_TIMESTAMP
       AND jc.promised_at < (CURRENT_DATE + INTERVAL '1 day')

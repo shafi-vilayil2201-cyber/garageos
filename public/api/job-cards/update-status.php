@@ -45,7 +45,7 @@ if (!$jobCardId || !in_array($newStatus, $boardStatuses, true)) {
     exit;
 }
 
-$statement = $pdo->prepare("SELECT * FROM job_cards WHERE id = :id AND organization_id = :organization_id");
+$statement = $pdo->prepare("SELECT * FROM job_cards WHERE id = :id AND organization_id = :organization_id AND deleted_at IS NULL");
 $statement->execute(['id' => $jobCardId, 'organization_id' => $user['organization_id']]);
 $jobCard = $statement->fetch(PDO::FETCH_ASSOC);
 

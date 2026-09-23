@@ -1340,16 +1340,30 @@ table.data-table {
 }
 
 .damage-mark-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
     border-bottom: 1px solid var(--border);
     padding: 5px 0;
     font-size: 12px;
 }
 
+.damage-mark-item strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .damage-mark-item span {
     color: var(--muted);
+}
+
+.damage-mark-item .damage-mark-number {
+    color: var(--primary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 .recorded-at-label {

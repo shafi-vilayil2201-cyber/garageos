@@ -80,6 +80,7 @@ if ($canManageJobCards) {
 $statement = $pdo->prepare("
     SELECT COUNT(*) FROM job_cards
     WHERE organization_id = :organization_id
+      AND deleted_at IS NULL
       AND status NOT IN ('delivered', 'cancelled')
 ");
 $statement->execute(['organization_id' => $organizationId]);
@@ -89,6 +90,7 @@ $openJobCards = (int) $statement->fetchColumn();
 $statement = $pdo->prepare("
     SELECT COUNT(*) FROM job_cards
     WHERE organization_id = :organization_id
+      AND deleted_at IS NULL
       AND closed_at::date = CURRENT_DATE
 ");
 $statement->execute(['organization_id' => $organizationId]);
@@ -158,6 +160,7 @@ $statement = $pdo->prepare("
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
     WHERE jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
     ORDER BY jc.created_at DESC
     LIMIT 6
 ");

@@ -30,7 +30,7 @@ $statement = $pdo->prepare("
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
     INNER JOIN customers c ON c.id = jc.customer_id
     INNER JOIN organizations o ON o.id = jc.organization_id
-    WHERE jc.id = :id AND jc.organization_id = :organization_id
+    WHERE jc.id = :id AND jc.organization_id = :organization_id AND jc.deleted_at IS NULL
 ");
 $statement->execute(['id' => $jobCardId, 'organization_id' => $organizationId]);
 $jobCard = $statement->fetch(PDO::FETCH_ASSOC);
@@ -69,6 +69,16 @@ $checkedAccessoryKeys = $statement->fetchAll(PDO::FETCH_COLUMN);
 $statement = $pdo->prepare("SELECT part_key, damage_type, x, y FROM job_card_damage_marks WHERE job_card_id = :job_card_id ORDER BY id");
 $statement->execute(['job_card_id' => $jobCardId]);
 $damageMarks = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$customerVoice = [];
+foreach (preg_split('/\r\n|\r|\n/', trim((string) $jobCard['customer_complaint'])) as $complaint) {
+    $complaint = trim($complaint);
+    $complaint = preg_replace('/^\d+\.\s*/', '', $complaint);
+
+    if ($complaint !== '') {
+        $customerVoice[] = $complaint;
+    }
+}
 
 $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $serviceLines))
     + array_sum(array_map(fn($l) => $l['quantity'] * $l['unit_price'] + $l['labour_charge'] * $l['labour_quantity'], $partLines));
@@ -144,35 +154,37 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
         </div>
     </div>
 
-    <?php if ($jobCard['customer_complaint']): ?>
-        <div class="section">
-            <h2>Customer complaint / request</h2>
-            <div class="section-box"><?= htmlspecialchars($jobCard['customer_complaint']) ?></div>
+    <?php if ($customerVoice): ?>
+        <div class="section customer-voice-section">
+            <h2>Customer voice</h2>
+            <div class="customer-voice-grid">
+                <?php foreach ($customerVoice as $index => $complaint): ?>
+                    <div class="customer-voice-item">
+                        <span class="customer-voice-number"><?= str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) ?></span>
+                        <span><?= htmlspecialchars($complaint) ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         </div>
     <?php endif; ?>
 
     <?php if (!empty($checkedAccessoryKeys) || !empty($damageMarks) || !empty($jobCard['damage_image_url'])): ?>
-        <div class="info-grid">
+        <div class="inspection-grid<?= empty($checkedAccessoryKeys) || (empty($damageMarks) && empty($jobCard['damage_image_url'])) ? ' inspection-grid-single' : '' ?>">
             <?php if (!empty($checkedAccessoryKeys)): ?>
-                <div class="info-block">
+                <div class="inspection-panel">
                     <h2>Accessories present</h2>
                     <?= accessory_checklist_display($checkedAccessoryKeys) ?>
                     <?= recorded_at_label($jobCard['accessories_recorded_at'], $jobCard['accessories_updated_at']) ?>
                 </div>
             <?php endif; ?>
-            <?php if (!empty($jobCard['damage_image_url'])): ?>
-                <div class="info-block" style="text-align:center;">
+            <?php if (!empty($damageMarks) || !empty($jobCard['damage_image_url'])): ?>
+                <div class="inspection-panel condition-panel">
                     <h2>Vehicle condition</h2>
-                    <div style="max-width:200px; margin:0 auto;">
+                    <?php if (!empty($jobCard['damage_image_url'])): ?>
+                        <div class="condition-figure">
                         <?= damage_image_display($jobCard['damage_image_url']) ?>
-                    </div>
-                    <?= damage_marks_display($damageMarks) ?>
-                    <?= recorded_at_label($jobCard['damage_recorded_at'], $jobCard['damage_updated_at']) ?>
-                </div>
-            <?php endif; ?>
-            <?php if (empty($jobCard['damage_image_url']) && !empty($damageMarks)): ?>
-                <div class="info-block">
-                    <h2>Vehicle condition</h2>
+                        </div>
+                    <?php endif; ?>
                     <?= damage_marks_display($damageMarks) ?>
                     <?= recorded_at_label($jobCard['damage_recorded_at'], $jobCard['damage_updated_at']) ?>
                 </div>
@@ -184,14 +196,18 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
         <div class="section">
             <h2>Services</h2>
             <table>
-                <tr><th>Service</th><th>Technician</th><th class="num">Price</th></tr>
-                <?php foreach ($serviceLines as $line): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($line['name']) ?></td>
-                        <td><?= htmlspecialchars($line['technician_name'] ?? '—') ?></td>
-                        <td class="num">₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
-                    </tr>
-                <?php endforeach; ?>
+                <thead>
+                    <tr><th>Service</th><th>Technician</th><th class="num">Price</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($serviceLines as $line): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($line['name']) ?></td>
+                            <td><?= htmlspecialchars($line['technician_name'] ?? '—') ?></td>
+                            <td class="num">₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
             </table>
         </div>
     <?php endif; ?>
@@ -200,23 +216,27 @@ $runningTotal = array_sum(array_map(fn($l) => $l['price'] - $l['discount'], $ser
         <div class="section">
             <h2>Parts used</h2>
             <table>
-                <tr><th>Part</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th></tr>
-                <?php foreach ($partLines as $line): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($line['name']) ?></td>
-                        <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
-                        <td class="num">₹<?= number_format($line['unit_price'], 2) ?></td>
-                        <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
-                    </tr>
-                    <?php if ($line['labour_charge'] > 0): ?>
-                        <?php $labourQty = (float) $line['labour_quantity']; ?>
-                        <tr class="labour-line">
-                            <td colspan="4">
-                                Labour<?= $labourQty != 1 ? ' ×' . rtrim(rtrim(number_format($labourQty, 2), '0'), '.') : '' ?><?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?> — ₹<?= number_format($line['labour_charge'] * $labourQty, 2) ?>
-                            </td>
+                <thead>
+                    <tr><th>Part</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($partLines as $line): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($line['name']) ?></td>
+                            <td class="num"><?= rtrim(rtrim(number_format($line['quantity'], 2), '0'), '.') ?></td>
+                            <td class="num">₹<?= number_format($line['unit_price'], 2) ?></td>
+                            <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
                         </tr>
-                    <?php endif; ?>
-                <?php endforeach; ?>
+                        <?php if ($line['labour_charge'] > 0): ?>
+                            <?php $labourQty = (float) $line['labour_quantity']; ?>
+                            <tr class="labour-line">
+                                <td colspan="4">
+                                    Labour<?= $labourQty != 1 ? ' ×' . rtrim(rtrim(number_format($labourQty, 2), '0'), '.') : '' ?><?= $line['technician_name'] ? ' — ' . htmlspecialchars($line['technician_name']) : '' ?> — ₹<?= number_format($line['labour_charge'] * $labourQty, 2) ?>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </tbody>
             </table>
         </div>
     <?php endif; ?>

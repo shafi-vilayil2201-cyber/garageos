@@ -56,14 +56,19 @@ $statement = $pdo->prepare("
         SELECT jci.technician_id, (jci.price - jci.discount) AS revenue
         FROM job_card_items jci
         INNER JOIN job_cards jc ON jc.id = jci.job_card_id
-        WHERE jc.organization_id = :organization_id AND jci.technician_id IS NOT NULL
+        WHERE jc.organization_id = :organization_id
+          AND jc.deleted_at IS NULL
+          AND jci.technician_id IS NOT NULL
 
         UNION ALL
 
         SELECT jcp.technician_id, (jcp.labour_charge * jcp.labour_quantity) AS revenue
         FROM job_card_parts jcp
         INNER JOIN job_cards jc ON jc.id = jcp.job_card_id
-        WHERE jc.organization_id = :organization_id2 AND jcp.technician_id IS NOT NULL AND jcp.labour_charge > 0
+        WHERE jc.organization_id = :organization_id2
+          AND jc.deleted_at IS NULL
+          AND jcp.technician_id IS NOT NULL
+          AND jcp.labour_charge > 0
     ) combined
     INNER JOIN users u ON u.id = combined.technician_id
     GROUP BY u.name
@@ -79,6 +84,7 @@ $statement = $pdo->prepare("
     INNER JOIN job_cards jc ON jc.id = jcp.job_card_id
     INNER JOIN parts p ON p.id = jcp.part_id
     WHERE jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
     GROUP BY p.name, p.unit
     ORDER BY quantity_used DESC
     LIMIT 10

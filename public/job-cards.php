@@ -103,6 +103,7 @@ $statement = $pdo->prepare("
     LEFT JOIN invoices inv ON inv.job_card_id = jc.id
     WHERE jc.organization_id = :organization_id
       AND jc.status NOT IN ('cancelled')
+      AND jc.deleted_at IS NULL
     ORDER BY jc.created_at DESC
 ");
 $statement->execute(['organization_id' => $organizationId]);
@@ -207,7 +208,12 @@ $topbarTitle = 'Job Cards';
                 <h1 class="page-title">Job Cards</h1>
 
                 <?php if ($canManageJobCards): ?>
-                    <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <?php if (user_can($user, 'job_cards.restore')): ?>
+                            <a href="/deleted-job-cards.php" class="button secondary"><?= icon('box', 16) ?> Deleted Job Cards</a>
+                        <?php endif; ?>
+                        <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
+                    </div>
                 <?php endif; ?>
             </div>
 

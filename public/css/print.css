@@ -1,6 +1,6 @@
 @page {
     size: A4;
-    margin: 15mm;
+    margin: 12mm;
 }
 
 * {
@@ -19,7 +19,7 @@ body {
         "Segoe UI",
         sans-serif;
     line-height: 1.45;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .no-print {
@@ -53,7 +53,7 @@ body {
     max-width: 210mm;
     margin: 0 auto;
     background: #ffffff;
-    padding: 16mm;
+    padding: 14mm;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
@@ -63,29 +63,29 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 20px;
-    padding-bottom: 14px;
+    gap: 18px;
+    padding-bottom: 10px;
     border-bottom: 2px solid #1c1a17;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 
 .org-logo {
     display: block;
-    max-height: 56px;
-    margin-bottom: 8px;
+    max-height: 46px;
+    margin-bottom: 5px;
 }
 
 .org-name {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     letter-spacing: -0.3px;
 }
 
 .org-meta {
-    margin-top: 4px;
+    margin-top: 3px;
     color: #6b6660;
-    font-size: 12px;
-    line-height: 1.6;
+    font-size: 10.5px;
+    line-height: 1.4;
 }
 
 .doc-title {
@@ -94,20 +94,20 @@ body {
 
 .doc-title h1 {
     margin: 0;
-    font-size: 18px;
+    font-size: 17px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 
 .doc-title .job-no {
     margin-top: 4px;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
 }
 
 .doc-title .job-date {
     margin-top: 2px;
-    font-size: 12px;
+    font-size: 10.5px;
     color: #6b6660;
 }
 
@@ -144,8 +144,8 @@ body {
 .info-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 18px;
+    gap: 22px;
+    margin-bottom: 14px;
 }
 
 .info-block h2 {
@@ -176,12 +176,14 @@ body {
 .info-row .value {
     font-weight: 600;
     text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* Sections */
 
 .section {
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 
 .section h2 {
@@ -201,6 +203,32 @@ body {
     white-space: pre-line;
 }
 
+.customer-voice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 22px;
+    border-top: 1px solid #e5e3dd;
+}
+
+.customer-voice-item {
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr);
+    gap: 7px;
+    min-width: 0;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0efeb;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.customer-voice-number,
+.damage-mark-number {
+    color: #c2660a;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
 /* Accessories checklist and damage diagram — same classes/markup as
    app.css's read-only variants (see app/View/JobCardIntakeExtras.php,
    app/Domain/Accessory.php), duplicated here since this print sheet
@@ -208,11 +236,14 @@ body {
 .checkbox-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4px 16px;
+    gap: 3px 16px;
 }
 
 .checkbox-grid-item {
-    font-size: 11.5px;
+    min-width: 0;
+    font-size: 10.5px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
 }
 
 .checkbox-grid-readonly .checkbox-grid-item {
@@ -226,29 +257,77 @@ body {
 
 .damage-image-readonly {
     width: 100%;
-    max-width: 200px;
+    max-width: 175px;
+    height: auto;
     display: block;
     margin: 0 auto;
 }
 
+.inspection-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+    margin-bottom: 14px;
+}
+
+.inspection-grid-single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.inspection-panel {
+    min-width: 0;
+}
+
+.inspection-panel h2 {
+    margin: 0 0 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b6660;
+}
+
+.condition-panel {
+    text-align: center;
+}
+
+.condition-figure {
+    width: 175px;
+    max-width: 100%;
+    margin: 0 auto 8px;
+}
+
 .damage-mark-list {
     display: grid;
-    gap: 3px;
+    gap: 0;
     margin-top: 8px;
     text-align: left;
 }
 
 .damage-mark-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
     border-bottom: 1px solid #e5e3dd;
-    padding: 4px 0;
-    font-size: 11px;
+    padding: 5px 0;
+    font-size: 10.5px;
+    line-height: 1.3;
+}
+
+.damage-mark-item strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .damage-mark-item span {
     color: #6b6660;
+}
+
+.damage-mark-item .damage-mark-number {
+    color: #c2660a;
 }
 
 .recorded-at-label {
@@ -262,6 +341,20 @@ table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12.5px;
+    page-break-inside: auto;
+}
+
+thead {
+    display: table-header-group;
+}
+
+tbody {
+    display: table-row-group;
+}
+
+tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 
 th {
@@ -275,7 +368,7 @@ th {
 }
 
 td {
-    padding: 7px 8px;
+    padding: 6px 8px;
     border-bottom: 1px solid #f0efeb;
 }
 
@@ -298,6 +391,8 @@ td {
     padding: 10px 8px 0;
     font-size: 14px;
     font-weight: 700;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 
 /* Invoice totals box */
@@ -351,6 +446,8 @@ td {
     font-size: 11.5px;
     color: #3a362f;
     text-align: justify;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 
 .signatures {
@@ -358,6 +455,8 @@ td {
     justify-content: space-between;
     gap: 40px;
     margin-top: 44px;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 
 .signature-block {
@@ -386,5 +485,13 @@ td {
         box-shadow: none;
         padding: 0;
         max-width: none;
+    }
+
+    .letterhead,
+    .info-grid,
+    .customer-voice-section,
+    .inspection-grid {
+        page-break-inside: avoid;
+        break-inside: avoid;
     }
 }

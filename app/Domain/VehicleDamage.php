@@ -75,6 +75,7 @@ function damage_marks_display(array $marks): string
 
     $html = '<div class="damage-mark-list">';
 
+    $number = 1;
     foreach ($marks as $mark) {
         $partKey = (string) ($mark['part_key'] ?? '');
         $type = (string) ($mark['damage_type'] ?? '');
@@ -84,9 +85,11 @@ function damage_marks_display(array $marks): string
         }
 
         $html .= '<div class="damage-mark-item">'
+            . '<span class="damage-mark-number">' . str_pad((string) $number, 2, '0', STR_PAD_LEFT) . '</span>'
             . '<strong>' . htmlspecialchars(VEHICLE_DAMAGE_PARTS[$partKey]['label']) . '</strong>'
             . '<span>' . htmlspecialchars(VEHICLE_DAMAGE_TYPES[$type]) . '</span>'
             . '</div>';
+        $number++;
     }
 
     return $html . '</div>';

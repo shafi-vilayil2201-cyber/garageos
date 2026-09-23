@@ -133,6 +133,7 @@ try {
         ['Dashboard', 'dashboard.view'],
         ['View job cards', 'job_cards.view'],
         ['Manage job cards', 'job_cards.manage'],
+        ['Restore job cards', 'job_cards.restore'],
         ['View invoices', 'invoices.view'],
         ['Manage invoices', 'invoices.manage'],
         ['View customers', 'customers.view'],

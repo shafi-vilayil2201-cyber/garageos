@@ -24,7 +24,7 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
 // A section label only renders when at least one link inside it will be
 // visible — an empty "Operations" heading with nothing under it is clutter,
 // not navigation, for a restricted role like Technician.
-$showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
+$showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'job_cards.restore') || user_can($user, 'parts.view');
 $showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'suppliers.view');
 $showHR = user_can($user, 'attendance.manage');
 
@@ -121,6 +121,10 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
                     <?php nav_link('/job-cards.php', 'job_cards', $activeNav, 'job-card', 'Job Cards'); ?>
                     <?php nav_link('/appointments.php', 'appointments', $activeNav, 'calendar', 'Appointments'); ?>
                     <?php nav_link('/reminders.php', 'reminders', $activeNav, 'bell', 'Reminders'); ?>
+                <?php endif; ?>
+
+                <?php if (user_can($user, 'job_cards.restore')): ?>
+                    <?php nav_link('/deleted-job-cards.php', 'deleted_job_cards', $activeNav, 'box', 'Deleted Job Cards'); ?>
                 <?php endif; ?>
 
                 <?php if (user_can($user, 'parts.view')): ?>

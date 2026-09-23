@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -18,6 +19,7 @@ require_permission($user, 'customers.view');
 
 $organizationId = $user['organization_id'];
 $canManageJobCards = user_can($user, 'job_cards.manage');
+$canRestoreJobCards = user_can($user, 'job_cards.restore');
 $customerId = (int) ($_GET['id'] ?? 0);
 
 $statement = $pdo->prepare("
@@ -30,6 +32,34 @@ $customer = $statement->fetch(PDO::FETCH_ASSOC);
 
 if (!$customer) {
     header('Location: /customers.php');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'restore_job_card') {
+    require_permission($user, 'job_cards.restore');
+    csrf_verify();
+
+    $restoreJobCardId = (int) ($_POST['job_card_id'] ?? 0);
+    $statement = $pdo->prepare("
+        SELECT id, job_no, customer_id
+        FROM job_cards
+        WHERE id = :id
+          AND customer_id = :customer_id
+          AND organization_id = :organization_id
+          AND deleted_at IS NOT NULL
+    ");
+    $statement->execute([
+        'id' => $restoreJobCardId,
+        'customer_id' => $customerId,
+        'organization_id' => $organizationId
+    ]);
+    $deletedJobCard = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if ($deletedJobCard) {
+        restore_job_card($pdo, $deletedJobCard, $user);
+    }
+
+    header('Location: /customer.php?id=' . $customerId);
     exit;
 }
 
@@ -48,12 +78,32 @@ $statement = $pdo->prepare("
            v.registration_no, v.make, v.model
     FROM job_cards jc
     INNER JOIN vehicles v ON v.id = jc.vehicle_id
-    WHERE jc.customer_id = :customer_id AND jc.organization_id = :organization_id
+    WHERE jc.customer_id = :customer_id
+      AND jc.organization_id = :organization_id
+      AND jc.deleted_at IS NULL
     ORDER BY jc.created_at DESC
     LIMIT 50
 ");
 $statement->execute(['customer_id' => $customerId, 'organization_id' => $organizationId]);
 $jobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$deletedJobCards = [];
+if ($canRestoreJobCards) {
+    $statement = $pdo->prepare("
+        SELECT jc.id, jc.job_no, jc.status, jc.created_at, jc.deleted_at,
+               v.registration_no, v.make, v.model, u.name AS deleted_by_name
+        FROM job_cards jc
+        INNER JOIN vehicles v ON v.id = jc.vehicle_id
+        LEFT JOIN users u ON u.id = jc.deleted_by
+        WHERE jc.customer_id = :customer_id
+          AND jc.organization_id = :organization_id
+          AND jc.deleted_at IS NOT NULL
+        ORDER BY jc.deleted_at DESC
+        LIMIT 50
+    ");
+    $statement->execute(['customer_id' => $customerId, 'organization_id' => $organizationId]);
+    $deletedJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
+}
 
 $statement = $pdo->prepare("
     SELECT i.id, i.invoice_no, i.status, i.total, i.amount_paid, i.created_at,
@@ -172,6 +222,48 @@ $topbarTitle = $customer['name'];
                             <?php endif; ?>
                         </div>
                     </div>
+
+                    <?php if ($canRestoreJobCards && !empty($deletedJobCards)): ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-header-title">
+                                    <span class="icon-badge"><?= icon('box', 15) ?></span>
+                                    Deleted Job Cards
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <tr><th>Job Card</th><th>Vehicle</th><th>Deleted</th><th></th></tr>
+                                        <?php foreach ($deletedJobCards as $jobCard): ?>
+                                            <tr>
+                                                <td>
+                                                    <strong><?= htmlspecialchars($jobCard['job_no']) ?></strong>
+                                                    <div class="result-meta"><?= htmlspecialchars(str_replace('_', ' ', $jobCard['status'])) ?></div>
+                                                </td>
+                                                <td>
+                                                    <?= htmlspecialchars($jobCard['registration_no']) ?>
+                                                    <div class="result-meta"><?= htmlspecialchars($jobCard['make'] . ' ' . $jobCard['model']) ?></div>
+                                                </td>
+                                                <td>
+                                                    <?= htmlspecialchars(date('d M Y, h:i A', strtotime($jobCard['deleted_at']))) ?>
+                                                    <div class="result-meta"><?= htmlspecialchars($jobCard['deleted_by_name'] ?? 'Unknown') ?></div>
+                                                </td>
+                                                <td>
+                                                    <form method="POST" action="" onsubmit="return confirm('Restore job card <?= htmlspecialchars(addslashes($jobCard['job_no'])) ?>?');">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="restore_job_card">
+                                                        <input type="hidden" name="job_card_id" value="<?= (int) $jobCard['id'] ?>">
+                                                        <button type="submit" class="button secondary sm"><?= icon('check', 13) ?> Restore</button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
 
                     <div class="card">
                         <div class="card-header">
