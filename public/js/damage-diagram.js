@@ -17,6 +17,9 @@ function initDamageDiagram(prefix)
         { key: 'windshield', label: 'Windshield', group: 'Front', d: 'M178 554 Q280 578 382 554 L390 624 Q280 654 170 624 Z', x: 280, y: 603 },
         { key: 'bonnet', label: 'Bonnet', group: 'Front', d: 'M170 635 Q280 665 390 635 L397 702 L163 702 Z', x: 280, y: 670 },
         { key: 'front_bumper', label: 'Front bumper', group: 'Front', d: 'M164 705 L396 705 L401 728 Q414 746 411 775 Q407 797 390 800 L170 800 Q153 797 149 775 Q146 746 159 728 Z', x: 280, y: 756 },
+        { key: 'front_left_headlight', label: 'Front left headlight', group: 'Front', d: 'M164 676 Q178 665 197 671 L202 701 L166 701 Z', x: 183, y: 687 },
+        { key: 'front_right_headlight', label: 'Front right headlight', group: 'Front', d: 'M396 676 Q382 665 363 671 L358 701 L394 701 Z', x: 377, y: 687 },
+        { key: 'front_grille', label: 'Front grille', group: 'Front', d: 'M205 706 L355 706 L365 725 L195 725 Z', x: 280, y: 716 },
 
         { key: 'rear_left_quarter_panel', label: 'Rear left quarter panel', group: 'Rear', d: 'M39 106 Q69 94 99 105 L126 122 L132 177 L119 178 Q107 153 80 153 L40 163 Z M40 255 L119 255 Q129 239 132 223 L132 280 L105 289 L40 276 Z', x: 92, y: 128 },
         { key: 'rear_right_quarter_panel', label: 'Rear right quarter panel', group: 'Rear', d: 'M521 106 Q491 94 461 105 L434 122 L428 177 L441 178 Q453 153 480 153 L520 163 Z M520 255 L441 255 Q431 239 428 223 L428 280 L455 289 L520 276 Z', x: 468, y: 128 },
@@ -28,10 +31,16 @@ function initDamageDiagram(prefix)
         { key: 'front_right_fender', label: 'Front right fender', group: 'Front', d: 'M528 503 L464 504 Q441 515 428 554 L428 686 Q442 698 461 696 L461 677 Q442 667 442 642 L449 606 Q459 580 481 570 L528 563 Z', x: 488, y: 640 },
         { key: 'front_left_mirror', label: 'Front left mirror', group: 'Front', d: 'M169 300 Q181 295 190 309 L193 329 Q188 342 176 339 L168 329 Z', x: 180, y: 320 },
         { key: 'front_right_mirror', label: 'Front right mirror', group: 'Front', d: 'M391 300 Q379 295 370 309 L367 329 Q372 342 384 339 L392 329 Z', x: 380, y: 320 },
+        { key: 'left_side_skirt', label: 'Left side skirt', group: 'Side', d: 'M101 400 L132 402 L132 554 L101 558 L108 535 L114 510 L114 435 Z', x: 116, y: 480 },
+        { key: 'right_side_skirt', label: 'Right side skirt', group: 'Side', d: 'M459 400 L428 402 L428 554 L459 558 L452 535 L446 510 L446 435 Z', x: 444, y: 480 },
+        { key: 'fuel_door', label: 'Fuel door', group: 'Side', d: 'M105 266 Q116 260 126 266 L126 287 Q116 293 105 287 Z', x: 116, y: 276 },
         { key: 'rear_left_wheel', label: 'Rear left wheel', group: 'Rear', d: 'M64 164 A45 45 0 1 1 63.9 254 A45 45 0 1 1 64 164 Z', x: 64, y: 209 },
         { key: 'rear_right_wheel', label: 'Rear right wheel', group: 'Rear', d: 'M496 164 A45 45 0 1 1 495.9 254 A45 45 0 1 1 496 164 Z', x: 496, y: 209 },
         { key: 'front_left_wheel', label: 'Front left wheel', group: 'Front', d: 'M64 512 A45 45 0 1 1 63.9 602 A45 45 0 1 1 64 512 Z', x: 64, y: 557 },
-        { key: 'front_right_wheel', label: 'Front right wheel', group: 'Front', d: 'M496 512 A45 45 0 1 1 495.9 602 A45 45 0 1 1 496 512 Z', x: 496, y: 557 }
+        { key: 'front_right_wheel', label: 'Front right wheel', group: 'Front', d: 'M496 512 A45 45 0 1 1 495.9 602 A45 45 0 1 1 496 512 Z', x: 496, y: 557 },
+        { key: 'rear_left_tail_light', label: 'Rear left tail light', group: 'Rear', d: 'M166 112 L205 112 L205 139 L166 139 Z', x: 185, y: 125 },
+        { key: 'rear_right_tail_light', label: 'Rear right tail light', group: 'Rear', d: 'M394 112 L355 112 L355 139 L394 139 Z', x: 375, y: 125 },
+        { key: 'rear_hatch', label: 'Rear hatch / tailgate', group: 'Rear', d: 'M207 109 L353 109 L360 218 Q280 231 200 218 Z', x: 280, y: 165 }
     ];
 
     const el = id => document.getElementById(`${prefix}-${id}`);
