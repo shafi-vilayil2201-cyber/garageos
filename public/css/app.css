@@ -511,17 +511,33 @@ textarea:focus-visible,
     display: none;
 }
 
+/* A gradient disc + soft ring in the brand's own orange, rather than a
+   flat grey circle — same "ring around a portrait" language as most
+   modern account avatars, just built from --primary instead of a
+   generic blue so it reads as this app's, not a borrowed one. */
 .avatar {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
-    background: #ece9e4;
+    background: linear-gradient(145deg, #e08a2f, var(--primary) 55%, var(--primary-dark));
     display: grid;
     place-items: center;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
     border: none;
     cursor: pointer;
+    box-shadow:
+        0 0 0 3px var(--primary-soft),
+        0 3px 8px rgba(156, 81, 8, 0.35);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.avatar:hover {
+    box-shadow:
+        0 0 0 3px var(--primary-soft),
+        0 5px 14px rgba(156, 81, 8, 0.45);
+    transform: translateY(-1px);
 }
 
 /* Account dropdown (topbar avatar) — anchored floating menu, distinct
