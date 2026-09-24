@@ -227,3 +227,4 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
 <script src="/js/modal.js"></script>
 <script src="/js/toast.js"></script>
 <script src="/js/confirm-modal.js"></script>
+<script src="/js/date-picker-click.js"></script>
