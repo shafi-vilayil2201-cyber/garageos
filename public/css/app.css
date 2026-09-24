@@ -514,12 +514,19 @@ textarea:focus-visible,
 /* A gradient disc + soft ring in the brand's own orange, rather than a
    flat grey circle — same "ring around a portrait" language as most
    modern account avatars, just built from --primary instead of a
-   generic blue so it reads as this app's, not a borrowed one. */
+   generic blue so it reads as this app's, not a borrowed one. The
+   radial-gradient layered on top of the linear one is a glossy
+   top-left highlight — the classic trick for making a flat CSS circle
+   read as a lit sphere instead of a painted disc — and since it's a
+   background layer, the person icon (real content) still paints above
+   it with no z-index juggling needed. */
 .avatar {
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    background: linear-gradient(145deg, #e08a2f, var(--primary) 55%, var(--primary-dark));
+    background:
+        radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55), transparent 55%),
+        linear-gradient(145deg, #e08a2f, var(--primary) 55%, var(--primary-dark));
     display: grid;
     place-items: center;
     font-size: 14px;
@@ -531,6 +538,12 @@ textarea:focus-visible,
         0 0 0 3px var(--primary-soft),
         0 3px 8px rgba(156, 81, 8, 0.35);
     transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.avatar svg {
+    fill: rgba(255, 255, 255, 0.95);
+    stroke: none;
+    filter: drop-shadow(0 1px 1.5px rgba(120, 60, 0, 0.35));
 }
 
 .avatar:hover {

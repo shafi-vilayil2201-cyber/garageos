@@ -3,8 +3,6 @@
 // Expects $user to be set by the including page. $topbarTitle is no
 // longer shown here — each page's own <h1 class="page-title"> in the
 // body is the one place the page name is displayed now.
-$initial = strtoupper(substr($user['name'], 0, 1));
-
 ?>
 <header class="topbar">
 
@@ -31,7 +29,7 @@ $initial = strtoupper(substr($user['name'], 0, 1));
         <div class="user-menu-trigger" id="user-menu-trigger">
             <button type="button" class="avatar" id="user-menu-button"
                     aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
-                <?= htmlspecialchars($initial) ?>
+                <?= icon('person', 20) ?>
             </button>
 
             <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
