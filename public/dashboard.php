@@ -348,7 +348,7 @@ $topbarTitle = 'Dashboard';
 
             <div class="content-grid">
 
-                <div class="card">
+                <div class="card" id="recent-job-cards">
                     <div class="card-header">
                         <div class="card-header-title">
                             <span class="icon-badge"><?= icon('job-card', 15) ?></span>
@@ -389,7 +389,7 @@ $topbarTitle = 'Dashboard';
                                     <?php endforeach; ?>
                                 </table>
                             </div>
-                            <?= render_numbered_pagination($recentJobCardsPage, $recentJobCardsPages, 'recent_page') ?>
+                            <?= render_numbered_pagination($recentJobCardsPage, $recentJobCardsPages, 'recent_page', [], 'recent-job-cards') ?>
                         <?php endif; ?>
                     </div>
                 </div>

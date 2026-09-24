@@ -753,6 +753,14 @@ textarea:focus-visible,
     margin-top: 20px;
 }
 
+/* Paging through Recent job cards jumps back to #recent-job-cards
+   (see render_numbered_pagination()'s $fragment) instead of the page
+   top — scroll-margin-top keeps that landing spot clear of the sticky
+   topbar (58px) instead of tucking the card header behind it. */
+#recent-job-cards {
+    scroll-margin-top: 74px;
+}
+
 /* Settings: each card sizes to its own content instead of stretching
    to match its row's tallest neighbor, and wraps to fewer columns —
    down to one on narrow screens — instead of a fixed column count. */

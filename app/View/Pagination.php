@@ -66,14 +66,20 @@ function render_pagination(int $page, int $totalRows, int $perPage = PAGINATION_
 // small enough to fit page-number buttons in one row instead of the
 // "Page X of Y" shorthand above. $paramName lets more than one of
 // these live on the same page without their query params colliding.
-function render_numbered_pagination(int $page, int $totalPages, string $paramName, array $extraParams = []): string
+// $fragment (an element id, no leading #) lands the browser back on
+// that widget after the page reloads, rather than at the very top —
+// without it, paging through a card partway down the page means
+// scrolling back down to it after every click.
+function render_numbered_pagination(int $page, int $totalPages, string $paramName, array $extraParams = [], string $fragment = ''): string
 {
     if ($totalPages <= 1) {
         return '';
     }
 
-    $buildUrl = function (int $targetPage) use ($paramName, $extraParams): string {
-        return '?' . http_build_query(array_merge($extraParams, [$paramName => $targetPage]));
+    $suffix = $fragment !== '' ? '#' . $fragment : '';
+
+    $buildUrl = function (int $targetPage) use ($paramName, $extraParams, $suffix): string {
+        return '?' . http_build_query(array_merge($extraParams, [$paramName => $targetPage])) . $suffix;
     };
 
     // Always show the first and last page plus a window around the
