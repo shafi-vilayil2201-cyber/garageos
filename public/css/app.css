@@ -2309,6 +2309,27 @@ body.kanban-touch-dragging {
     overflow-y: auto;
 }
 
+/* A submit button that floats above a long modal form instead of
+   sitting at the end of it — for forms inside .modal-body whose content
+   (e.g. the accessories checklist, the damage diagram) can run taller
+   than the modal, so the button stays reachable without scrolling all
+   the way down. Only the button itself is interactive: the sticky row
+   has no background/padding of its own, so it doesn't eat into the
+   content width or block clicks on whatever scrolls underneath it. */
+.actions-float {
+    position: sticky;
+    bottom: 14px;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+    pointer-events: none;
+}
+
+.actions-float .button {
+    pointer-events: auto;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
 /* Responsive
    Three tiers: desktop (>=1024px, untouched baseline), tablet
    (768-1023px, same layout as desktop but with an optional manual

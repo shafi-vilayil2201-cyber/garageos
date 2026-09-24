@@ -1145,7 +1145,7 @@ $topbarTitle = $jobCard['job_no'];
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="update_accessories">
                     <?= accessory_intake_block($checkedAccessoryKeys) ?>
-                    <div class="actions">
+                    <div class="actions actions-float">
                         <button type="submit" class="button"><?= icon('check', 16) ?> Save accessories</button>
                     </div>
                 </form>
@@ -1167,7 +1167,7 @@ $topbarTitle = $jobCard['job_no'];
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="update_damage">
                     <?= damage_intake_block('adddamage', $damageMarks) ?>
-                    <div class="actions">
+                    <div class="actions actions-float">
                         <button type="submit" class="button"><?= icon('check', 16) ?> Save condition</button>
                     </div>
                 </form>
