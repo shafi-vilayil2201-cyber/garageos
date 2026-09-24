@@ -27,10 +27,13 @@
         </div>
 
         <div class="user-menu-trigger" id="user-menu-trigger">
+            <!-- The little "person" figure is drawn entirely in CSS
+                 (.avatar::before/::after in app.css) as two shaded
+                 spheres rather than a flat icon, for a glossy 3D look
+                 — aria-label below covers accessibility, so there's no
+                 visible-content requirement on the button itself. -->
             <button type="button" class="avatar" id="user-menu-button"
-                    aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
-                <?= icon('person', 28) ?>
-            </button>
+                    aria-haspopup="true" aria-expanded="false" aria-label="Account menu"></button>
 
             <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
                 <a href="/profile.php" class="user-menu-item"><?= icon('person', 15) ?> Profile</a>

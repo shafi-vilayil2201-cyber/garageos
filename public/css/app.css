@@ -513,18 +513,20 @@ textarea:focus-visible,
 
 /* A white disc with a soft ring, rather than a flat grey circle —
    same "ring around a portrait" language as most modern account
-   avatars. The person icon inside is a solid yellow (the same yellow
-   as the Quality Check status elsewhere), so it reads as a deliberate
-   accent color against the white, not just leftover default black. */
+   avatars. The little figure inside isn't an icon at all: ::before is
+   a head, ::after is the shoulders, each its own radial-gradient
+   sphere (bright highlight, gold midtone, brown-shadow edge) so they
+   read as lit, glossy 3D shapes — like the rounded-plastic avatar
+   glyphs this was modeled on — rather than a flat silhouette. overflow:
+   hidden clips the shoulders piece to the circle for free, so it
+   doesn't need its own precise curve. */
 .avatar {
     width: 38px;
     height: 38px;
     border-radius: 50%;
     background: #ffffff;
-    display: grid;
-    place-items: center;
-    font-size: 14px;
-    font-weight: 700;
+    position: relative;
+    overflow: hidden;
     border: none;
     cursor: pointer;
     box-shadow:
@@ -533,10 +535,28 @@ textarea:focus-visible,
     transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.avatar svg {
-    fill: #eab308;
-    stroke: none;
-    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.15));
+.avatar::before,
+.avatar::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: radial-gradient(circle at 33% 28%, #fef08a, #eab308 55%, #a16207 100%);
+    box-shadow: inset 0 -2px 3px rgba(161, 98, 7, 0.45);
+}
+
+.avatar::before {
+    top: 6px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+}
+
+.avatar::after {
+    bottom: -4px;
+    width: 30px;
+    height: 20px;
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
 }
 
 .avatar:hover {
