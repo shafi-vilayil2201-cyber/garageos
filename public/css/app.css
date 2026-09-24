@@ -862,6 +862,11 @@ textarea:focus-visible,
 .page:has(.kanban) {
     display: flex;
     flex-direction: column;
+    /* Trimmed from the global 32px, same reasoning as the top-padding
+       override further down — every px reclaimed here goes straight
+       into .kanban-column's height instead of sitting empty below the
+       Deleted Job Cards link. */
+    padding-bottom: 20px;
 }
 
 /* A quiet utility link below the kanban board — kept out of the page
@@ -874,7 +879,7 @@ textarea:focus-visible,
 
 .page:has(.kanban) .page-footer-links {
     margin-top: auto;
-    padding-top: 18px;
+    padding-top: 10px;
 }
 
 .page-footer-link {
@@ -1787,8 +1792,8 @@ table.data-table {
     border-radius: var(--radius);
     border-top: 3px solid transparent;
     padding: 14px;
-    height: calc(100vh - 276px);
-    min-height: 450px;
+    height: calc(100vh - 254px);
+    min-height: 470px;
     box-sizing: border-box;
     /* Grid's automatic row sizing otherwise uses the column's un-clipped
        *content* height (the full card stack, ignoring the scrollable
