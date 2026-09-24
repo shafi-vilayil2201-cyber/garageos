@@ -243,12 +243,35 @@ $topbarTitle = 'Dashboard';
             <div class="page-header">
                 <div>
                     <h1 class="page-title">
-                        Good day, <?= htmlspecialchars($user['name']) ?>
+                        <span id="greeting-word">Good day</span>, <?= htmlspecialchars($user['name']) ?> <span aria-hidden="true">👋🏻</span>
                     </h1>
                     <p class="page-description">
                         Here's what's happening at your workshop today.
                     </p>
                 </div>
+
+                <script>
+                    // Computed from the visitor's own clock, not the server's —
+                    // the server (a UTC VM) has no idea what time it actually is
+                    // at the workshop. "Good day" above is the no-JS fallback.
+                    (function () {
+                        var greetingWord = document.getElementById('greeting-word');
+                        var hour = new Date().getHours();
+                        var greeting = 'Good day';
+
+                        if (hour >= 5 && hour < 12) {
+                            greeting = 'Good morning';
+                        } else if (hour >= 12 && hour < 17) {
+                            greeting = 'Good afternoon';
+                        } else if (hour >= 17 && hour < 21) {
+                            greeting = 'Good evening';
+                        } else {
+                            greeting = 'Good night';
+                        }
+
+                        greetingWord.textContent = greeting;
+                    })();
+                </script>
 
                 <?php if ($canManageJobCards): ?>
                     <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
