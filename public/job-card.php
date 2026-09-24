@@ -1012,8 +1012,8 @@ $topbarTitle = $jobCard['job_no'];
                                     <div class="form-error" style="margin-bottom:12px;"><?= htmlspecialchars($error) ?></div>
                                 <?php endif; ?>
                                 <p class="result-meta" style="margin-bottom:12px;">
-                                    <?= htmlspecialchars($jobCard['job_no']) ?> will be removed from the board. It's not deleted — you
-                                    can find and restore it from <?= htmlspecialchars($jobCard['customer_name']) ?>'s customer page.
+                                    <!-- <?= htmlspecialchars($jobCard['job_no']) ?> will be removed from the board. It's not deleted — you
+                                    can find and restore it from <?= htmlspecialchars($jobCard['customer_name']) ?>'s customer page. -->
                                 </p>
                                 <form method="POST" action=""
                                       data-confirm="<?= htmlspecialchars($jobCard['job_no'], ENT_QUOTES) ?> will be removed from the board. It's not deleted — you can find and restore it from <?= htmlspecialchars($jobCard['customer_name'], ENT_QUOTES) ?>'s customer page."
