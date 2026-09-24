@@ -397,6 +397,10 @@ textarea:focus-visible,
     background-size: 28px 28px;
     background-position: -6px -6px;
     background-color: var(--bg);
+    /* Anchored to the viewport rather than scrolling with the page's
+       content, like the sidebar (position: fixed) already is — the
+       canvas stays put underneath whatever scrolls over it. */
+    background-attachment: fixed;
 }
 
 /* Top bar */

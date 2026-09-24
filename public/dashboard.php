@@ -243,7 +243,7 @@ $topbarTitle = 'Dashboard';
             <div class="page-header">
                 <div>
                     <h1 class="page-title">
-                        <span id="greeting-word">Good day</span>, <?= htmlspecialchars($user['name']) ?> <span aria-hidden="true">👋🏻</span>
+                        <span id="greeting-word">Good day</span>, <?= htmlspecialchars($user['name']) ?> <span aria-hidden="true">👋</span>
                     </h1>
                     <p class="page-description">
                         Here's what's happening at your workshop today.
