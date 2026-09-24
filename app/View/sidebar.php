@@ -28,7 +28,7 @@ function nav_link(string $href, string $key, string $activeNav, string $iconName
 // not navigation, for a restricted role like Technician.
 $showWorkspace = user_can($user, 'dashboard.view') || user_can($user, 'job_cards.view') || user_can($user, 'parts.view');
 $showOperations = user_can($user, 'customers.view') || user_can($user, 'vehicles.view') || user_can($user, 'suppliers.view');
-$showHR = user_can($user, 'attendance.manage');
+$showHR = user_can($user, 'attendance.manage') || user_can($user, 'users.manage');
 
 // Purchases and Payroll live here now, alongside the new Finance pages
 // — the group shows if any one child would be visible, exactly like
@@ -160,6 +160,10 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
                 <div class="nav-label">
                     HR
                 </div>
+
+                <?php if (user_can($user, 'users.manage')): ?>
+                    <?php nav_link('/employees.php', 'employees', $activeNav, 'team', 'Employees'); ?>
+                <?php endif; ?>
 
                 <?php if (user_can($user, 'attendance.manage')): ?>
                     <?php nav_link('/attendance.php', 'attendance', $activeNav, 'calendar', 'Attendance'); ?>

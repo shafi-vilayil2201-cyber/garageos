@@ -824,6 +824,81 @@ textarea:focus-visible,
     gap: 28px;
 }
 
+/* A .card that's also a plain navigation link (e.g. an employee card in
+   .settings-grid on employees.php) — same box as .card, just clickable
+   as a whole instead of needing a separate "View" link inside it. */
+.card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.card-link:hover {
+    box-shadow: var(--shadow), 0 8px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+/* Same idea as .card-link, but for a <button class="card"> that opens
+   a modal instead of navigating (the payroll cards) — resets the
+   native button chrome so it reads as a plain card, not a button. */
+button.card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    padding: 0;
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+button.card:hover {
+    box-shadow: var(--shadow), 0 8px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+.employee-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.employee-card-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.employee-card-top .icon-badge {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--surface-sunken);
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.employee-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+.employee-card-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
 .settings-section-title {
     margin: 0 0 14px;
     font-size: 12px;
@@ -1746,6 +1821,33 @@ table.data-table {
     margin-top: 4px;
     color: var(--muted);
     font-size: 12px;
+}
+
+/* A "label: value" row inside a card — print.css has had this for
+   invoice/job-card print sheets since the start, but nothing in the
+   main app stylesheet did until a profile-style detail card needed it
+   here (see employee.php's Contact/Payroll cards). */
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row .label {
+    color: var(--muted);
+}
+
+.info-row .value {
+    font-weight: 600;
+    text-align: right;
 }
 
 .autocomplete-results {

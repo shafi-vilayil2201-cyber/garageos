@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $statement = $pdo->prepare("
-    SELECT u.name, u.designation, u.salary_type, pr.days_present, pr.days_absent, pr.days_half_day,
+    SELECT pr.user_id, u.name, u.designation, u.salary_type, pr.days_present, pr.days_absent, pr.days_half_day,
         pr.gross_salary, pr.deduction_amount, pr.net_salary, pr.generated_at
     FROM payroll_runs pr
     JOIN users u ON u.id = pr.user_id
@@ -135,6 +135,29 @@ $statement = $pdo->prepare("
 ");
 $statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart]);
 $payrollRows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+// Each card's modal shows this employee's history alongside the
+// selected month — cheap to pull for every employee at once here
+// (a small workshop's staff count times a handful of periods each)
+// rather than a query-per-card-per-click.
+$payrollHistoryByUser = [];
+
+if (!empty($payrollRows)) {
+    $userIds = array_unique(array_column($payrollRows, 'user_id'));
+    $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+
+    $statement = $pdo->prepare("
+        SELECT user_id, period_month, gross_salary, deduction_amount, net_salary, generated_at
+        FROM payroll_runs
+        WHERE organization_id = ? AND user_id IN ($placeholders)
+        ORDER BY period_month DESC
+    ");
+    $statement->execute([$organizationId, ...$userIds]);
+
+    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $payrollHistoryByUser[(int) $row['user_id']][] = $row;
+    }
+}
 
 $activeNav = 'payroll';
 $topbarTitle = 'Payroll';
@@ -194,44 +217,121 @@ $topbarTitle = 'Payroll';
                         </form>
                     </div>
                 </div>
-                <div class="card-body" style="padding:0;">
 
-                    <?php if (empty($payrollRows)): ?>
+                <?php if (empty($payrollRows)): ?>
+                    <div class="card-body">
                         <div class="empty-state">
                             <?= icon('wallet', 28) ?>
                             No payroll generated yet for this month.
                         </div>
-                    <?php else: ?>
-                        <div class="table-wrap">
-                            <table class="data-table">
-                                <tr>
-                                    <th>Name</th><th>Type</th><th>Present</th><th>Absent</th><th>Half-day</th>
-                                    <th>Gross</th><th>Deduction</th><th>Net</th>
-                                </tr>
-                                <?php foreach ($payrollRows as $row): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($row['name']) ?></td>
-                                        <td><?= $row['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></td>
-                                        <td><?= rtrim(rtrim(number_format((float) $row['days_present'], 1), '0'), '.') ?></td>
-                                        <td><?= rtrim(rtrim(number_format((float) $row['days_absent'], 1), '0'), '.') ?></td>
-                                        <td><?= rtrim(rtrim(number_format((float) $row['days_half_day'], 1), '0'), '.') ?></td>
-                                        <td>&#8377;<?= number_format((float) $row['gross_salary'], 2) ?></td>
-                                        <td>&#8377;<?= number_format((float) $row['deduction_amount'], 2) ?></td>
-                                        <td><strong>&#8377;<?= number_format((float) $row['net_salary'], 2) ?></strong></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </table>
-                        </div>
-                    <?php endif; ?>
-
-                </div>
+                    </div>
+                <?php endif; ?>
             </div>
+
+            <?php if (!empty($payrollRows)): ?>
+                <div class="settings-grid" style="margin-top:20px;">
+                    <?php foreach ($payrollRows as $row): ?>
+                        <?php $modalId = 'payroll-modal-' . (int) $row['user_id']; ?>
+                        <button type="button" class="card" onclick="openModal('<?= $modalId ?>')">
+                            <div class="card-body">
+                                <div class="employee-card-top">
+                                    <div class="employee-card-name"><?= htmlspecialchars($row['name']) ?></div>
+                                    <span class="icon-badge"><?= icon('wallet', 15) ?></span>
+                                </div>
+                                <div class="result-meta"><?= $row['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></div>
+
+                                <div style="margin-top:12px;">
+                                    <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_present'], 1), '0'), '.') ?></span></div>
+                                    <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_absent'], 1), '0'), '.') ?></span></div>
+                                    <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_half_day'], 1), '0'), '.') ?></span></div>
+                                    <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $row['gross_salary'], 2) ?></span></div>
+                                    <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $row['deduction_amount'], 2) ?></span></div>
+                                    <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:15px;">&#8377;<?= number_format((float) $row['net_salary'], 2) ?></span></div>
+                                </div>
+                            </div>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
 
         </section>
 
     </main>
 
 </div>
+
+<?php foreach ($payrollRows as $row): ?>
+    <?php
+        $modalId = 'payroll-modal-' . (int) $row['user_id'];
+        $history = $payrollHistoryByUser[(int) $row['user_id']] ?? [];
+    ?>
+    <div class="modal-backdrop" id="<?= $modalId ?>">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('wallet', 16) ?></span>
+                    <?= htmlspecialchars($row['name']) ?>
+                </div>
+                <button type="button" class="modal-close" data-close-modal="<?= $modalId ?>" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+
+                <div class="card" style="box-shadow:none;">
+                    <div class="card-header">
+                        <div class="card-header-title"><?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?></div>
+                    </div>
+                    <div class="card-body">
+                        <div class="info-row"><span class="label">Type</span><span class="value"><?= $row['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></span></div>
+                        <?php if ($row['designation']): ?>
+                            <div class="info-row"><span class="label">Designation</span><span class="value"><?= htmlspecialchars($row['designation']) ?></span></div>
+                        <?php endif; ?>
+                        <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_present'], 1), '0'), '.') ?></span></div>
+                        <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_absent'], 1), '0'), '.') ?></span></div>
+                        <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_half_day'], 1), '0'), '.') ?></span></div>
+                        <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $row['gross_salary'], 2) ?></span></div>
+                        <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $row['deduction_amount'], 2) ?></span></div>
+                        <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:16px;">&#8377;<?= number_format((float) $row['net_salary'], 2) ?></span></div>
+                        <p class="result-meta" style="margin-top:8px;">Generated <?= htmlspecialchars(date('d M Y, h:i A', strtotime($row['generated_at']))) ?></p>
+                    </div>
+                </div>
+
+                <div class="card" style="box-shadow:none; margin-top:16px;">
+                    <div class="card-header">
+                        <div class="card-header-title">Payroll history</div>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <?php if (count($history) <= 1): ?>
+                            <div class="empty-state">
+                                <?= icon('wallet', 24) ?>
+                                No earlier payroll on record.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <tr><th>Period</th><th>Gross</th><th>Deduction</th><th>Net</th></tr>
+                                    <?php foreach ($history as $pastRun): ?>
+                                        <?php if ($pastRun['period_month'] === $periodStart) continue; ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars((new DateTime($pastRun['period_month']))->format('M Y')) ?></td>
+                                            <td>&#8377;<?= number_format((float) $pastRun['gross_salary'], 2) ?></td>
+                                            <td>&#8377;<?= number_format((float) $pastRun['deduction_amount'], 2) ?></td>
+                                            <td>&#8377;<?= number_format((float) $pastRun['net_salary'], 2) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="actions" style="justify-content:flex-end; margin-top:16px;">
+                    <a href="/employee.php?id=<?= (int) $row['user_id'] ?>" class="button secondary"><?= icon('person', 16) ?> Full employee profile</a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+<?php endforeach; ?>
 
 </body>
 </html>
