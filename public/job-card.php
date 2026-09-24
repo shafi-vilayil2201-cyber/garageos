@@ -934,7 +934,7 @@ $topbarTitle = $jobCard['job_no'];
                                             'received' => '#4338ca',
                                             'in_progress' => '#b45309',
                                             'on_hold' => '#b91c1c',
-                                            'quality_check' => '#6d28d9',
+                                            'quality_check' => '#ca8a04',
                                             'ready' => '#15803d',
                                             'delivered' => '#78716c'
                                         ];
