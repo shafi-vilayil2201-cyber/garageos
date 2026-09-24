@@ -833,6 +833,28 @@ textarea:focus-visible,
     color: var(--muted);
 }
 
+/* A quiet utility link below the kanban board — kept out of the page
+   header/nav since it's a rarely-used escape hatch, not primary action. */
+.page-footer-links {
+    display: flex;
+    justify-content: center;
+    margin-top: 18px;
+}
+
+.page-footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.page-footer-link:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
 /* The live-search box shown in a card-header, next to its title */
 .header-search {
     max-width: 260px;

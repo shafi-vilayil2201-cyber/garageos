@@ -208,12 +208,7 @@ $topbarTitle = 'Job Cards';
                 <h1 class="page-title">Job Cards</h1>
 
                 <?php if ($canManageJobCards): ?>
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <?php if (user_can($user, 'job_cards.restore')): ?>
-                            <a href="/deleted-job-cards.php" class="button secondary"><?= icon('box', 16) ?> Deleted Job Cards</a>
-                        <?php endif; ?>
-                        <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
-                    </div>
+                    <button type="button" class="button" onclick="openModal('jobcard-modal')"><?= icon('plus', 16) ?> New Job Card</button>
                 <?php endif; ?>
             </div>
 
@@ -314,6 +309,12 @@ $topbarTitle = 'Job Cards';
                             </div>
                         </div>
                     <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (user_can($user, 'job_cards.restore')): ?>
+                <div class="page-footer-links">
+                    <a href="/deleted-job-cards.php" class="page-footer-link"><?= icon('trash', 15) ?> Deleted Job Cards</a>
                 </div>
             <?php endif; ?>
 
