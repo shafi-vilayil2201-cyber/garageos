@@ -1762,8 +1762,13 @@ table.data-table {
     border-radius: var(--radius);
     border-top: 3px solid transparent;
     padding: 14px;
-    height: calc(100vh - 275px);
-    min-height: 480px;
+    /* A bit taller than before so the columns reach closer to the
+       "Deleted Job Cards" link below the board, instead of leaving a
+       band of empty page between them — the cards themselves keep
+       their own padding/spacing untouched, so a full column still
+       scrolls rather than getting cramped. */
+    height: calc(100vh - 235px);
+    min-height: 520px;
     box-sizing: border-box;
     transition: box-shadow 0.15s ease, opacity 0.15s ease;
     display: flex;
