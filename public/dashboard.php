@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/View/VehicleIntake.php';
+require_once __DIR__ . '/../app/View/Pagination.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -146,7 +147,21 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId]);
 $remindersDue = (int) $statement->fetchColumn();
 
-// Recent job cards
+// Recent job cards — a small, dashboard-scoped pager (5 per page) rather
+// than app/View/Pagination.php's Prev/Next component, which is built for
+// list pages with potentially hundreds of pages. This widget's total is
+// always small, so numbered page buttons fit in the same footer row
+// without needing "Page X of Y" shorthand.
+const DASHBOARD_RECENT_PER_PAGE = 5;
+
+$statement = $pdo->prepare("
+    SELECT COUNT(*) FROM job_cards WHERE organization_id = :organization_id AND deleted_at IS NULL
+");
+$statement->execute(['organization_id' => $organizationId]);
+$recentJobCardsTotal = (int) $statement->fetchColumn();
+$recentJobCardsPages = max(1, (int) ceil($recentJobCardsTotal / DASHBOARD_RECENT_PER_PAGE));
+$recentJobCardsPage = min(max(1, (int) ($_GET['recent_page'] ?? 1)), $recentJobCardsPages);
+
 $statement = $pdo->prepare("
     SELECT
         jc.job_no,
@@ -162,9 +177,12 @@ $statement = $pdo->prepare("
     WHERE jc.organization_id = :organization_id
       AND jc.deleted_at IS NULL
     ORDER BY jc.created_at DESC
-    LIMIT 6
+    LIMIT :limit OFFSET :offset
 ");
-$statement->execute(['organization_id' => $organizationId]);
+$statement->bindValue('organization_id', $organizationId);
+$statement->bindValue('limit', DASHBOARD_RECENT_PER_PAGE, PDO::PARAM_INT);
+$statement->bindValue('offset', ($recentJobCardsPage - 1) * DASHBOARD_RECENT_PER_PAGE, PDO::PARAM_INT);
+$statement->execute();
 $recentJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
 
 // Someone who marks other people's attendance (Owner/Manager) wants a
@@ -371,6 +389,7 @@ $topbarTitle = 'Dashboard';
                                     <?php endforeach; ?>
                                 </table>
                             </div>
+                            <?= render_numbered_pagination($recentJobCardsPage, $recentJobCardsPages, 'recent_page') ?>
                         <?php endif; ?>
                     </div>
                 </div>

@@ -60,3 +60,54 @@ function render_pagination(int $page, int $totalRows, int $perPage = PAGINATION_
         </div>
     ';
 }
+
+// A compact numbered pager (1 2 3 ... 8) for a small widget — a
+// dashboard card, not a full list page — where the total is always
+// small enough to fit page-number buttons in one row instead of the
+// "Page X of Y" shorthand above. $paramName lets more than one of
+// these live on the same page without their query params colliding.
+function render_numbered_pagination(int $page, int $totalPages, string $paramName, array $extraParams = []): string
+{
+    if ($totalPages <= 1) {
+        return '';
+    }
+
+    $buildUrl = function (int $targetPage) use ($paramName, $extraParams): string {
+        return '?' . http_build_query(array_merge($extraParams, [$paramName => $targetPage]));
+    };
+
+    // Always show the first and last page plus a window around the
+    // current one, with an ellipsis filling any gap — so the control
+    // never grows past a handful of buttons no matter how many pages
+    // actually exist.
+    $pagesToShow = array_unique(array_filter(
+        [1, $page - 1, $page, $page + 1, $totalPages],
+        fn(int $p): bool => $p >= 1 && $p <= $totalPages
+    ));
+    sort($pagesToShow);
+
+    $buttons = '';
+    $previousPage = 0;
+
+    foreach ($pagesToShow as $p) {
+        if ($previousPage && $p - $previousPage > 1) {
+            $buttons .= '<span class="pagination-ellipsis">&hellip;</span>';
+        }
+
+        $buttons .= $p === $page
+            ? '<span class="pagination-number active" aria-current="page">' . $p . '</span>'
+            : '<a href="' . htmlspecialchars($buildUrl($p)) . '" class="pagination-number">' . $p . '</a>';
+
+        $previousPage = $p;
+    }
+
+    $prev = $page > 1
+        ? '<a href="' . htmlspecialchars($buildUrl($page - 1)) . '" class="pagination-arrow" aria-label="Previous page">' . icon('chevron-left', 14) . '</a>'
+        : '<span class="pagination-arrow" aria-disabled="true">' . icon('chevron-left', 14) . '</span>';
+
+    $next = $page < $totalPages
+        ? '<a href="' . htmlspecialchars($buildUrl($page + 1)) . '" class="pagination-arrow" aria-label="Next page">' . icon('chevron-right', 14) . '</a>'
+        : '<span class="pagination-arrow" aria-disabled="true">' . icon('chevron-right', 14) . '</span>';
+
+    return '<div class="pagination pagination-compact">' . $prev . $buttons . $next . '</div>';
+}

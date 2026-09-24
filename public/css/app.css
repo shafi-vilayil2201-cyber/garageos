@@ -1055,6 +1055,58 @@ table.data-table {
     pointer-events: none;
 }
 
+/* The compact numbered variant (render_numbered_pagination()) — a
+   dashboard-widget footer, not a full list page, so it's centered and
+   built from small pill buttons instead of the Prev/Next + "Page X of
+   Y" summary above. */
+.pagination-compact {
+    justify-content: center;
+    gap: 4px;
+    padding: 12px 20px;
+}
+
+.pagination-number,
+.pagination-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.pagination-number:hover,
+.pagination-arrow:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+
+.pagination-number.active {
+    background: var(--primary-soft);
+    color: var(--primary-dark);
+}
+
+.pagination-arrow[aria-disabled="true"] {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.pagination-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 28px;
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
 /* Status badges */
 
 .badge {
