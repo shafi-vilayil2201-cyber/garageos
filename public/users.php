@@ -34,19 +34,30 @@ function read_salary_fields(array $post): array
     $salaryType = $post['salary_type'] ?? '';
     $salaryAmountRaw = trim($post['salary_amount'] ?? '');
     $joinedAt = trim($post['joined_at'] ?? '');
+    $salaryPayDayRaw = trim($post['salary_pay_day'] ?? '');
 
     $salaryType = in_array($salaryType, ['monthly', 'daily_wage'], true) ? $salaryType : null;
     $joinedAt = $joinedAt !== '' ? $joinedAt : null;
 
+    // Capped at 1-28 (matches the salary_pay_day CHECK constraint) so a
+    // "31st" cycle, which has no anchor in February, can never be saved.
+    $salaryPayDay = null;
+    if ($salaryPayDayRaw !== '') {
+        if (!ctype_digit($salaryPayDayRaw) || (int) $salaryPayDayRaw < 1 || (int) $salaryPayDayRaw > 28) {
+            return [null, null, null, null, null, 'Salary day must be between 1 and 28.'];
+        }
+        $salaryPayDay = (int) $salaryPayDayRaw;
+    }
+
     if ($salaryType === null && $salaryAmountRaw === '') {
-        return [$designation ?: null, null, null, $joinedAt, null];
+        return [$designation ?: null, null, null, $joinedAt, $salaryPayDay, null];
     }
 
     if ($salaryType === null || $salaryAmountRaw === '' || !is_numeric($salaryAmountRaw) || (float) $salaryAmountRaw <= 0) {
-        return [null, null, null, null, 'Salary type and a positive salary amount must be set together.'];
+        return [null, null, null, null, null, 'Salary type and a positive salary amount must be set together.'];
     }
 
-    return [$designation ?: null, $salaryType, (float) $salaryAmountRaw, $joinedAt, null];
+    return [$designation ?: null, $salaryType, (float) $salaryAmountRaw, $joinedAt, $salaryPayDay, null];
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -63,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $roleId = (int) ($_POST['role_id'] ?? 0);
-        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryError] = read_salary_fields($_POST);
+        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryPayDay, $salaryError] = read_salary_fields($_POST);
 
         if ($name === '' || $email === '' || !$roleId || ($password !== '' && strlen($password) < 8)) {
             $error = 'Name, email and a role are required. If you set a new password, it must be at least 8 characters.';
@@ -100,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             SET name = :name, email = :email, password_hash = :password_hash,
                                 designation = :designation, salary_type = :salary_type,
                                 salary_amount = :salary_amount, joined_at = :joined_at,
+                                salary_pay_day = :salary_pay_day,
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE id = :id
                         ");
@@ -111,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'salary_type' => $salaryType,
                             'salary_amount' => $salaryAmount,
                             'joined_at' => $joinedAt,
+                            'salary_pay_day' => $salaryPayDay,
                             'id' => $editingUserId
                         ]);
                     } else {
@@ -119,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             SET name = :name, email = :email,
                                 designation = :designation, salary_type = :salary_type,
                                 salary_amount = :salary_amount, joined_at = :joined_at,
+                                salary_pay_day = :salary_pay_day,
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE id = :id
                         ");
@@ -129,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'salary_type' => $salaryType,
                             'salary_amount' => $salaryAmount,
                             'joined_at' => $joinedAt,
+                            'salary_pay_day' => $salaryPayDay,
                             'id' => $editingUserId
                         ]);
                     }
@@ -177,7 +192,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $roleId = (int) ($_POST['role_id'] ?? 0);
-        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryError] = read_salary_fields($_POST);
+        [$designation, $salaryType, $salaryAmount, $joinedAt, $salaryPayDay, $salaryError] = read_salary_fields($_POST);
+
+        // Left blank, the pay day defaults to the day-of-month they
+        // joined on — the case the manager will hit most often — while
+        // staying a plain editable field for the times it doesn't (a
+        // renegotiated cycle later, or a day past 28 that needs capping).
+        if ($salaryPayDay === null && $joinedAt !== null) {
+            $salaryPayDay = min(28, (int) (new DateTime($joinedAt))->format('j'));
+        }
 
         if ($name === '' || $email === '' || strlen($password) < 8 || !$roleId) {
             $error = 'Name, email, a role, and a password of at least 8 characters are required.';
@@ -199,8 +222,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 try {
                     $statement = $pdo->prepare("
-                        INSERT INTO users (organization_id, branch_id, name, email, password_hash, status, designation, salary_type, salary_amount, joined_at)
-                        VALUES (:organization_id, :branch_id, :name, :email, :password_hash, 'active', :designation, :salary_type, :salary_amount, :joined_at)
+                        INSERT INTO users (organization_id, branch_id, name, email, password_hash, status, designation, salary_type, salary_amount, joined_at, salary_pay_day)
+                        VALUES (:organization_id, :branch_id, :name, :email, :password_hash, 'active', :designation, :salary_type, :salary_amount, :joined_at, :salary_pay_day)
                         RETURNING id
                     ");
                     $statement->execute([
@@ -212,7 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'designation' => $designation,
                         'salary_type' => $salaryType,
                         'salary_amount' => $salaryAmount,
-                        'joined_at' => $joinedAt
+                        'joined_at' => $joinedAt,
+                        'salary_pay_day' => $salaryPayDay
                     ]);
                     $newUserId = $statement->fetchColumn();
 
@@ -270,12 +294,12 @@ $editingUser = null;
 
 if ($editingUserId) {
     $statement = $pdo->prepare("
-        SELECT u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at,
+        SELECT u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at, u.salary_pay_day,
             MIN(ur.role_id) AS role_id
         FROM users u
         LEFT JOIN user_roles ur ON ur.user_id = u.id
         WHERE u.id = :id AND u.organization_id = :organization_id
-        GROUP BY u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at
+        GROUP BY u.id, u.name, u.email, u.designation, u.salary_type, u.salary_amount, u.joined_at, u.salary_pay_day
     ");
     $statement->execute(['id' => $editingUserId, 'organization_id' => $organizationId]);
     $editingUser = $statement->fetch(PDO::FETCH_ASSOC);
@@ -451,6 +475,11 @@ $topbarTitle = 'Users';
                             <label>Joined on (optional)</label>
                             <input type="date" name="joined_at">
                         </div>
+                        <div class="form-field">
+                            <label>Salary day (optional)</label>
+                            <input type="number" name="salary_pay_day" min="1" max="28" placeholder="Defaults to the day they joined">
+                            <p class="result-meta">Which day of the month their pay cycle runs from — leave blank to use the day they joined.</p>
+                        </div>
                     </div>
 
                     <div class="form-actions">
@@ -528,6 +557,11 @@ $topbarTitle = 'Users';
                             <div class="form-field">
                                 <label>Joined on (optional)</label>
                                 <input type="date" name="joined_at" value="<?= htmlspecialchars($editingUser['joined_at'] ?? '') ?>">
+                            </div>
+                            <div class="form-field">
+                                <label>Salary day (optional)</label>
+                                <input type="number" name="salary_pay_day" min="1" max="28" value="<?= htmlspecialchars($editingUser['salary_pay_day'] ?? '') ?>" placeholder="Defaults to the day they joined">
+                                <p class="result-meta">Which day of the month their pay cycle runs from — leave blank to use the day they joined.</p>
                             </div>
                         </div>
 

@@ -3,7 +3,9 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Payroll.php';
+require_once __DIR__ . '/../app/Domain/SalaryAdvance.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -20,142 +22,192 @@ require_permission($user, 'payroll.manage');
 
 $organizationId = $user['organization_id'];
 
-$periodMonth = $_GET['month'] ?? date('Y-m');
+// One employee's payroll run for one specific period — attendance,
+// any outstanding advance, calculate_payroll(), upsert, settle the
+// advance against the new run, audit-log it. Shared by both the
+// single-row "Generate" button and "Generate all due".
+function generate_payroll_run(PDO $pdo, array $user, int $organizationId, array $salariedUser, string $periodStart, string $periodEnd): void
+{
+    $daysInPeriod = (new DateTime($periodStart))->diff(new DateTime($periodEnd))->days;
 
-if (!DateTime::createFromFormat('Y-m', $periodMonth)) {
-    $periodMonth = date('Y-m');
+    $statement = $pdo->prepare("
+        SELECT status FROM attendance
+        WHERE user_id = :user_id AND work_date >= :period_start AND work_date < :period_end
+    ");
+    $statement->execute([
+        'user_id' => $salariedUser['id'],
+        'period_start' => $periodStart,
+        'period_end' => $periodEnd
+    ]);
+    $attendanceRows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+    $advanceAmount = outstanding_advance_for_user($pdo, $organizationId, (int) $salariedUser['id']);
+    $result = calculate_payroll($salariedUser, $attendanceRows, $daysInPeriod, $advanceAmount);
+
+    $statement = $pdo->prepare("
+        INSERT INTO payroll_runs (
+            organization_id, user_id, period_month, days_in_period,
+            days_present, days_absent, days_half_day,
+            gross_salary, deduction_amount, advance_deducted, net_salary, generated_by
+        ) VALUES (
+            :organization_id, :user_id, :period_month, :days_in_period,
+            :days_present, :days_absent, :days_half_day,
+            :gross_salary, :deduction_amount, :advance_deducted, :net_salary, :generated_by
+        )
+        ON CONFLICT (user_id, period_month) DO UPDATE SET
+            days_in_period = EXCLUDED.days_in_period,
+            days_present = EXCLUDED.days_present,
+            days_absent = EXCLUDED.days_absent,
+            days_half_day = EXCLUDED.days_half_day,
+            gross_salary = EXCLUDED.gross_salary,
+            deduction_amount = EXCLUDED.deduction_amount,
+            advance_deducted = EXCLUDED.advance_deducted,
+            net_salary = EXCLUDED.net_salary,
+            generated_by = EXCLUDED.generated_by,
+            generated_at = CURRENT_TIMESTAMP
+        RETURNING id
+    ");
+    $statement->execute([
+        'organization_id' => $organizationId,
+        'user_id' => $salariedUser['id'],
+        'period_month' => $periodStart,
+        'days_in_period' => $daysInPeriod,
+        'days_present' => $result['days_present'],
+        'days_absent' => $result['days_absent'],
+        'days_half_day' => $result['days_half_day'],
+        'gross_salary' => $result['gross_salary'],
+        'deduction_amount' => $result['deduction_amount'],
+        'advance_deducted' => $result['advance_deducted'],
+        'net_salary' => $result['net_salary'],
+        'generated_by' => $user['id']
+    ]);
+    $payrollRunId = (int) $statement->fetchColumn();
+
+    if ($advanceAmount > 0) {
+        settle_outstanding_advances($pdo, $organizationId, (int) $salariedUser['id'], $payrollRunId);
+    }
+
+    log_audit_event(
+        $pdo, $user, 'create', 'payroll_run', $payrollRunId,
+        "Generated payroll for {$salariedUser['name']}, " . (new DateTime($periodStart))->format('d M') . '–' . (new DateTime($periodEnd))->modify('-1 day')->format('d M Y')
+    );
 }
 
-$periodStart = $periodMonth . '-01';
-$daysInMonth = (int) (new DateTime($periodStart))->format('t');
-
-$generated = false;
+$generatedCount = 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     csrf_verify();
     require_permission($user, 'payroll.manage');
 
-    $postedMonth = $_POST['period_month'] ?? '';
+    $action = $_POST['action'] ?? '';
 
-    if (DateTime::createFromFormat('Y-m', $postedMonth)) {
+    $usersStatement = $pdo->prepare("
+        SELECT id, name, salary_type, salary_amount, salary_pay_day, joined_at, created_at
+        FROM users
+        WHERE organization_id = :organization_id AND status = 'active' AND salary_type IS NOT NULL
+    ");
+    $usersStatement->execute(['organization_id' => $organizationId]);
+    $salariedUsers = $usersStatement->fetchAll(PDO::FETCH_ASSOC);
+    $salariedUsersById = array_column($salariedUsers, null, 'id');
 
-        $periodMonth = $postedMonth;
-        $periodStart = $periodMonth . '-01';
-        $daysInMonth = (int) (new DateTime($periodStart))->format('t');
+    $periodsStatement = $pdo->prepare("SELECT period_month FROM payroll_runs WHERE organization_id = :organization_id AND user_id = :user_id");
 
-        $usersStatement = $pdo->prepare("
-            SELECT id, salary_type, salary_amount
-            FROM users
-            WHERE organization_id = :organization_id AND status = 'active' AND salary_type IS NOT NULL
-        ");
-        $usersStatement->execute(['organization_id' => $organizationId]);
-        $salariedUsers = $usersStatement->fetchAll(PDO::FETCH_ASSOC);
+    $pdo->beginTransaction();
 
-        $attendanceStatement = $pdo->prepare("
-            SELECT status FROM attendance
-            WHERE user_id = :user_id
-              AND work_date >= :period_start
-              AND work_date < (:period_start_end::date + INTERVAL '1 month')
-        ");
+    try {
+        if ($action === 'generate_one') {
 
-        $upsert = $pdo->prepare("
-            INSERT INTO payroll_runs (
-                organization_id, user_id, period_month, days_in_period,
-                days_present, days_absent, days_half_day,
-                gross_salary, deduction_amount, net_salary, generated_by
-            ) VALUES (
-                :organization_id, :user_id, :period_month, :days_in_period,
-                :days_present, :days_absent, :days_half_day,
-                :gross_salary, :deduction_amount, :net_salary, :generated_by
-            )
-            ON CONFLICT (user_id, period_month) DO UPDATE SET
-                days_in_period = EXCLUDED.days_in_period,
-                days_present = EXCLUDED.days_present,
-                days_absent = EXCLUDED.days_absent,
-                days_half_day = EXCLUDED.days_half_day,
-                gross_salary = EXCLUDED.gross_salary,
-                deduction_amount = EXCLUDED.deduction_amount,
-                net_salary = EXCLUDED.net_salary,
-                generated_by = EXCLUDED.generated_by,
-                generated_at = CURRENT_TIMESTAMP
-        ");
+            $targetUserId = (int) ($_POST['user_id'] ?? 0);
+            $periodStart = trim($_POST['period_start'] ?? '');
 
-        $pdo->beginTransaction();
-
-        try {
-            foreach ($salariedUsers as $salariedUser) {
-
-                $attendanceStatement->execute([
-                    'user_id' => $salariedUser['id'],
-                    'period_start' => $periodStart,
-                    'period_start_end' => $periodStart
-                ]);
-                $attendanceRows = $attendanceStatement->fetchAll(PDO::FETCH_ASSOC);
-
-                $result = calculate_payroll($salariedUser, $attendanceRows, $daysInMonth);
-
-                $upsert->execute([
-                    'organization_id' => $organizationId,
-                    'user_id' => $salariedUser['id'],
-                    'period_month' => $periodStart,
-                    'days_in_period' => $daysInMonth,
-                    'days_present' => $result['days_present'],
-                    'days_absent' => $result['days_absent'],
-                    'days_half_day' => $result['days_half_day'],
-                    'gross_salary' => $result['gross_salary'],
-                    'deduction_amount' => $result['deduction_amount'],
-                    'net_salary' => $result['net_salary'],
-                    'generated_by' => $user['id']
-                ]);
+            if (isset($salariedUsersById[$targetUserId]) && DateTime::createFromFormat('Y-m-d', $periodStart)) {
+                generate_payroll_run($pdo, $user, $organizationId, $salariedUsersById[$targetUserId], $periodStart, payroll_period_end($periodStart));
+                $generatedCount = 1;
             }
 
-            log_audit_event(
-                $pdo, $user, 'create', 'payroll_run', null,
-                'Generated payroll for ' . (new DateTime($periodStart))->format('F Y') . ' (' . count($salariedUsers) . ' staff)'
-            );
+        } elseif ($action === 'generate_all_due') {
 
-            $pdo->commit();
-            $generated = true;
+            foreach ($salariedUsers as $salariedUser) {
 
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            error_log('Payroll generation failed: ' . $e->getMessage());
+                $payDay = (int) ($salariedUser['salary_pay_day'] ?? 1);
+                $joinedAt = $salariedUser['joined_at'] ?? $salariedUser['created_at'];
+
+                $periodsStatement->execute(['organization_id' => $organizationId, 'user_id' => $salariedUser['id']]);
+                $generatedPeriods = $periodsStatement->fetchAll(PDO::FETCH_COLUMN);
+
+                foreach (pending_payroll_periods($payDay, $joinedAt, $generatedPeriods) as $period) {
+                    generate_payroll_run($pdo, $user, $organizationId, $salariedUser, $period['start'], $period['end']);
+                    $generatedCount++;
+                }
+            }
         }
+
+        $pdo->commit();
+
+        if ($generatedCount > 0) {
+            flash_set($generatedCount === 1 ? 'Payroll generated.' : "Payroll generated for {$generatedCount} periods.");
+        }
+
+        header('Location: /payroll.php');
+        exit;
+
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        error_log('Payroll generation failed: ' . $e->getMessage());
     }
 }
 
+// Every active salaried employee, their pending (due) periods, and
+// their most recently generated payroll run — everything the page
+// needs in three queries instead of one per employee.
 $statement = $pdo->prepare("
-    SELECT pr.user_id, u.name, u.designation, u.salary_type, pr.days_present, pr.days_absent, pr.days_half_day,
-        pr.gross_salary, pr.deduction_amount, pr.net_salary, pr.generated_at
-    FROM payroll_runs pr
-    JOIN users u ON u.id = pr.user_id
-    WHERE pr.organization_id = :organization_id AND pr.period_month = :period_start
-    ORDER BY u.name
+    SELECT id, name, designation, salary_type, salary_amount, salary_pay_day, joined_at, created_at
+    FROM users
+    WHERE organization_id = :organization_id AND status = 'active' AND salary_type IS NOT NULL
+    ORDER BY name
 ");
-$statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart]);
-$payrollRows = $statement->fetchAll(PDO::FETCH_ASSOC);
+$statement->execute(['organization_id' => $organizationId]);
+$salariedUsers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
-// Each card's modal shows this employee's history alongside the
-// selected month — cheap to pull for every employee at once here
-// (a small workshop's staff count times a handful of periods each)
-// rather than a query-per-card-per-click.
-$payrollHistoryByUser = [];
+$dueList = [];
+$latestRunByUser = [];
+$historyByUser = [];
 
-if (!empty($payrollRows)) {
-    $userIds = array_unique(array_column($payrollRows, 'user_id'));
+if (!empty($salariedUsers)) {
+
+    $userIds = array_column($salariedUsers, 'id');
     $placeholders = implode(',', array_fill(0, count($userIds), '?'));
 
     $statement = $pdo->prepare("
-        SELECT user_id, period_month, gross_salary, deduction_amount, net_salary, generated_at
+        SELECT user_id, period_month, gross_salary, deduction_amount, advance_deducted, net_salary, generated_at,
+            days_present, days_absent, days_half_day
         FROM payroll_runs
         WHERE organization_id = ? AND user_id IN ($placeholders)
         ORDER BY period_month DESC
     ");
     $statement->execute([$organizationId, ...$userIds]);
 
+    $generatedPeriodsByUser = [];
+
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $payrollHistoryByUser[(int) $row['user_id']][] = $row;
+        $uid = (int) $row['user_id'];
+        $historyByUser[$uid][] = $row;
+        $generatedPeriodsByUser[$uid][] = $row['period_month'];
+
+        if (!isset($latestRunByUser[$uid])) {
+            $latestRunByUser[$uid] = $row;
+        }
+    }
+
+    foreach ($salariedUsers as $salariedUser) {
+        $uid = (int) $salariedUser['id'];
+        $payDay = (int) ($salariedUser['salary_pay_day'] ?? 1);
+        $joinedAt = $salariedUser['joined_at'] ?? $salariedUser['created_at'];
+
+        foreach (pending_payroll_periods($payDay, $joinedAt, $generatedPeriodsByUser[$uid] ?? []) as $period) {
+            $dueList[] = ['user' => $salariedUser, 'period' => $period];
+        }
     }
 }
 
@@ -189,65 +241,87 @@ $topbarTitle = 'Payroll';
             <div class="page-header">
                 <div>
                     <h1 class="page-title">Payroll</h1>
-                    <p class="page-description">Generate monthly salary from attendance — safe to re-run after fixing an attendance mistake.</p>
+                    <p class="page-description">Each employee is paid on their own cycle (Settings on their profile) — generate whatever's due below, any time, not just once a month.</p>
                 </div>
             </div>
-
-            <?php if ($generated): ?>
-                <div class="form-success" style="margin-bottom:16px;"><?= icon('check-circle', 16) ?> Payroll generated for <?= htmlspecialchars($periodMonth) ?>.</div>
-            <?php endif; ?>
 
             <div class="card">
                 <div class="card-header">
                     <div class="card-header-title">
-                        <span class="icon-badge"><?= icon('wallet', 15) ?></span>
-                        <?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?>
+                        <span class="icon-badge"><?= icon('alert-triangle', 15) ?></span>
+                        Payroll due
                     </div>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        <form method="GET" action="">
-                            <div class="header-date-wrap">
-                                <button type="button" class="button secondary header-date-trigger" aria-label="Choose month" onclick="openDatePicker(this)"><?= icon('calendar', 16) ?> <?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?></button>
-                                <input type="month" name="month" value="<?= htmlspecialchars($periodMonth) ?>" onchange="this.form.submit()">
-                            </div>
-                        </form>
+                    <?php if (count($dueList) > 1): ?>
                         <form method="POST" action="">
                             <?= csrf_field() ?>
-                            <input type="hidden" name="period_month" value="<?= htmlspecialchars($periodMonth) ?>">
-                            <button type="submit" class="button"><?= icon('check', 16) ?> Generate</button>
+                            <input type="hidden" name="action" value="generate_all_due">
+                            <button type="submit" class="button"><?= icon('check', 16) ?> Generate all due (<?= count($dueList) ?>)</button>
                         </form>
-                    </div>
+                    <?php endif; ?>
                 </div>
 
-                <?php if (empty($payrollRows)): ?>
+                <?php if (empty($dueList)): ?>
                     <div class="card-body">
-                        <div class="empty-state">
-                            <?= icon('wallet', 28) ?>
-                            No payroll generated yet for this month.
+                        <p class="result-meta">Nothing due right now — every closed pay cycle has been generated.</p>
+                    </div>
+                <?php else: ?>
+                    <div class="card-body" style="padding:0;">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Employee</th><th>Period</th><th></th></tr>
+                                <?php foreach ($dueList as $due): ?>
+                                    <?php
+                                        $periodLabel = (new DateTime($due['period']['start']))->format('d M Y')
+                                            . ' – ' . (new DateTime($due['period']['end']))->modify('-1 day')->format('d M Y');
+                                    ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($due['user']['name']) ?></td>
+                                        <td><?= htmlspecialchars($periodLabel) ?></td>
+                                        <td>
+                                            <form method="POST" action="">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="action" value="generate_one">
+                                                <input type="hidden" name="user_id" value="<?= (int) $due['user']['id'] ?>">
+                                                <input type="hidden" name="period_start" value="<?= htmlspecialchars($due['period']['start']) ?>">
+                                                <button type="submit" class="button secondary sm"><?= icon('check', 13) ?> Generate</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
                         </div>
                     </div>
                 <?php endif; ?>
             </div>
 
-            <?php if (!empty($payrollRows)): ?>
+            <?php if (!empty($salariedUsers)): ?>
                 <div class="settings-grid" style="margin-top:20px;">
-                    <?php foreach ($payrollRows as $row): ?>
-                        <?php $modalId = 'payroll-modal-' . (int) $row['user_id']; ?>
+                    <?php foreach ($salariedUsers as $salariedUser): ?>
+                        <?php
+                            $uid = (int) $salariedUser['id'];
+                            $latest = $latestRunByUser[$uid] ?? null;
+                            $modalId = 'payroll-modal-' . $uid;
+                        ?>
                         <button type="button" class="card" onclick="openModal('<?= $modalId ?>')">
                             <div class="card-body">
                                 <div class="employee-card-top">
-                                    <div class="employee-card-name"><?= htmlspecialchars($row['name']) ?></div>
+                                    <div class="employee-card-name"><?= htmlspecialchars($salariedUser['name']) ?></div>
                                     <span class="icon-badge"><?= icon('wallet', 15) ?></span>
                                 </div>
-                                <div class="result-meta"><?= $row['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></div>
+                                <div class="result-meta"><?= $salariedUser['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></div>
 
-                                <div style="margin-top:12px;">
-                                    <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_present'], 1), '0'), '.') ?></span></div>
-                                    <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_absent'], 1), '0'), '.') ?></span></div>
-                                    <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_half_day'], 1), '0'), '.') ?></span></div>
-                                    <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $row['gross_salary'], 2) ?></span></div>
-                                    <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $row['deduction_amount'], 2) ?></span></div>
-                                    <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:15px;">&#8377;<?= number_format((float) $row['net_salary'], 2) ?></span></div>
-                                </div>
+                                <?php if ($latest): ?>
+                                    <div style="margin-top:12px;">
+                                        <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_present'], 1), '0'), '.') ?></span></div>
+                                        <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_absent'], 1), '0'), '.') ?></span></div>
+                                        <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_half_day'], 1), '0'), '.') ?></span></div>
+                                        <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $latest['gross_salary'], 2) ?></span></div>
+                                        <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $latest['deduction_amount'], 2) ?></span></div>
+                                        <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:15px;">&#8377;<?= number_format((float) $latest['net_salary'], 2) ?></span></div>
+                                    </div>
+                                <?php else: ?>
+                                    <p class="result-meta" style="margin-top:12px;">No payroll generated yet.</p>
+                                <?php endif; ?>
                             </div>
                         </button>
                     <?php endforeach; ?>
@@ -260,40 +334,52 @@ $topbarTitle = 'Payroll';
 
 </div>
 
-<?php foreach ($payrollRows as $row): ?>
+<?php foreach ($salariedUsers as $salariedUser): ?>
     <?php
-        $modalId = 'payroll-modal-' . (int) $row['user_id'];
-        $history = $payrollHistoryByUser[(int) $row['user_id']] ?? [];
+        $uid = (int) $salariedUser['id'];
+        $modalId = 'payroll-modal-' . $uid;
+        $history = $historyByUser[$uid] ?? [];
+        $latest = $history[0] ?? null;
     ?>
     <div class="modal-backdrop" id="<?= $modalId ?>">
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
                     <span class="icon-badge"><?= icon('wallet', 16) ?></span>
-                    <?= htmlspecialchars($row['name']) ?>
+                    <?= htmlspecialchars($salariedUser['name']) ?>
                 </div>
                 <button type="button" class="modal-close" data-close-modal="<?= $modalId ?>" aria-label="Close"><?= icon('x', 18) ?></button>
             </div>
             <div class="modal-body">
 
-                <div class="card" style="box-shadow:none;">
-                    <div class="card-header">
-                        <div class="card-header-title"><?= htmlspecialchars((new DateTime($periodStart))->format('F Y')) ?></div>
+                <?php if ($latest): ?>
+                    <div class="card" style="box-shadow:none;">
+                        <div class="card-header">
+                            <div class="card-header-title"><?= htmlspecialchars(payroll_period_label($latest['period_month'])) ?></div>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-row"><span class="label">Type</span><span class="value"><?= $salariedUser['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></span></div>
+                            <?php if ($salariedUser['designation']): ?>
+                                <div class="info-row"><span class="label">Designation</span><span class="value"><?= htmlspecialchars($salariedUser['designation']) ?></span></div>
+                            <?php endif; ?>
+                            <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_present'], 1), '0'), '.') ?></span></div>
+                            <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_absent'], 1), '0'), '.') ?></span></div>
+                            <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $latest['days_half_day'], 1), '0'), '.') ?></span></div>
+                            <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $latest['gross_salary'], 2) ?></span></div>
+                            <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $latest['deduction_amount'], 2) ?></span></div>
+                            <?php if ((float) $latest['advance_deducted'] > 0): ?>
+                                <div class="info-row"><span class="label">Advance recovered</span><span class="value">&#8377;<?= number_format((float) $latest['advance_deducted'], 2) ?></span></div>
+                            <?php endif; ?>
+                            <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:16px;">&#8377;<?= number_format((float) $latest['net_salary'], 2) ?></span></div>
+                            <p class="result-meta" style="margin-top:8px;">Generated <?= htmlspecialchars(date('d M Y, h:i A', strtotime($latest['generated_at']))) ?></p>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="info-row"><span class="label">Type</span><span class="value"><?= $row['salary_type'] === 'monthly' ? 'Monthly' : 'Daily wage' ?></span></div>
-                        <?php if ($row['designation']): ?>
-                            <div class="info-row"><span class="label">Designation</span><span class="value"><?= htmlspecialchars($row['designation']) ?></span></div>
-                        <?php endif; ?>
-                        <div class="info-row"><span class="label">Present</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_present'], 1), '0'), '.') ?></span></div>
-                        <div class="info-row"><span class="label">Absent</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_absent'], 1), '0'), '.') ?></span></div>
-                        <div class="info-row"><span class="label">Half-day</span><span class="value"><?= rtrim(rtrim(number_format((float) $row['days_half_day'], 1), '0'), '.') ?></span></div>
-                        <div class="info-row"><span class="label">Gross</span><span class="value">&#8377;<?= number_format((float) $row['gross_salary'], 2) ?></span></div>
-                        <div class="info-row"><span class="label">Deduction</span><span class="value">&#8377;<?= number_format((float) $row['deduction_amount'], 2) ?></span></div>
-                        <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:16px;">&#8377;<?= number_format((float) $row['net_salary'], 2) ?></span></div>
-                        <p class="result-meta" style="margin-top:8px;">Generated <?= htmlspecialchars(date('d M Y, h:i A', strtotime($row['generated_at']))) ?></p>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <?= icon('wallet', 24) ?>
+                        No payroll generated yet.
                     </div>
-                </div>
+                <?php endif; ?>
 
                 <div class="card" style="box-shadow:none; margin-top:16px;">
                     <div class="card-header">
@@ -309,10 +395,9 @@ $topbarTitle = 'Payroll';
                             <div class="table-wrap">
                                 <table class="data-table">
                                     <tr><th>Period</th><th>Gross</th><th>Deduction</th><th>Net</th></tr>
-                                    <?php foreach ($history as $pastRun): ?>
-                                        <?php if ($pastRun['period_month'] === $periodStart) continue; ?>
+                                    <?php foreach (array_slice($history, 1) as $pastRun): ?>
                                         <tr>
-                                            <td><?= htmlspecialchars((new DateTime($pastRun['period_month']))->format('M Y')) ?></td>
+                                            <td><?= htmlspecialchars(payroll_period_label($pastRun['period_month'])) ?></td>
                                             <td>&#8377;<?= number_format((float) $pastRun['gross_salary'], 2) ?></td>
                                             <td>&#8377;<?= number_format((float) $pastRun['deduction_amount'], 2) ?></td>
                                             <td>&#8377;<?= number_format((float) $pastRun['net_salary'], 2) ?></td>
@@ -325,7 +410,7 @@ $topbarTitle = 'Payroll';
                 </div>
 
                 <div class="actions" style="justify-content:flex-end; margin-top:16px;">
-                    <a href="/employee.php?id=<?= (int) $row['user_id'] ?>" class="button secondary"><?= icon('person', 16) ?> Full employee profile</a>
+                    <a href="/employee.php?id=<?= $uid ?>" class="button secondary"><?= icon('person', 16) ?> Full employee profile</a>
                 </div>
 
             </div>

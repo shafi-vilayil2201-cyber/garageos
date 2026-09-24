@@ -2,6 +2,10 @@
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
+require_once __DIR__ . '/../app/Domain/Payroll.php';
+require_once __DIR__ . '/../app/Domain/SalaryAdvance.php';
+require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -19,15 +23,41 @@ require_permission($user, 'users.manage');
 $organizationId = $user['organization_id'];
 $employeeId = (int) ($_GET['id'] ?? 0);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'record_advance') {
+
+    csrf_verify();
+    require_permission($user, 'payroll.manage');
+
+    $advanceAmount = (float) ($_POST['amount'] ?? 0);
+    $paidAt = trim($_POST['paid_at'] ?? '') ?: date('Y-m-d');
+    $notes = trim($_POST['notes'] ?? '') ?: null;
+
+    $statement = $pdo->prepare("SELECT name FROM users WHERE id = :id AND organization_id = :organization_id");
+    $statement->execute(['id' => $employeeId, 'organization_id' => $organizationId]);
+    $targetName = $statement->fetchColumn();
+
+    if ($targetName && $advanceAmount > 0) {
+        record_salary_advance($pdo, $organizationId, $employeeId, $advanceAmount, $paidAt, $notes, $user['id']);
+        log_audit_event(
+            $pdo, $user, 'create', 'salary_advance', $employeeId,
+            "Recorded a ₹$advanceAmount advance for $targetName, recovered from their next payroll run"
+        );
+        flash_set("Advance recorded — it'll be deducted from {$targetName}'s next payroll run.");
+    }
+
+    header('Location: /employee.php?id=' . $employeeId);
+    exit;
+}
+
 $statement = $pdo->prepare("
-    SELECT u.id, u.name, u.email, u.phone, u.status, u.designation, u.joined_at,
-        u.salary_type, u.salary_amount,
+    SELECT u.id, u.name, u.email, u.phone, u.status, u.designation, u.joined_at, u.created_at,
+        u.salary_type, u.salary_amount, u.salary_pay_day,
         STRING_AGG(r.name, ', ' ORDER BY r.name) AS role_names
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
     WHERE u.id = :id AND u.organization_id = :organization_id
-    GROUP BY u.id, u.name, u.email, u.phone, u.status, u.designation, u.joined_at, u.salary_type, u.salary_amount
+    GROUP BY u.id, u.name, u.email, u.phone, u.status, u.designation, u.joined_at, u.created_at, u.salary_type, u.salary_amount, u.salary_pay_day
 ");
 $statement->execute(['id' => $employeeId, 'organization_id' => $organizationId]);
 $employee = $statement->fetch(PDO::FETCH_ASSOC);
@@ -110,6 +140,17 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId, 'user_id' => $employeeId]);
 $payrollHistory = $statement->fetchAll(PDO::FETCH_ASSOC);
 $latestPayroll = $payrollHistory[0] ?? null;
+
+$outstandingAdvance = $employee['salary_type']
+    ? outstanding_advance_for_user($pdo, $organizationId, $employeeId)
+    : 0.0;
+
+$pendingPayrollPeriods = [];
+if ($employee['salary_type'] && $employee['status'] === 'active') {
+    $payDay = (int) ($employee['salary_pay_day'] ?? 1);
+    $joinedAtOrCreated = $employee['joined_at'] ?? $employee['created_at'] ?? date('Y-m-d');
+    $pendingPayrollPeriods = pending_payroll_periods($payDay, $joinedAtOrCreated, array_column($payrollHistory, 'period_month'));
+}
 
 // Recent activity — audit_logs where this employee was the actor (what
 // they did), not where they were the subject (e.g. someone editing
@@ -273,12 +314,30 @@ $topbarTitle = $employee['name'];
                                 <span class="icon-badge"><?= icon('wallet', 15) ?></span>
                                 Payroll
                             </div>
-                            <a href="/payroll.php" class="card-header-link">Open Payroll</a>
+                            <?php if ($employee['salary_type'] && $employee['status'] === 'active'): ?>
+                                <button type="button" class="button secondary sm" onclick="openModal('record-advance-modal')"><?= icon('plus', 13) ?> Record advance</button>
+                            <?php endif; ?>
                         </div>
                         <div class="card-body">
-                            <?php if ($latestPayroll): ?>
+
+                            <?php if (!empty($pendingPayrollPeriods)): ?>
+                                <div class="form-error" style="margin-bottom:12px;">
+                                    <?= count($pendingPayrollPeriods) === 1 ? '1 pay cycle is' : count($pendingPayrollPeriods) . ' pay cycles are' ?> due —
+                                    <a href="/payroll.php">generate it from Payroll</a>.
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($outstandingAdvance > 0): ?>
                                 <div class="info-row">
-                                    <span class="label"><?= htmlspecialchars((new DateTime($latestPayroll['period_month']))->format('F Y')) ?></span>
+                                    <span class="label">Outstanding advance</span>
+                                    <span class="value">&#8377;<?= number_format($outstandingAdvance, 2) ?></span>
+                                </div>
+                                <p class="result-meta">Recovered in full from the next payroll run.</p>
+                            <?php endif; ?>
+
+                            <?php if ($latestPayroll): ?>
+                                <div class="info-row" style="margin-top:8px;">
+                                    <span class="label"><?= htmlspecialchars(payroll_period_label($latestPayroll['period_month'])) ?></span>
                                     <span class="value"><strong>&#8377;<?= number_format((float) $latestPayroll['net_salary'], 2) ?></strong></span>
                                 </div>
                                 <p class="result-meta">Last generated <?= htmlspecialchars(date('d M Y', strtotime($latestPayroll['generated_at']))) ?></p>
@@ -289,7 +348,7 @@ $topbarTitle = $employee['name'];
                                             <tr><th>Period</th><th>Net</th></tr>
                                             <?php foreach (array_slice($payrollHistory, 1) as $run): ?>
                                                 <tr>
-                                                    <td><?= htmlspecialchars((new DateTime($run['period_month']))->format('M Y')) ?></td>
+                                                    <td><?= htmlspecialchars(payroll_period_label($run['period_month'])) ?></td>
                                                     <td>&#8377;<?= number_format((float) $run['net_salary'], 2) ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -344,6 +403,42 @@ $topbarTitle = $employee['name'];
     </main>
 
 </div>
+
+<?php if ($employee['salary_type'] && $employee['status'] === 'active'): ?>
+    <div class="modal-backdrop" id="record-advance-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('wallet', 16) ?></span>
+                    Record advance — <?= htmlspecialchars($employee['name']) ?>
+                </div>
+                <button type="button" class="modal-close" data-close-modal="record-advance-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" class="stack">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="record_advance">
+                    <div class="form-field">
+                        <label for="advance-amount">Amount (&#8377;)</label>
+                        <input type="number" id="advance-amount" name="amount" min="0.01" step="0.01" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="advance-paid-at">Paid on</label>
+                        <input type="date" id="advance-paid-at" name="paid_at" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="advance-notes">Notes (optional)</label>
+                        <input type="text" id="advance-notes" name="notes" placeholder="e.g. Medical expense">
+                    </div>
+                    <p class="result-meta">Recovered in full from <?= htmlspecialchars($employee['name']) ?>'s next payroll run — never split across multiple cycles.</p>
+                    <div class="actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Record advance</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 </body>
 </html>
