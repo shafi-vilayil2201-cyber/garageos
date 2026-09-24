@@ -133,3 +133,20 @@ function pending_payroll_periods(int $payDay, string $joinedAt, array $generated
 
     return $periods;
 }
+
+// The end date of the next period this employee doesn't have a run
+// for yet, whether or not it's actually closed — i.e. "Generate Salary
+// becomes available on ___" for a card that's fully caught up right
+// now. Skips forward past every period already in $generatedPeriods
+// the same way pending_payroll_periods() does, just without the
+// "has it closed" cutoff.
+function next_payroll_period_end(int $payDay, string $joinedAt, array $generatedPeriods): string
+{
+    $cursor = payroll_period_start_for($payDay, $joinedAt);
+
+    while (in_array($cursor, $generatedPeriods, true)) {
+        $cursor = payroll_period_end($cursor);
+    }
+
+    return payroll_period_end($cursor);
+}

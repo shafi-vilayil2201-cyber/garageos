@@ -126,13 +126,18 @@ foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
     ];
 }
 
+// Keyed on paid_at — an unpaid run isn't a real expense yet (see
+// migration 054), and with per-employee pay cycles period_month is
+// often a mid-month date rather than always matching this page's
+// calendar-month selector.
 $statement = $pdo->prepare("
-    SELECT pr.period_month AS date, u.name AS employee_name, pr.net_salary
+    SELECT pr.paid_at::date AS date, u.name AS employee_name, pr.net_salary
     FROM payroll_runs pr
     INNER JOIN users u ON u.id = pr.user_id
-    WHERE pr.organization_id = :organization_id AND pr.period_month = :period_start
+    WHERE pr.organization_id = :organization_id AND pr.payment_status = 'paid'
+      AND pr.paid_at >= :period_start AND pr.paid_at < (:period_start_end::date + INTERVAL '1 month')
 ");
-$statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart]);
+$statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart, 'period_start_end' => $periodStart]);
 foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $rows[] = [
         'date' => $row['date'],

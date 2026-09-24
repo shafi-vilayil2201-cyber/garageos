@@ -1754,6 +1754,21 @@ table.data-table {
     gap: 8px;
 }
 
+/* Actionable, not wrong — a due-but-not-yet-a-problem state (e.g. a
+   payroll card's "Payroll due" notice), so it gets the warning amber
+   instead of .form-error's red or .form-success's green. */
+.form-notice {
+    background: var(--warning-soft);
+    color: #92400e;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /* Date/month picker in a card-header (Attendance, Payroll, Finance).
    The native input's own click target only opens the picker when you
    hit its built-in calendar glyph exactly — clicking its text instead

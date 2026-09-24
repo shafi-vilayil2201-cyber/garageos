@@ -131,7 +131,7 @@ $recentJobCards = $statement->fetchAll(PDO::FETCH_ASSOC);
 // Payroll — the same payroll_runs rows payroll.php generates, just this
 // employee's whole history instead of one org-wide month at a time.
 $statement = $pdo->prepare("
-    SELECT period_month, days_present, days_absent, days_half_day, gross_salary, deduction_amount, net_salary, generated_at
+    SELECT period_month, days_present, days_absent, days_half_day, gross_salary, deduction_amount, net_salary, generated_at, payment_status, paid_at
     FROM payroll_runs
     WHERE organization_id = :organization_id AND user_id = :user_id
     ORDER BY period_month DESC
@@ -340,16 +340,20 @@ $topbarTitle = $employee['name'];
                                     <span class="label"><?= htmlspecialchars(payroll_period_label($latestPayroll['period_month'])) ?></span>
                                     <span class="value"><strong>&#8377;<?= number_format((float) $latestPayroll['net_salary'], 2) ?></strong></span>
                                 </div>
-                                <p class="result-meta">Last generated <?= htmlspecialchars(date('d M Y', strtotime($latestPayroll['generated_at']))) ?></p>
+                                <p class="result-meta">
+                                    <span class="badge badge-<?= $latestPayroll['payment_status'] === 'paid' ? 'ready' : 'in_progress' ?>"><?= $latestPayroll['payment_status'] === 'paid' ? 'Paid' : 'Unpaid' ?></span>
+                                    <?= $latestPayroll['payment_status'] === 'paid' ? 'on ' . htmlspecialchars(date('d M Y', strtotime($latestPayroll['paid_at']))) : '— generated ' . htmlspecialchars(date('d M Y', strtotime($latestPayroll['generated_at']))) ?>
+                                </p>
 
                                 <?php if (count($payrollHistory) > 1): ?>
                                     <div class="table-wrap" style="margin-top:12px;">
                                         <table class="data-table">
-                                            <tr><th>Period</th><th>Net</th></tr>
+                                            <tr><th>Period</th><th>Net</th><th>Status</th></tr>
                                             <?php foreach (array_slice($payrollHistory, 1) as $run): ?>
                                                 <tr>
                                                     <td><?= htmlspecialchars(payroll_period_label($run['period_month'])) ?></td>
                                                     <td>&#8377;<?= number_format((float) $run['net_salary'], 2) ?></td>
+                                                    <td><span class="badge badge-<?= $run['payment_status'] === 'paid' ? 'ready' : 'in_progress' ?>"><?= $run['payment_status'] === 'paid' ? 'Paid' : 'Unpaid' ?></span></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </table>

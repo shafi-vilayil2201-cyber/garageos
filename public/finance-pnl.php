@@ -55,9 +55,15 @@ function calculate_pnl(PDO $pdo, int $organizationId, string $windowStart, strin
     $statement->execute(['organization_id' => $organizationId, 'window_start' => $windowStart, 'window_end' => $windowEnd]);
     $costOfGoods = (float) $statement->fetchColumn();
 
+    // Keyed on paid_at, the same cash-basis the revenue line above
+    // uses (payments.created_at, not invoice date) — an unpaid run
+    // isn't cash out yet, and period_month is often a mid-month date
+    // now that employees can have their own pay cycle, not a clean
+    // fit for a "which window does this belong to" range filter.
     $statement = $pdo->prepare("
         SELECT COALESCE(SUM(net_salary), 0) FROM payroll_runs
-        WHERE organization_id = :organization_id AND period_month >= :window_start AND period_month < :window_end
+        WHERE organization_id = :organization_id AND payment_status = 'paid'
+          AND paid_at >= :window_start AND paid_at < :window_end
     ");
     $statement->execute(['organization_id' => $organizationId, 'window_start' => $windowStart, 'window_end' => $windowEnd]);
     $payroll = (float) $statement->fetchColumn();

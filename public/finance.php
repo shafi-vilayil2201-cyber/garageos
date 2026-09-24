@@ -49,11 +49,18 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart, 'period_start_end' => $periodStart]);
 $monthPurchases = (float) $statement->fetchColumn();
 
+// Keyed on paid_at (when it was actually marked paid), not
+// period_month — an unpaid run isn't real cash-out yet, and with
+// per-employee pay cycles (salary_pay_day) period_month is often an
+// arbitrary mid-month date rather than always the 1st, so matching it
+// against a calendar-month boundary directly would silently miss most
+// employees' payroll here.
 $statement = $pdo->prepare("
     SELECT COALESCE(SUM(net_salary), 0) FROM payroll_runs
-    WHERE organization_id = :organization_id AND period_month = :period_start
+    WHERE organization_id = :organization_id AND payment_status = 'paid'
+      AND paid_at >= :period_start AND paid_at < (:period_start_end::date + INTERVAL '1 month')
 ");
-$statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart]);
+$statement->execute(['organization_id' => $organizationId, 'period_start' => $periodStart, 'period_start_end' => $periodStart]);
 $monthPayroll = (float) $statement->fetchColumn();
 
 $monthExpenses = $monthManualExpenses + $monthPurchases + $monthPayroll;
