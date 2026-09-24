@@ -390,10 +390,10 @@ textarea:focus-visible,
     transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     /* A faint dot grid under the cards — reads as a workspace canvas
        (Apple/Figma-style) rather than a flat fill. Wide spacing and a
-       barely-there dot (rgba of --muted at low alpha — a CSS variable
+       low-opacity dot (rgba of --muted at low alpha — a CSS variable
        can't carry its own opacity) so it stays in the background at a
        glance; only shows through in the gaps between cards/tables. */
-    background-image: radial-gradient(rgba(107, 102, 96, 0.16) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(107, 102, 96, 0.16) 1.8px, transparent 1.8px);
     background-size: 28px 28px;
     background-position: -6px -6px;
     background-color: var(--bg);
