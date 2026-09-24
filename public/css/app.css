@@ -1762,14 +1762,20 @@ table.data-table {
     border-radius: var(--radius);
     border-top: 3px solid transparent;
     padding: 14px;
-    /* A bit taller than before so the columns reach closer to the
-       "Deleted Job Cards" link below the board, instead of leaving a
-       band of empty page between them — the cards themselves keep
-       their own padding/spacing untouched, so a full column still
-       scrolls rather than getting cramped. */
-    height: calc(100vh - 235px);
-    min-height: 520px;
+    height: calc(100vh - 305px);
+    min-height: 420px;
     box-sizing: border-box;
+    /* Grid's automatic row sizing otherwise uses the column's un-clipped
+       *content* height (the full card stack, ignoring the scrollable
+       child's overflow) to size the shared row track — every column
+       then sits inside a row as tall as the busiest one, even though
+       each column's own box still shows the height/min-height above.
+       That invisible extra height is what was pushing everything below
+       the board down. overflow: hidden makes this item's own box (not
+       just the scrollable .kanban-column-cards inside it) the thing
+       Grid measures, so the row track matches the height actually set
+       above instead of the tallest column's true card count. */
+    overflow: hidden;
     transition: box-shadow 0.15s ease, opacity 0.15s ease;
     display: flex;
     flex-direction: column;
