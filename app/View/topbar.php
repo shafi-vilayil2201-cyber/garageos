@@ -29,7 +29,7 @@
         <div class="user-menu-trigger" id="user-menu-trigger">
             <button type="button" class="avatar" id="user-menu-button"
                     aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
-                <?= icon('person', 20) ?>
+                <?= icon('person', 28) ?>
             </button>
 
             <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
