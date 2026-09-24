@@ -392,7 +392,5 @@ $topbarTitle = 'Service Catalog';
     </div>
 </div>
 
-<script src="/js/modal.js"></script>
-
 </body>
 </html>

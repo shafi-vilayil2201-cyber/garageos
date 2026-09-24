@@ -14,29 +14,6 @@
     const cardLinks = Array.from(board.querySelectorAll('.kanban-card-link[draggable="true"]'));
 
 
-    function showToast(message)
-    {
-        let toast = document.getElementById('kanban-toast');
-
-        if (!toast)
-        {
-            toast = document.createElement('div');
-            toast.id = 'kanban-toast';
-            toast.className = 'kanban-toast';
-            document.body.appendChild(toast);
-        }
-
-        toast.textContent = message;
-        toast.classList.add('visible');
-
-        clearTimeout(toast._hideTimer);
-        toast._hideTimer = setTimeout(() =>
-        {
-            toast.classList.remove('visible');
-        }, 3200);
-    }
-
-
     function updateCount(status, delta)
     {
         const el = document.getElementById(`kanban-count-${status}`);
@@ -128,7 +105,7 @@
         } catch (error)
         {
             console.error(error);
-            showToast(error.message || 'Could not move that job card. Reverting.');
+            window.showToast(error.message || 'Could not move that job card. Reverting.', 'error');
 
             const originalHolder = fromColumn.querySelector('.kanban-column-cards');
             originalHolder.insertBefore(wrap, originalHolder.firstChild);

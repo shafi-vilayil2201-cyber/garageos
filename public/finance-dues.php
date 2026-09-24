@@ -298,7 +298,6 @@ $topbarTitle = 'Debt';
     </div>
 </div>
 
-<script src="/js/modal.js"></script>
 <script>
 function openPayableModal(purchaseId, purchaseNo, balance)
 {

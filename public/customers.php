@@ -382,8 +382,6 @@ $topbarTitle = 'Customers';
         </div>
     </div>
 
-    <script src="/js/modal.js"></script>
-
 <?php endif; ?>
 
 <?php if (!empty($customers)): ?>

@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Support/Flash.php';
+
 // Expects $activeNav and $user (with $user['permissions']) to be set by
 // the including page.
 $activeNav = $activeNav ?? '';
@@ -219,4 +221,9 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
 
 <div class="sidebar-flyout" id="sidebar-flyout" hidden></div>
 
+<?= flash_render() ?>
+
 <script src="/js/responsive-nav.js"></script>
+<script src="/js/modal.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/confirm-modal.js"></script>

@@ -334,7 +334,6 @@ $topbarTitle = 'Appointments';
         </div>
     </div>
 
-    <script src="/js/modal.js"></script>
     <script src="/js/vehicle-intake.js"></script>
     <script>initVehicleIntake('appt');</script>
 

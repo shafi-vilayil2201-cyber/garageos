@@ -7,6 +7,7 @@ require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/Accessory.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -59,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'quick
         ]);
 
         log_audit_event($pdo, $user, 'update', 'job_card', $editJobCardId, "Updated details for {$editingJobCard['job_no']} via quick edit");
+        flash_set("{$editingJobCard['job_no']} updated.");
     }
 
     header('Location: /job-cards.php');
@@ -379,7 +381,6 @@ $topbarTitle = 'Job Cards';
         </div>
     </div>
 
-    <script src="/js/modal.js"></script>
     <script src="/js/vehicle-intake.js"></script>
     <script src="/js/customer-voice-list.js"></script>
     <script src="/js/damage-diagram.js"></script>

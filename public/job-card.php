@@ -7,6 +7,7 @@ require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/PartUnit.php';
 require_once __DIR__ . '/../app/Domain/Accessory.php';
 require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -79,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             apply_job_card_status($pdo, $jobCard, $newStatus, $organizationId, $user);
 
+            flash_set("Status updated to " . str_replace('_', ' ', $newStatus) . ".");
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
         }
@@ -107,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         }
 
+        flash_set('Promised delivery saved.');
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
 
@@ -121,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "Recorded accessories present for {$jobCard['job_no']}"
         );
 
+        flash_set('Accessories saved.');
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
 
@@ -135,6 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "Recorded vehicle condition for {$jobCard['job_no']}"
         );
 
+        flash_set('Vehicle condition saved.');
         header('Location: /job-card.php?id=' . $jobCardId);
         exit;
 
@@ -178,6 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     "Added service '$addedServiceName' to job card {$jobCard['job_no']}" . ($price != $catalogService['standard_price'] ? " (price adjusted to ₹$price)" : '')
                 );
 
+                flash_set("Added \"$addedServiceName\".");
                 header('Location: /job-card.php?id=' . $jobCardId);
                 exit;
             }
@@ -206,6 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     "Added custom service '$customName' (₹$price) to job card {$jobCard['job_no']}"
                 );
 
+                flash_set("Added \"$customName\".");
                 header('Location: /job-card.php?id=' . $jobCardId);
                 exit;
             }
@@ -307,6 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$error) {
+            flash_set("Added \"$addedPartName\".");
             header('Location: /job-card.php?id=' . $jobCardId);
             exit;
         }
@@ -502,6 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo, $user, 'delete', 'job_card_item', $jobCardId,
                     "Removed service '$removedServiceName' from job card {$jobCard['job_no']}"
                 );
+                flash_set("Removed \"$removedServiceName\".");
             }
         }
 
@@ -559,6 +568,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $pdo, $user, 'delete', 'job_card_part', $jobCardId,
                         "Removed part '{$removed['name']}' from job card {$jobCard['job_no']}"
                     );
+                    flash_set("Removed \"{$removed['name']}\".");
                 }
 
                 $pdo->commit();
@@ -581,7 +591,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = $deleteError;
             $errorAction = 'delete_job_card';
         } else {
-            header('Location: /customer.php?id=' . (int) $jobCard['customer_id'] . '&deleted=' . urlencode($jobCard['job_no']));
+            flash_set("{$jobCard['job_no']} removed from the board. Restore it anytime from {$jobCard['customer_name']}'s customer page.");
+            header('Location: /customer.php?id=' . (int) $jobCard['customer_id']);
             exit;
         }
     }
@@ -738,7 +749,10 @@ $topbarTitle = $jobCard['job_no'];
                                                 <td class="num">₹<?= number_format($line['price'] - $line['discount'], 2) ?></td>
                                                 <?php if ($canRemoveLines): ?>
                                                     <td>
-                                                        <form method="POST" action="" onsubmit="return confirm('Remove this service from the job card?');">
+                                                        <form method="POST" action=""
+                                                              data-confirm="Remove this service from the job card?"
+                                                              data-confirm-title="Remove service?"
+                                                              data-confirm-label="Remove">
                                                             <?= csrf_field() ?>
                                                             <input type="hidden" name="action" value="remove_service">
                                                             <input type="hidden" name="item_id" value="<?= (int) $line['id'] ?>">
@@ -782,7 +796,10 @@ $topbarTitle = $jobCard['job_no'];
                                                 <td class="num">₹<?= number_format($line['quantity'] * $line['unit_price'], 2) ?></td>
                                                 <?php if ($canRemoveLines): ?>
                                                     <td>
-                                                        <form method="POST" action="" onsubmit="return confirm('Remove this part and its labour charge, and restore stock?');">
+                                                        <form method="POST" action=""
+                                                              data-confirm="Remove this part and its labour charge, and restore stock?"
+                                                              data-confirm-title="Remove part?"
+                                                              data-confirm-label="Remove">
                                                             <?= csrf_field() ?>
                                                             <input type="hidden" name="action" value="remove_part">
                                                             <input type="hidden" name="item_id" value="<?= (int) $line['id'] ?>">
@@ -995,10 +1012,13 @@ $topbarTitle = $jobCard['job_no'];
                                     <div class="form-error" style="margin-bottom:12px;"><?= htmlspecialchars($error) ?></div>
                                 <?php endif; ?>
                                 <p class="result-meta" style="margin-bottom:12px;">
-                                    Removes <?= htmlspecialchars($jobCard['job_no']) ?> from the active board. It isn't erased —
-                                    it stays on <?= htmlspecialchars($jobCard['customer_name']) ?>'s profile and the Owner can restore it.
+                                    <?= htmlspecialchars($jobCard['job_no']) ?> will be removed from the board. It's not deleted — you
+                                    can find and restore it from <?= htmlspecialchars($jobCard['customer_name']) ?>'s customer page.
                                 </p>
-                                <form method="POST" action="" onsubmit="return confirm('Delete job card <?= htmlspecialchars(addslashes($jobCard['job_no'])) ?>? It can be restored later from the customer\'s profile.');">
+                                <form method="POST" action=""
+                                      data-confirm="<?= htmlspecialchars($jobCard['job_no'], ENT_QUOTES) ?> will be removed from the board. It's not deleted — you can find and restore it from <?= htmlspecialchars($jobCard['customer_name'], ENT_QUOTES) ?>'s customer page."
+                                      data-confirm-title="Delete job card?"
+                                      data-confirm-label="Delete">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="delete_job_card">
                                     <button type="submit" class="button danger"><?= icon('x', 16) ?> Delete job card</button>
@@ -1175,7 +1195,6 @@ $topbarTitle = $jobCard['job_no'];
         </div>
     </div>
 
-    <script src="/js/modal.js"></script>
     <script src="/js/job-card-detail.js"></script>
     <script src="/js/damage-diagram.js"></script>
     <script>initDamageDiagram('adddamage');</script>

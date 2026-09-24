@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/JobCardStatus.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -37,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
 
     if ($jobCard) {
         restore_job_card($pdo, $jobCard, $user);
+        flash_set("{$jobCard['job_no']} restored to the active board.");
     }
 
     header('Location: /deleted-job-cards.php');
@@ -126,7 +128,11 @@ $topbarTitle = 'Deleted Job Cards';
                                             <div class="result-meta"><?= htmlspecialchars($jobCard['deleted_by_name'] ?? 'Unknown') ?></div>
                                         </td>
                                         <td>
-                                            <form method="POST" action="" onsubmit="return confirm('Restore job card <?= htmlspecialchars(addslashes($jobCard['job_no'])) ?>?');">
+                                            <form method="POST" action=""
+                                                  data-confirm="Restore job card <?= htmlspecialchars($jobCard['job_no'], ENT_QUOTES) ?> back onto the active board?"
+                                                  data-confirm-title="Restore job card?"
+                                                  data-confirm-label="Restore"
+                                                  data-confirm-variant="neutral">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="action" value="restore_job_card">
                                                 <input type="hidden" name="job_card_id" value="<?= (int) $jobCard['id'] ?>">

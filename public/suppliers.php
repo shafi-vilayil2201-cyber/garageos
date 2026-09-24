@@ -309,8 +309,6 @@ $topbarTitle = 'Suppliers';
         </div>
     </div>
 
-    <script src="/js/modal.js"></script>
-
 <?php endif; ?>
 
 </body>

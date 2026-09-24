@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () =>
             } catch (error) {
                 if (!(error && error.name === 'AbortError')) {
                     console.error(error);
-                    alert("Couldn't share the invoice PDF. Try Print Invoice instead.");
+                    window.showToast("Couldn't share the invoice PDF. Try Print Invoice instead.", 'error');
                 }
             } finally {
                 restore();
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () =>
             } else {
                 console.error(error);
                 const detail = error && (error.message || error.name) ? ': ' + (error.message || error.name) : '';
-                alert("Couldn't prepare the invoice PDF" + detail + ". Try Print Invoice instead.");
+                window.showToast("Couldn't prepare the invoice PDF" + detail + ". Try Print Invoice instead.", 'error');
                 restore();
             }
         }
