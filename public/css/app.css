@@ -594,7 +594,7 @@ textarea:focus-visible,
    taller title+description block) and reclaims some of the margin that
    description line's own line-height used to need. */
 .page-header-tight {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     align-items: center;
 }
 
@@ -1762,13 +1762,23 @@ table.data-table {
     margin-left: 12px;
 }
 
-/* Kanban (job cards board) */
+/* Kanban (job cards board) — every bit of vertical space reclaimed up
+   here (page's own top padding, the search row's bottom margin, this
+   margin-top) feeds directly into .kanban-column's height below, so
+   the board itself gets taller instead of that space going to waste. */
+.page:has(.kanban) {
+    padding-top: 20px;
+}
+
+.page:has(.kanban) .search-row {
+    margin-bottom: 10px;
+}
 
 .kanban {
     display: grid;
     grid-template-columns: repeat(5, minmax(220px, 1fr));
     gap: 16px;
-    margin-top: 24px;
+    margin-top: 14px;
     align-items: stretch;
 }
 
@@ -1777,8 +1787,8 @@ table.data-table {
     border-radius: var(--radius);
     border-top: 3px solid transparent;
     padding: 14px;
-    height: calc(100vh - 305px);
-    min-height: 420px;
+    height: calc(100vh - 276px);
+    min-height: 450px;
     box-sizing: border-box;
     /* Grid's automatic row sizing otherwise uses the column's un-clipped
        *content* height (the full card stack, ignoring the scrollable
