@@ -54,3 +54,16 @@ function settle_outstanding_advances(PDO $pdo, int $organizationId, int $userId,
         'user_id' => $userId
     ]);
 }
+
+// Reverses settle_outstanding_advances() for one run — puts whatever
+// it previously settled back into the "outstanding" pool. Called right
+// before recalculating an existing unpaid run, so a second advance
+// recorded after the first recalculation doesn't silently replace the
+// first one's deduction: every advance ever tied to this run becomes
+// outstanding again, then gets swept back up together in one sum by
+// the settle call that follows the recalculation.
+function unsettle_advances_for_run(PDO $pdo, int $payrollRunId): void
+{
+    $statement = $pdo->prepare("UPDATE salary_advances SET settled_in_payroll_run_id = NULL WHERE settled_in_payroll_run_id = :payroll_run_id");
+    $statement->execute(['payroll_run_id' => $payrollRunId]);
+}

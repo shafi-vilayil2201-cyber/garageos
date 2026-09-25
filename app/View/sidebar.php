@@ -162,7 +162,7 @@ $financeGroupActive = $activeNav === 'finance_overview' || in_array($activeNav, 
                 </div>
 
                 <?php if (user_can($user, 'users.manage')): ?>
-                    <?php nav_link('/employees.php', 'employees', $activeNav, 'team', 'Employees'); ?>
+                    <?php nav_link('/employees.php', 'employees', $activeNav, 'mechanic', 'Employees'); ?>
                 <?php endif; ?>
 
                 <?php if (user_can($user, 'attendance.manage')): ?>
