@@ -79,37 +79,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '' || $phone === '') {
             $error = 'Name and phone are required.';
             $errorAction = 'create';
+        } elseif ($state !== '' && !in_array($state, INDIAN_STATES, true)) {
+            $error = 'Choose a valid state.';
+            $errorAction = 'create';
         } else {
+            try {
+                $statement = $pdo->prepare("
+                    SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 6) AS INT)), 0) + 1
+                    FROM customers
+                    WHERE organization_id = :organization_id
+                ");
+                $statement->execute(['organization_id' => $organizationId]);
+                $nextNumber = (int) $statement->fetchColumn();
+                $code = 'CUST-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
-            $statement = $pdo->prepare("
-                SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 6) AS INT)), 0) + 1
-                FROM customers
-                WHERE organization_id = :organization_id
-            ");
-            $statement->execute(['organization_id' => $organizationId]);
-            $nextNumber = (int) $statement->fetchColumn();
-            $code = 'CUST-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+                $statement = $pdo->prepare("
+                    INSERT INTO customers (organization_id, name, code, phone, email, address, gstin, state)
+                    VALUES (:organization_id, :name, :code, :phone, :email, :address, :gstin, :state)
+                    RETURNING id
+                ");
 
-            $statement = $pdo->prepare("
-                INSERT INTO customers (organization_id, name, code, phone, email, address)
-                VALUES (:organization_id, :name, :code, :phone, :email, :address)
-                RETURNING id
-            ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'name' => $name,
+                    'code' => $code,
+                    'phone' => $phone,
+                    'email' => $email ?: null,
+                    'address' => $address ?: null,
+                    'gstin' => $gstin ?: null,
+                    'state' => $state ?: null
+                ]);
+                $newCustomerId = (int) $statement->fetchColumn();
 
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'name' => $name,
-                'code' => $code,
-                'phone' => $phone,
-                'email' => $email ?: null,
-                'address' => $address ?: null
-            ]);
-            $newCustomerId = (int) $statement->fetchColumn();
+                log_audit_event($pdo, $user, 'create', 'customer', $newCustomerId, "Created customer $name");
 
-            log_audit_event($pdo, $user, 'create', 'customer', $newCustomerId, "Created customer $name");
+                header('Location: /customers.php');
+                exit;
 
-            header('Location: /customers.php');
-            exit;
+            } catch (Throwable $e) {
+                $error = 'Could not save customer. Please check the details and try again.';
+                $errorAction = 'create';
+            }
         }
     }
 }
@@ -298,6 +308,19 @@ $topbarTitle = 'Customers';
                         <div class="form-field">
                             <label for="address">Address (optional)</label>
                             <textarea id="address" name="address"></textarea>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="gstin">GSTIN (optional)</label>
+                            <input type="text" id="gstin" name="gstin" placeholder="For B2B invoices">
+                        </div>
+
+                        <div class="form-field">
+                            <label for="state">State (optional)</label>
+                            <select id="state" name="state">
+                                <?= state_options() ?>
+                            </select>
+                            <p class="result-meta" style="margin-top:6px;">Used to show GST as CGST+SGST or IGST on invoices — leave unset if unsure.</p>
                         </div>
 
                     </div>

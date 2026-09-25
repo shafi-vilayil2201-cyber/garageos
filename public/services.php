@@ -74,32 +74,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '') {
             $error = 'Service name is required.';
             $errorAction = 'update';
+        } elseif ($standardPrice < 0) {
+            $error = 'Standard price cannot be negative.';
+            $errorAction = 'update';
+        } elseif ($estimatedMinutes <= 0) {
+            $error = 'Estimated duration must be at least 1 minute.';
+            $errorAction = 'update';
         } else {
-            $statement = $pdo->prepare("
-                UPDATE services
-                SET name = :name, service_category_id = :service_category_id,
-                    standard_price = :standard_price, estimated_minutes = :estimated_minutes,
-                    tax_rate = :tax_rate, sac_code = :sac_code,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND organization_id = :organization_id
-            ");
-            $statement->execute([
-                'name' => $name,
-                'service_category_id' => $categoryId,
-                'standard_price' => $standardPrice,
-                'estimated_minutes' => $estimatedMinutes,
-                'tax_rate' => $taxRate,
-                'sac_code' => $sacCode ?: null,
-                'id' => $editingServiceId,
-                'organization_id' => $organizationId
-            ]);
+            try {
+                $statement = $pdo->prepare("
+                    UPDATE services
+                    SET name = :name, service_category_id = :service_category_id,
+                        standard_price = :standard_price, estimated_minutes = :estimated_minutes,
+                        tax_rate = :tax_rate, sac_code = :sac_code,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id AND organization_id = :organization_id
+                ");
+                $statement->execute([
+                    'name' => $name,
+                    'service_category_id' => $categoryId,
+                    'standard_price' => $standardPrice,
+                    'estimated_minutes' => $estimatedMinutes,
+                    'tax_rate' => $taxRate,
+                    'sac_code' => $sacCode ?: null,
+                    'id' => $editingServiceId,
+                    'organization_id' => $organizationId
+                ]);
 
-            if ($statement->rowCount() > 0) {
-                log_audit_event($pdo, $user, 'update', 'service', $editingServiceId, "Updated service '$name'");
+                if ($statement->rowCount() > 0) {
+                    log_audit_event($pdo, $user, 'update', 'service', $editingServiceId, "Updated service '$name'");
+                }
+
+                header('Location: /services.php');
+                exit;
+
+            } catch (Throwable $e) {
+                $error = 'Could not update service. Please check the details and try again.';
+                $errorAction = 'update';
             }
-
-            header('Location: /services.php');
-            exit;
         }
 
     } else {
@@ -107,30 +119,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '') {
             $error = 'Service name is required.';
             $errorAction = 'create';
+        } elseif ($standardPrice < 0) {
+            $error = 'Standard price cannot be negative.';
+            $errorAction = 'create';
+        } elseif ($estimatedMinutes <= 0) {
+            $error = 'Estimated duration must be at least 1 minute.';
+            $errorAction = 'create';
         } else {
-            $code = generate_service_code($pdo, $organizationId, $name);
+            try {
+                $code = generate_service_code($pdo, $organizationId, $name);
 
-            $statement = $pdo->prepare("
-                INSERT INTO services (organization_id, service_category_id, name, code, standard_price, estimated_minutes, tax_rate, sac_code)
-                VALUES (:organization_id, :service_category_id, :name, :code, :standard_price, :estimated_minutes, :tax_rate, :sac_code)
-                RETURNING id
-            ");
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'service_category_id' => $categoryId,
-                'name' => $name,
-                'code' => $code,
-                'standard_price' => $standardPrice,
-                'estimated_minutes' => $estimatedMinutes,
-                'tax_rate' => $taxRate,
-                'sac_code' => $sacCode ?: null
-            ]);
-            $newServiceId = (int) $statement->fetchColumn();
+                $statement = $pdo->prepare("
+                    INSERT INTO services (organization_id, service_category_id, name, code, standard_price, estimated_minutes, tax_rate, sac_code)
+                    VALUES (:organization_id, :service_category_id, :name, :code, :standard_price, :estimated_minutes, :tax_rate, :sac_code)
+                    RETURNING id
+                ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'service_category_id' => $categoryId,
+                    'name' => $name,
+                    'code' => $code,
+                    'standard_price' => $standardPrice,
+                    'estimated_minutes' => $estimatedMinutes,
+                    'tax_rate' => $taxRate,
+                    'sac_code' => $sacCode ?: null
+                ]);
+                $newServiceId = (int) $statement->fetchColumn();
 
-            log_audit_event($pdo, $user, 'create', 'service', $newServiceId, "Created service '$name'");
+                log_audit_event($pdo, $user, 'create', 'service', $newServiceId, "Created service '$name'");
 
-            header('Location: /services.php');
-            exit;
+                header('Location: /services.php');
+                exit;
+
+            } catch (Throwable $e) {
+                $error = 'Could not create service. Please check the details and try again.';
+                $errorAction = 'create';
+            }
         }
     }
 }

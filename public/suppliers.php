@@ -74,32 +74,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Supplier name is required.';
             $errorAction = 'create';
         } else {
+            try {
+                $statement = $pdo->prepare("
+                    SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 5) AS INT)), 0) + 1
+                    FROM suppliers WHERE organization_id = :organization_id
+                ");
+                $statement->execute(['organization_id' => $organizationId]);
+                $nextNumber = (int) $statement->fetchColumn();
+                $code = 'SUP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
-            $statement = $pdo->prepare("
-                SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 5) AS INT)), 0) + 1
-                FROM suppliers WHERE organization_id = :organization_id
-            ");
-            $statement->execute(['organization_id' => $organizationId]);
-            $nextNumber = (int) $statement->fetchColumn();
-            $code = 'SUP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+                $statement = $pdo->prepare("
+                    INSERT INTO suppliers (organization_id, name, code, phone, email, address, gstin)
+                    VALUES (:organization_id, :name, :code, :phone, :email, :address, :gstin)
+                    RETURNING id
+                ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'name' => $name,
+                    'code' => $code,
+                    'phone' => $phone ?: null,
+                    'email' => $email ?: null,
+                    'address' => $address ?: null,
+                    'gstin' => $gstin ?: null
+                ]);
+                $newSupplierId = (int) $statement->fetchColumn();
 
-            $statement = $pdo->prepare("
-                INSERT INTO suppliers (organization_id, name, code, phone)
-                VALUES (:organization_id, :name, :code, :phone)
-                RETURNING id
-            ");
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'name' => $name,
-                'code' => $code,
-                'phone' => $phone ?: null
-            ]);
-            $newSupplierId = (int) $statement->fetchColumn();
+                log_audit_event($pdo, $user, 'create', 'supplier', $newSupplierId, "Created supplier $name");
 
-            log_audit_event($pdo, $user, 'create', 'supplier', $newSupplierId, "Created supplier $name");
+                header('Location: /suppliers.php');
+                exit;
 
-            header('Location: /suppliers.php');
-            exit;
+            } catch (Throwable $e) {
+                $error = 'Could not save supplier. Please check the details and try again.';
+                $errorAction = 'create';
+            }
         }
     }
 }
@@ -248,6 +256,18 @@ $topbarTitle = 'Suppliers';
                         <div class="form-field">
                             <label>Phone (optional)</label>
                             <input type="tel" name="phone">
+                        </div>
+                        <div class="form-field">
+                            <label>Email (optional)</label>
+                            <input type="email" name="email">
+                        </div>
+                        <div class="form-field">
+                            <label>Address (optional)</label>
+                            <textarea name="address"></textarea>
+                        </div>
+                        <div class="form-field">
+                            <label>GSTIN (optional)</label>
+                            <input type="text" name="gstin" placeholder="For input tax credit">
                         </div>
                     </div>
                     <div class="form-actions">

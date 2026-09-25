@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $quantity = (float) ($quantities[$index] ?? 0);
         $unitCost = (float) ($unitCosts[$index] ?? 0);
 
-        if ($partId && $quantity > 0) {
+        if ($partId && $quantity > 0 && $unitCost >= 0) {
             $lines[] = [
                 'part_id' => $partId,
                 'quantity' => $quantity,

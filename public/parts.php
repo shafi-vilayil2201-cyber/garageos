@@ -52,6 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '' || $sku === '') {
             $error = 'Name and SKU are required.';
             $errorAction = 'update';
+        } elseif ($costPrice < 0 || $sellingPrice < 0 || $reorderLevel < 0 || $taxRate < 0) {
+            $error = 'Prices, reorder level, and tax rate cannot be negative.';
+            $errorAction = 'update';
         } else {
             try {
                 $statement = $pdo->prepare("
@@ -102,6 +105,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($name === '' || $sku === '') {
             $error = 'Name and SKU are required.';
+            $errorAction = 'create';
+        } elseif ($costPrice < 0 || $sellingPrice < 0 || $openingStock < 0 || $reorderLevel < 0 || $taxRate < 0) {
+            $error = 'Prices, opening stock, reorder level, and tax rate cannot be negative.';
+            $errorAction = 'create';
+        } elseif (part_unit_is_whole($unit) && fmod($openingStock, 1) !== 0.0) {
+            $error = 'Opening stock must be a whole number for this unit.';
             $errorAction = 'create';
         } else {
 

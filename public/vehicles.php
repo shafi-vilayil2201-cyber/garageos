@@ -43,64 +43,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $editingVehicleId = (int) ($_POST['vehicle_id'] ?? 0);
 
+        $validFuelTypes = ['petrol', 'diesel', 'ev', 'hybrid', 'cng'];
+        $fuelType = in_array($fuelType, $validFuelTypes, true) ? $fuelType : 'petrol';
+
         if (!$customerId || $registrationNo === '' || $make === '' || $model === '') {
             $error = 'Customer, registration number, make and model are required.';
             $errorAction = 'update';
         } else {
-            $statement = $pdo->prepare("
-                UPDATE vehicles
-                SET customer_id = :customer_id, registration_no = :registration_no, make = :make,
-                    model = :model, year = :year, fuel_type = :fuel_type, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND organization_id = :organization_id
-            ");
-            $statement->execute([
-                'customer_id' => $customerId,
-                'registration_no' => $registrationNo,
-                'make' => $make,
-                'model' => $model,
-                'year' => $year ?: null,
-                'fuel_type' => $fuelType,
-                'id' => $editingVehicleId,
-                'organization_id' => $organizationId
-            ]);
+            try {
+                $statement = $pdo->prepare("
+                    UPDATE vehicles
+                    SET customer_id = :customer_id, registration_no = :registration_no, make = :make,
+                        model = :model, year = :year, fuel_type = :fuel_type, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id AND organization_id = :organization_id
+                ");
+                $statement->execute([
+                    'customer_id' => $customerId,
+                    'registration_no' => $registrationNo,
+                    'make' => $make,
+                    'model' => $model,
+                    'year' => $year ?: null,
+                    'fuel_type' => $fuelType,
+                    'id' => $editingVehicleId,
+                    'organization_id' => $organizationId
+                ]);
 
-            if ($statement->rowCount() > 0) {
-                log_audit_event($pdo, $user, 'update', 'vehicle', $editingVehicleId, "Updated vehicle $registrationNo");
+                if ($statement->rowCount() > 0) {
+                    log_audit_event($pdo, $user, 'update', 'vehicle', $editingVehicleId, "Updated vehicle $registrationNo");
+                }
+
+                header('Location: /vehicles.php');
+                exit;
+
+            } catch (Throwable $e) {
+                $error = str_contains($e->getMessage(), 'uq_vehicles_organization_registration')
+                    ? 'A vehicle with this registration number already exists in your garage.'
+                    : 'Could not update vehicle. Please check the details and try again.';
+                $errorAction = 'update';
             }
-
-            header('Location: /vehicles.php');
-            exit;
         }
 
     } else {
+
+        $validFuelTypes = ['petrol', 'diesel', 'ev', 'hybrid', 'cng'];
+        $fuelType = in_array($fuelType, $validFuelTypes, true) ? $fuelType : 'petrol';
 
         if (!$customerId || $registrationNo === '' || $make === '' || $model === '') {
             $error = 'Customer, registration number, make and model are required.';
             $errorAction = 'create';
             $preselectedCustomerId = $customerId;
         } else {
+            try {
+                $statement = $pdo->prepare("
+                    INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
+                    VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
+                    RETURNING id
+                ");
 
-            $statement = $pdo->prepare("
-                INSERT INTO vehicles (organization_id, customer_id, registration_no, make, model, year, fuel_type)
-                VALUES (:organization_id, :customer_id, :registration_no, :make, :model, :year, :fuel_type)
-                RETURNING id
-            ");
+                $statement->execute([
+                    'organization_id' => $organizationId,
+                    'customer_id' => $customerId,
+                    'registration_no' => $registrationNo,
+                    'make' => $make,
+                    'model' => $model,
+                    'year' => $year ?: null,
+                    'fuel_type' => $fuelType
+                ]);
+                $newVehicleId = (int) $statement->fetchColumn();
 
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'customer_id' => $customerId,
-                'registration_no' => $registrationNo,
-                'make' => $make,
-                'model' => $model,
-                'year' => $year ?: null,
-                'fuel_type' => $fuelType
-            ]);
-            $newVehicleId = (int) $statement->fetchColumn();
+                log_audit_event($pdo, $user, 'create', 'vehicle', $newVehicleId, "Registered vehicle $registrationNo");
 
-            log_audit_event($pdo, $user, 'create', 'vehicle', $newVehicleId, "Registered vehicle $registrationNo");
+                header('Location: /vehicles.php');
+                exit;
 
-            header('Location: /vehicles.php');
-            exit;
+            } catch (Throwable $e) {
+                $error = str_contains($e->getMessage(), 'uq_vehicles_organization_registration')
+                    ? 'A vehicle with this registration number already exists in your garage.'
+                    : 'Could not register vehicle. Please check the details and try again.';
+                $errorAction = 'create';
+                $preselectedCustomerId = $customerId;
+            }
         }
     }
 }
