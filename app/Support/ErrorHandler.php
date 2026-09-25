@@ -59,7 +59,7 @@ function garageos_handle_exception(Throwable $e): void
 
     $isDev = (env('APP_ENV', 'production') !== 'production');
 
-    require __DIR__ . '/../app/View/error.php';
+    require __DIR__ . '/../View/error.php';
 }
 
 // PHP errors (notices, warnings, deprecations) that aren't exceptions
