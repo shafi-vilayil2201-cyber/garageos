@@ -29,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
     require_permission($user, 'payroll.manage');
 
     $advanceAmount = (float) ($_POST['amount'] ?? 0);
-    $paidAt = trim($_POST['paid_at'] ?? '') ?: date('Y-m-d');
+    $paidAtRaw = trim($_POST['paid_at'] ?? '');
+    $paidAt = ($paidAtRaw !== '' && DateTime::createFromFormat('Y-m-d', $paidAtRaw)) ? $paidAtRaw : date('Y-m-d');
     $notes = trim($_POST['notes'] ?? '') ?: null;
 
     $statement = $pdo->prepare("SELECT name FROM users WHERE id = :id AND organization_id = :organization_id");
@@ -37,12 +38,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
     $targetName = $statement->fetchColumn();
 
     if ($targetName && $advanceAmount > 0) {
-        record_salary_advance($pdo, $organizationId, $employeeId, $advanceAmount, $paidAt, $notes, $user['id']);
-        log_audit_event(
-            $pdo, $user, 'create', 'salary_advance', $employeeId,
-            "Recorded a ₹$advanceAmount advance for $targetName, recovered from their next payroll run"
-        );
-        flash_set("Advance recorded — it'll be deducted from {$targetName}'s next payroll run.");
+        try {
+            $pdo->beginTransaction();
+            record_salary_advance($pdo, $organizationId, $employeeId, $advanceAmount, $paidAt, $notes, $user['id']);
+            log_audit_event(
+                $pdo, $user, 'create', 'salary_advance', $employeeId,
+                "Recorded a ₹$advanceAmount advance for $targetName, recovered from their next payroll run"
+            );
+            $pdo->commit();
+            flash_set("Advance recorded — it'll be deducted from {$targetName}'s next payroll run.");
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            error_log('Salary advance failed: ' . $e->getMessage());
+            flash_set('Failed to record advance — please check the amount and try again.', 'error');
+        }
     }
 
     header('Location: /employee.php?id=' . $employeeId);

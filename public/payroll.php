@@ -29,26 +29,53 @@ $organizationId = $user['organization_id'];
 // gets fixed — the upsert just recomputes it. Once paid, it's locked:
 // this refuses outright rather than silently resurrecting an unpaid
 // state on a run that's already been counted as a real expense.
-function generate_payroll_run(PDO $pdo, array $user, int $organizationId, array $salariedUser, string $periodStart, string $periodEnd): bool
+//
+// $payDay/$joinedAt are only used to verify $periodStart is actually
+// legitimate for a *new* run — the "only available once it's due" rule
+// used to live purely in what button the page rendered, which a direct
+// POST past the UI could ignore entirely (confirmed: an arbitrary
+// future period generated cleanly). A period that already has a run is
+// always allowed through here regardless of due-ness — it was
+// legitimate when first created, and recalculating it is a correction,
+// not a new grant.
+function generate_payroll_run(PDO $pdo, array $user, int $organizationId, array $salariedUser, string $periodStart, string $periodEnd, int $payDay, string $joinedAt): bool
 {
     $statement = $pdo->prepare("
-        SELECT payment_status FROM payroll_runs
+        SELECT id, payment_status FROM payroll_runs
         WHERE organization_id = :organization_id AND user_id = :user_id AND period_month = :period_month
     ");
     $statement->execute(['organization_id' => $organizationId, 'user_id' => $salariedUser['id'], 'period_month' => $periodStart]);
-    $existingStatus = $statement->fetchColumn();
+    $existing = $statement->fetch(PDO::FETCH_ASSOC);
 
-    if ($existingStatus === 'paid') {
+    if ($existing && $existing['payment_status'] === 'paid') {
         return false;
+    }
+
+    if (!$existing) {
+        $periodsStatement = $pdo->prepare("SELECT period_month FROM payroll_runs WHERE organization_id = :organization_id AND user_id = :user_id");
+        $periodsStatement->execute(['organization_id' => $organizationId, 'user_id' => $salariedUser['id']]);
+        $generatedPeriods = $periodsStatement->fetchAll(PDO::FETCH_COLUMN);
+
+        $duePeriodStarts = array_column(pending_payroll_periods($payDay, $joinedAt, $generatedPeriods), 'start');
+
+        if (!in_array($periodStart, $duePeriodStarts, true)) {
+            return false;
+        }
+    } else {
+        // Recalculating: whatever this run previously settled goes back
+        // into the outstanding pool, so it's correctly included in the
+        // fresh sum below instead of being replaced by it.
+        unsettle_advances_for_run($pdo, (int) $existing['id']);
     }
 
     $daysInPeriod = (new DateTime($periodStart))->diff(new DateTime($periodEnd))->days;
 
     $statement = $pdo->prepare("
         SELECT status FROM attendance
-        WHERE user_id = :user_id AND work_date >= :period_start AND work_date < :period_end
+        WHERE organization_id = :organization_id AND user_id = :user_id AND work_date >= :period_start AND work_date < :period_end
     ");
     $statement->execute([
+        'organization_id' => $organizationId,
         'user_id' => $salariedUser['id'],
         'period_start' => $periodStart,
         'period_end' => $periodEnd
@@ -102,8 +129,8 @@ function generate_payroll_run(PDO $pdo, array $user, int $organizationId, array 
     }
 
     log_audit_event(
-        $pdo, $user, $existingStatus === false ? 'create' : 'update', 'payroll_run', $payrollRunId,
-        ($existingStatus === false ? 'Generated' : 'Regenerated') . " payroll for {$salariedUser['name']}, " . (new DateTime($periodStart))->format('d M') . '–' . (new DateTime($periodEnd))->modify('-1 day')->format('d M Y')
+        $pdo, $user, $existing ? 'update' : 'create', 'payroll_run', $payrollRunId,
+        ($existing ? 'Regenerated' : 'Generated') . " payroll for {$salariedUser['name']}, " . (new DateTime($periodStart))->format('d M') . '–' . (new DateTime($periodEnd))->modify('-1 day')->format('d M Y')
     );
 
     return true;
@@ -167,7 +194,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $periodStart = trim($_POST['period_start'] ?? '');
 
             if (isset($salariedUsersById[$targetUserId]) && DateTime::createFromFormat('Y-m-d', $periodStart)) {
-                if (generate_payroll_run($pdo, $user, $organizationId, $salariedUsersById[$targetUserId], $periodStart, payroll_period_end($periodStart))) {
+                $targetUser = $salariedUsersById[$targetUserId];
+                $targetPayDay = (int) ($targetUser['salary_pay_day'] ?? 1);
+                $targetJoinedAt = $targetUser['joined_at'] ?? $targetUser['created_at'];
+
+                if (generate_payroll_run($pdo, $user, $organizationId, $targetUser, $periodStart, payroll_period_end($periodStart), $targetPayDay, $targetJoinedAt)) {
                     $generatedCount = 1;
                 }
             }
@@ -342,7 +373,11 @@ $topbarTitle = 'Payroll';
                                             <button type="submit" class="button" style="width:100%;"><?= icon('check', 16) ?> Generate Salary</button>
                                         </form>
                                     <?php elseif ($latest && $latest['payment_status'] === 'unpaid'): ?>
-                                        <form method="POST" action="">
+                                        <form method="POST" action=""
+                                              data-confirm="Mark &#8377;<?= number_format((float) $latest['net_salary'], 2) ?> as paid to <?= htmlspecialchars($salariedUser['name'], ENT_QUOTES) ?> for <?= htmlspecialchars(payroll_period_label($latest['period_month']), ENT_QUOTES) ?>? This locks the record — it can no longer be recalculated."
+                                              data-confirm-title="Mark as paid?"
+                                              data-confirm-label="Mark as Paid"
+                                              data-confirm-variant="neutral">
                                             <?= csrf_field() ?>
                                             <input type="hidden" name="action" value="mark_paid">
                                             <input type="hidden" name="payroll_run_id" value="<?= (int) $latest['id'] ?>">

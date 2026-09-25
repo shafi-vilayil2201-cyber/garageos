@@ -67,6 +67,7 @@ function calculate_payroll(array $user, array $attendanceRows, int $daysInPeriod
 // calendar-month behaviour every already-generated payroll_run used.
 function payroll_period_start_for(int $payDay, string $referenceDate): string
 {
+    $payDay = max(1, min(28, $payDay));
     $reference = new DateTime($referenceDate);
     $day = (int) $reference->format('j');
 

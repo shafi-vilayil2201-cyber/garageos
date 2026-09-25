@@ -13,6 +13,13 @@ require_once __DIR__ . '/../app/Support/Env.php';
 
 load_env(__DIR__ . '/../.env');
 
+// Global error handler — registered before anything else so even a
+// database connection failure (the very next thing that happens) renders
+// a styled error page instead of a raw die(). Catches uncaught
+// exceptions, promotes PHP errors to exceptions, and handles fatal
+// shutdown errors. See ErrorHandler.php for details.
+require_once __DIR__ . '/../app/Support/ErrorHandler.php';
+
 // Defaults match the long-standing local dev setup (see README) so a
 // checkout with no .env still runs — a real install always provides its
 // own .env with its own generated password.
@@ -24,18 +31,11 @@ $password = env('DB_PASSWORD', 'garageos_dev_2026');
 
 $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
 
-try {
-    $pdo = new PDO($dsn, $user, $password);
+$pdo = new PDO($dsn, $user, $password);
 
-    $pdo->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
-    );
+$pdo->setAttribute(
+    PDO::ATTR_ERRMODE,
+    PDO::ERRMODE_EXCEPTION
+);
 
-    return $pdo;
-
-} catch (PDOException $e) {
-    error_log("Database connection failed: " . $e->getMessage());
-    http_response_code(500);
-    die("Something went wrong. Please try again shortly.");
-}
+return $pdo;
