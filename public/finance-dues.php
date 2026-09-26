@@ -182,16 +182,16 @@ $topbarTitle = 'Debt';
                             <table class="data-table">
                                 <tr><th>Supplier</th><th>Code</th><th>Outstanding Balance</th><th></th></tr>
                                 <?php foreach ($supplierPayables as $sp): ?>
-                                    <tr>
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>">
                                         <td>
-                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" style="font-weight: 600; color: var(--color-primary, #4f46e5); text-decoration: none;">
+                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" style="font-weight: 600; color: var(--text); text-decoration: none;">
                                                 <?= htmlspecialchars($sp['supplier_name']) ?>
                                             </a>
                                         </td>
                                         <td><span class="badge badge-subtle"><?= htmlspecialchars($sp['supplier_code'] ?? '—') ?></span></td>
-                                        <td class="num" style="font-weight: 600; color: var(--color-danger, #ef4444);">₹<?= number_format((float) $sp['outstanding_balance'], 2) ?></td>
+                                        <td class="num" style="font-weight: 600; color: var(--danger);">₹<?= number_format((float) $sp['outstanding_balance'], 2) ?></td>
                                         <td style="text-align: right;">
-                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" class="button secondary" style="padding: 4px 10px; font-size: 12px;">
+                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" class="button secondary sm">
                                                 <?= icon('receipt', 14) ?> View Ledger
                                             </a>
                                         </td>
@@ -222,7 +222,7 @@ $topbarTitle = 'Debt';
                                 <tr><th>Purchase</th><th>Supplier</th><th>Status</th><th>Balance due</th><th></th></tr>
                                 <?php foreach ($payableRows as $row): ?>
                                     <?php $rowBalance = (float) $row['total'] - (float) $row['amount_paid']; ?>
-                                    <tr>
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>&tab=bills">
                                         <td><strong><?= htmlspecialchars($row['purchase_no']) ?></strong></td>
                                         <td>
                                             <a href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>" style="text-decoration: none; color: inherit; font-weight: 500;">
@@ -233,7 +233,7 @@ $topbarTitle = 'Debt';
                                         <td class="num" style="font-weight: 600;">₹<?= number_format($rowBalance, 2) ?></td>
                                         <td style="text-align: right;">
                                             <?php if (user_can($user, 'finance.manage')): ?>
-                                                <button type="button" class="button secondary"
+                                                <button type="button" class="button secondary sm"
                                                         onclick="openPayableModal(<?= (int) $row['id'] ?>, '<?= htmlspecialchars(addslashes($row['purchase_no'])) ?>', <?= $rowBalance ?>)">
                                                     Record payment
                                                 </button>
@@ -265,12 +265,12 @@ $topbarTitle = 'Debt';
                             <table class="data-table">
                                 <tr><th>Invoice</th><th>Customer</th><th>Status</th><th>Balance due</th><th></th></tr>
                                 <?php foreach ($receivableRows as $row): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($row['invoice_no']) ?></td>
+                                    <tr class="clickable" data-href="/invoice.php?id=<?= (int) $row['id'] ?>">
+                                        <td><strong><?= htmlspecialchars($row['invoice_no']) ?></strong></td>
                                         <td><?= htmlspecialchars($row['customer_name']) ?></td>
-                                        <td style="text-transform:capitalize;"><?= htmlspecialchars($row['status']) ?></td>
+                                        <td style="text-transform:capitalize;"><span class="badge badge-warning"><?= htmlspecialchars($row['status']) ?></span></td>
                                         <td class="num">₹<?= number_format($row['total'] - $row['amount_paid'], 2) ?></td>
-                                        <td><a href="/invoice.php?id=<?= (int) $row['id'] ?>" class="button secondary">View</a></td>
+                                        <td style="text-align:right;"><a href="/invoice.php?id=<?= (int) $row['id'] ?>" class="button secondary sm">View</a></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
@@ -349,5 +349,6 @@ function openPayableModal(purchaseId, purchaseNo, balance)
 }
 </script>
 
+<script src="/js/clickable-rows.js"></script>
 </body>
 </html>

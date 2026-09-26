@@ -315,7 +315,7 @@ $topbarTitle = 'Suppliers';
                                     $due = (float) $s['outstanding_balance'];
                                     $hasDue = $due > 0.009;
                                     ?>
-                                    <tr>
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $s['id'] ?>">
                                         <td>
                                             <a href="/supplier.php?id=<?= (int) $s['id'] ?>" style="font-weight:600; color:var(--text); text-decoration:none; font-size:14px;">
                                                 <?= htmlspecialchars($s['name']) ?>
@@ -474,5 +474,6 @@ $topbarTitle = 'Suppliers';
 
 <?php endif; ?>
 
+<script src="/js/clickable-rows.js"></script>
 </body>
 </html>
