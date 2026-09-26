@@ -192,7 +192,7 @@ $topbarTitle = 'Debt';
                                         <td class="num" style="font-weight: 600; color: var(--color-danger, #ef4444);">₹<?= number_format((float) $sp['outstanding_balance'], 2) ?></td>
                                         <td style="text-align: right;">
                                             <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" class="button secondary" style="padding: 4px 10px; font-size: 12px;">
-                                                <?= icon('file-text', 14) ?> View Ledger
+                                                <?= icon('receipt', 14) ?> View Ledger
                                             </a>
                                         </td>
                                     </tr>

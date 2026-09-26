@@ -682,6 +682,27 @@ class SupplierLedger
     }
 
     /**
+     * All purchases for a given supplier for the Bills/Invoices tab.
+     */
+    public function getAllPurchases(int $organizationId, int $supplierId): array
+    {
+        $statement = $this->pdo->prepare("
+            SELECT id, purchase_no, subtotal, tax_amount, total, amount_paid, payment_status, created_at,
+                   (total - amount_paid) AS balance_due
+            FROM purchases
+            WHERE organization_id = :organization_id
+              AND supplier_id     = :supplier_id
+            ORDER BY created_at DESC
+        ");
+        $statement->execute([
+            'organization_id' => $organizationId,
+            'supplier_id'     => $supplierId
+        ]);
+
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Unpaid purchases for a given supplier — for the payment
      * allocation dropdown in the 'Record Payment' modal.
      */

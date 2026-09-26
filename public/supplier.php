@@ -5,11 +5,11 @@ require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/SupplierLedger.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
 $auth = new Auth($pdo);
-
 $user = $auth->user();
 
 if (!$user) {
@@ -41,8 +41,11 @@ if (!$supplier) {
 
 $ledger = new SupplierLedger($pdo);
 
-$error        = null;
-$successModal = null;
+$error   = null;
+$activeTab = $_GET['tab'] ?? 'ledger';
+if (!in_array($activeTab, ['ledger', 'bills', 'plans', 'profile'], true)) {
+    $activeTab = 'ledger';
+}
 
 // -----------------------------------------------------------------
 //  POST actions
@@ -50,7 +53,6 @@ $successModal = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
 
     csrf_verify();
-
     $action = $_POST['action'] ?? '';
 
     try {
@@ -70,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 }
 
                 $allocations = [];
-                if ($purchaseId) {
+                if ($purchaseId > 0) {
                     $allocations[] = ['purchase_id' => $purchaseId, 'amount' => $amount];
                 }
 
@@ -83,11 +85,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 log_audit_event($pdo, $user, 'create', 'supplier_payment', $paymentId,
                     'Recorded payment of ₹' . number_format($amount, 2) . ' to ' . $supplier['name']
                 );
+                flash_set('Payment of ₹' . number_format($amount, 2) . ' recorded successfully.');
                 break;
 
-            case 'credit_adjustment':
-                $amount = (float) ($_POST['amount'] ?? 0);
-                $reason = trim($_POST['reason'] ?? '');
+            case 'adjustment':
+                $adjType = $_POST['adjustment_type'] ?? 'credit';
+                $amount  = (float) ($_POST['amount'] ?? 0);
+                $reason  = trim($_POST['reason'] ?? '');
 
                 if ($amount <= 0) {
                     throw new RuntimeException('Enter a valid amount.');
@@ -96,34 +100,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                     throw new RuntimeException('A reason is required for adjustments.');
                 }
 
-                $txnId = $ledger->recordCreditAdjustment($organizationId, $supplierId, $amount, $reason, $user);
-
-                log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
-                    'Credit adjustment of ₹' . number_format($amount, 2) . ' for ' . $supplier['name'] . ': ' . $reason
-                );
-                break;
-
-            case 'debit_adjustment':
-                $amount = (float) ($_POST['amount'] ?? 0);
-                $reason = trim($_POST['reason'] ?? '');
-
-                if ($amount <= 0) {
-                    throw new RuntimeException('Enter a valid amount.');
+                if ($adjType === 'credit') {
+                    $txnId = $ledger->recordCreditAdjustment($organizationId, $supplierId, $amount, $reason, $user);
+                    log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
+                        'Credit adjustment of ₹' . number_format($amount, 2) . ' for ' . $supplier['name'] . ': ' . $reason
+                    );
+                    flash_set('Credit adjustment of ₹' . number_format($amount, 2) . ' recorded.');
+                } else {
+                    $txnId = $ledger->recordDebitAdjustment($organizationId, $supplierId, $amount, $reason, $user);
+                    log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
+                        'Debit adjustment of ₹' . number_format($amount, 2) . ' for ' . $supplier['name'] . ': ' . $reason
+                    );
+                    flash_set('Debit adjustment of ₹' . number_format($amount, 2) . ' recorded.');
                 }
-                if ($reason === '') {
-                    throw new RuntimeException('A reason is required for adjustments.');
-                }
-
-                $txnId = $ledger->recordDebitAdjustment($organizationId, $supplierId, $amount, $reason, $user);
-
-                log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
-                    'Debit adjustment of ₹' . number_format($amount, 2) . ' for ' . $supplier['name'] . ': ' . $reason
-                );
                 break;
 
             case 'opening_balance':
-                $amount  = (float) ($_POST['amount'] ?? 0);
-                $desc    = trim($_POST['description'] ?? '');
+                $amount   = (float) ($_POST['amount'] ?? 0);
+                $desc     = trim($_POST['description'] ?? '');
                 $asOfDate = $_POST['as_of_date'] ?? date('Y-m-d');
 
                 if ($amount <= 0) {
@@ -135,6 +129,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
                     'Opening balance of ₹' . number_format($amount, 2) . ' for ' . $supplier['name']
                 );
+                flash_set('Opening balance of ₹' . number_format($amount, 2) . ' saved.');
+                break;
+
+            case 'reverse_transaction':
+                $txnId  = (int) ($_POST['transaction_id'] ?? 0);
+                $reason = trim($_POST['reversal_reason'] ?? '');
+
+                if (!$txnId) {
+                    throw new RuntimeException('Invalid transaction.');
+                }
+                if ($reason === '') {
+                    throw new RuntimeException('Reason for reversal is required.');
+                }
+
+                $newTxnId = $ledger->reverseTransaction($organizationId, $txnId, $reason, $user);
+
+                log_audit_event($pdo, $user, 'create', 'supplier_transaction', $newTxnId,
+                    'Reversed supplier transaction #' . $txnId . ': ' . $reason
+                );
+                flash_set('Transaction reversed successfully.');
                 break;
 
             case 'create_plan':
@@ -162,6 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 log_audit_event($pdo, $user, 'create', 'supplier_payment_plan', $planId,
                     'Created payment plan of ₹' . number_format($planAmount, 2) . '/' . $frequency . ' for ' . $supplier['name']
                 );
+                flash_set('Payment plan created.');
                 break;
 
             case 'update_plan_status':
@@ -177,6 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 log_audit_event($pdo, $user, 'update', 'supplier_payment_plan', $planId,
                     'Updated payment plan status to ' . $newStatus . ' for ' . $supplier['name']
                 );
+                flash_set('Plan status updated to ' . $newStatus . '.');
                 break;
 
             default:
@@ -184,7 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
         }
 
         $pdo->commit();
-        header('Location: /supplier.php?id=' . $supplierId);
+        header('Location: /supplier.php?id=' . $supplierId . '&tab=' . urlencode($activeTab));
         exit;
 
     } catch (Throwable $e) {
@@ -201,10 +217,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
 
 $summary = $ledger->getSupplierSummary($organizationId, $supplierId);
 
-// Ledger filters
-$dateFrom   = $_GET['from'] ?? null;
-$dateTo     = $_GET['to'] ?? null;
-$typeFilter = $_GET['type'] ?? null;
+// Quick preset date handling
+$periodPreset = $_GET['preset'] ?? '';
+$dateFrom     = $_GET['from'] ?? null;
+$dateTo       = $_GET['to'] ?? null;
+$typeFilter   = $_GET['type'] ?? null;
+
+if ($periodPreset === 'this_month') {
+    $dateFrom = date('Y-m-01');
+    $dateTo   = date('Y-m-t');
+} elseif ($periodPreset === 'last_30') {
+    $dateFrom = date('Y-m-d', strtotime('-30 days'));
+    $dateTo   = date('Y-m-d');
+} elseif ($periodPreset === 'this_fy') {
+    $curMonth = (int) date('n');
+    $curYear  = (int) date('Y');
+    $fyStartYear = $curMonth >= 4 ? $curYear : $curYear - 1;
+    $dateFrom = $fyStartYear . '-04-01';
+    $dateTo   = ($fyStartYear + 1) . '-03-31';
+}
 
 $ledgerPage = max(1, (int) ($_GET['lp'] ?? 1));
 $perPage    = 25;
@@ -218,6 +249,7 @@ $ledgerOffset = ($ledgerPage - 1) * $perPage;
 
 $ledgerTotalPages = max(1, (int) ceil($ledgerTotal / $perPage));
 
+$allPurchases    = $ledger->getAllPurchases($organizationId, $supplierId);
 $unpaidPurchases = $ledger->getUnpaidPurchases($organizationId, $supplierId);
 $paymentPlans    = $ledger->getPaymentPlans($organizationId, $supplierId);
 
@@ -226,16 +258,16 @@ $txnTypeLabels = [
     'PURCHASE'           => 'Purchase',
     'PAYMENT'            => 'Payment',
     'PURCHASE_RETURN'    => 'Return',
-    'CREDIT_ADJUSTMENT'  => 'Credit',
-    'DEBIT_ADJUSTMENT'   => 'Debit',
+    'CREDIT_ADJUSTMENT'  => 'Credit (Disc/Return)',
+    'DEBIT_ADJUSTMENT'   => 'Debit (Charge)',
     'REFUND'             => 'Refund',
     'PAYMENT_REVERSAL'   => 'Pay. Reversal',
     'PURCHASE_REVERSAL'  => 'Pur. Reversal'
 ];
 
 $txnTypeBadge = [
-    'OPENING_BALANCE'    => 'badge-info',
-    'PURCHASE'           => 'badge-warning',
+    'OPENING_BALANCE'    => 'badge-neutral',
+    'PURCHASE'           => 'badge-danger',
     'PAYMENT'            => 'badge-success',
     'PURCHASE_RETURN'    => 'badge-success',
     'CREDIT_ADJUSTMENT'  => 'badge-success',
@@ -245,7 +277,6 @@ $txnTypeBadge = [
     'PURCHASE_REVERSAL'  => 'badge-danger'
 ];
 
-// Frequency label helper
 function frequency_label(string $freq): string {
     return match ($freq) {
         'weekly'    => 'Weekly',
@@ -255,7 +286,6 @@ function frequency_label(string $freq): string {
     };
 }
 
-// Next payment date helper
 function next_payment_date(array $plan): ?string {
     $start = new DateTime($plan['start_date']);
     $now   = new DateTime();
@@ -282,6 +312,22 @@ function next_payment_date(array $plan): ?string {
     return $date->format('d M Y');
 }
 
+$outstandingBal = (float) $summary['outstanding_balance'];
+$isPayable = $outstandingBal > 0.009;
+
+// WhatsApp text generator
+$waPhone = preg_replace('/[^0-9]/', '', $supplier['phone'] ?? '');
+if ($waPhone && strlen($waPhone) === 10) {
+    $waPhone = '91' . $waPhone;
+}
+$orgName = $user['organization_name'] ?? 'GarageOS';
+$waText = "Hello {$supplier['name']},\n\nAccount Summary from {$orgName}:\n"
+    . "• Total Purchases: ₹" . number_format((float) $summary['total_purchases'], 2) . "\n"
+    . "• Total Paid: ₹" . number_format((float) $summary['total_payments'], 2) . "\n"
+    . "• Outstanding Balance: ₹" . number_format($outstandingBal, 2) . "\n\n"
+    . "As of: " . date('d M Y') . "\nThank you!";
+$waUrl = "https://wa.me/{$waPhone}?text=" . urlencode($waText);
+
 $activeNav = 'suppliers';
 $topbarTitle = $supplier['name'];
 
@@ -297,58 +343,163 @@ $topbarTitle = $supplier['name'];
     <link rel="stylesheet" href="/css/app.css">
     <?= favicon_tag($user['organization_logo_url'] ?? null) ?>
     <style>
-        .supplier-summary {
+        .supplier-hero-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 12px;
             margin-bottom: 20px;
         }
-        .summary-item {
+        .hero-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px;
-            text-align: center;
+            border-radius: 12px;
+            padding: 16px 18px;
+            position: relative;
+            overflow: hidden;
         }
-        .summary-item .label {
+        .hero-card .hero-label {
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             color: var(--muted);
             margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
-        .summary-item .value {
-            font-size: 20px;
+        .hero-card .hero-value {
+            font-size: 22px;
             font-weight: 700;
+            line-height: 1.2;
         }
-        .summary-item .value.outstanding {
-            color: var(--danger);
+        .hero-card .hero-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
         }
-        .summary-item .value.success {
-            color: var(--success);
+        .hero-card.highlight-due {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, var(--card) 100%);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        .hero-card.highlight-clear {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, var(--card) 100%);
+            border-color: rgba(16, 185, 129, 0.3);
         }
 
-        .action-bar {
+        .action-toolbar {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
             margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
         }
-
-        .ledger-filters {
+        .action-group {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             align-items: center;
         }
-        .ledger-filters input,
-        .ledger-filters select {
-            padding: 6px 10px;
-            font-size: 13px;
-            min-width: 0;
+
+        /* Modern Tabs */
+        .tab-nav {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        .tab-btn {
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--muted);
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .tab-btn:hover {
+            color: var(--text);
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+            font-weight: 600;
+        }
+        .tab-pill {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: var(--hover);
+            color: var(--text);
+        }
+        .tab-btn.active .tab-pill {
+            background: rgba(79, 70, 229, 0.12);
+            color: var(--accent);
         }
 
-        .badge-info    { background: #e0f2fe; color: #0369a1; }
+        /* Preset Chips */
+        .chip-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-chip {
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            text-decoration: none;
+            color: var(--text);
+            background: var(--card);
+            transition: all 0.15s ease;
+        }
+        .filter-chip:hover {
+            background: var(--hover);
+        }
+        .filter-chip.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* Modal Segmented Tabs */
+        .modal-tabs {
+            display: flex;
+            background: var(--hover);
+            padding: 4px;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            gap: 4px;
+        }
+        .modal-tab-item {
+            flex: 1;
+            text-align: center;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--muted);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .modal-tab-item.active {
+            background: var(--card);
+            color: var(--text);
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .badge-neutral { background: var(--hover); color: var(--text); }
         .badge-success { background: #dcfce7; color: #15803d; }
         .badge-warning { background: #fef9c3; color: #a16207; }
         .badge-danger  { background: #fee2e2; color: #b91c1c; }
@@ -356,45 +507,18 @@ $topbarTitle = $supplier['name'];
         .ledger-table td.debit  { color: var(--danger); font-weight: 600; }
         .ledger-table td.credit { color: var(--success); font-weight: 600; }
 
-        .plan-card {
+        .plan-item-card {
             border: 1px solid var(--border);
             border-radius: 10px;
             padding: 16px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            background: var(--card);
         }
-        .plan-card .plan-header {
+        .plan-item-card .plan-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
-        }
-        .plan-card .plan-detail {
-            font-size: 13px;
-            color: var(--muted);
-            margin-bottom: 4px;
-        }
-
-        .ledger-pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            padding: 14px;
-        }
-        .ledger-pagination a {
-            padding: 6px 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 13px;
-            color: var(--text);
-        }
-        .ledger-pagination a:hover { background: var(--hover); }
-        .ledger-pagination .current {
-            background: var(--accent);
-            color: #fff;
-            border-color: var(--accent);
-            font-weight: 600;
         }
     </style>
 </head>
@@ -410,22 +534,32 @@ $topbarTitle = $supplier['name'];
 
         <section class="page">
 
-            <a href="/suppliers.php" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to Suppliers</a>
+            <a href="/suppliers.php" class="link-action" style="margin-bottom:14px; display:inline-flex; align-items:center; gap:6px;">
+                <?= icon('arrow-left', 14) ?> Back to Suppliers
+            </a>
 
-            <div class="page-header">
+            <!-- Page Title & Meta Header -->
+            <div class="page-header" style="margin-bottom:16px;">
                 <div>
-                    <h1 class="page-title"><?= htmlspecialchars($supplier['name']) ?></h1>
+                    <h1 class="page-title" style="display:flex; align-items:center; gap:10px;">
+                        <?= htmlspecialchars($supplier['name']) ?>
+                        <span class="badge badge-neutral" style="font-size:12px;"><?= htmlspecialchars($supplier['code']) ?></span>
+                    </h1>
                     <p class="page-description">
-                        <?= htmlspecialchars($supplier['code']) ?>
-                        <?= $supplier['phone'] ? ' · ' . htmlspecialchars($supplier['phone']) : '' ?>
-                        <?= $supplier['email'] ? ' · ' . htmlspecialchars($supplier['email']) : '' ?>
+                        <?= $supplier['phone'] ? '📞 ' . htmlspecialchars($supplier['phone']) : '' ?>
+                        <?= $supplier['email'] ? ' · ✉️ ' . htmlspecialchars($supplier['email']) : '' ?>
                         <?= $supplier['gstin'] ? ' · GSTIN: ' . htmlspecialchars($supplier['gstin']) : '' ?>
                     </p>
                 </div>
 
-                <div style="display:flex; gap:10px; align-items:center;">
+                <div class="action-group">
+                    <?php if ($supplier['phone']): ?>
+                        <a href="<?= $waUrl ?>" target="_blank" rel="noopener" class="button secondary" title="Share balance statement via WhatsApp">
+                            <?= brand_icon('whatsapp', 15) ?> Share Statement
+                        </a>
+                    <?php endif; ?>
                     <?php if ($canManage): ?>
-                        <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary"><?= icon('settings', 16) ?> Edit</a>
+                        <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary"><?= icon('settings', 15) ?> Edit Profile</a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -434,293 +568,444 @@ $topbarTitle = $supplier['name'];
                 <div class="form-error" style="margin-bottom:16px;"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <!-- ─── Financial Summary ─── -->
-            <div class="supplier-summary">
-                <div class="summary-item">
-                    <div class="label">Total Purchases</div>
-                    <div class="value">₹<?= number_format((float) $summary['total_purchases'], 2) ?></div>
+            <!-- ─── Financial Summary Cards ─── -->
+            <div class="supplier-hero-grid">
+                <div class="hero-card">
+                    <div class="hero-label">
+                        <span>Total Purchases</span>
+                        <?= icon('truck', 16) ?>
+                    </div>
+                    <div class="hero-value">₹<?= number_format((float) $summary['total_purchases'], 2) ?></div>
+                    <div class="hero-sub"><?= count($allPurchases) ?> total bill<?= count($allPurchases) === 1 ? '' : 's' ?></div>
                 </div>
-                <div class="summary-item">
-                    <div class="label">Total Payments</div>
-                    <div class="value success">₹<?= number_format((float) $summary['total_payments'], 2) ?></div>
+
+                <div class="hero-card">
+                    <div class="hero-label">
+                        <span>Total Paid</span>
+                        <?= icon('wallet', 16) ?>
+                    </div>
+                    <div class="hero-value" style="color:var(--success);">₹<?= number_format((float) $summary['total_payments'], 2) ?></div>
+                    <div class="hero-sub">Settled amount</div>
                 </div>
-                <div class="summary-item">
-                    <div class="label">Credits / Returns</div>
-                    <div class="value">₹<?= number_format((float) $summary['total_credits'], 2) ?></div>
+
+                <div class="hero-card">
+                    <div class="hero-label">
+                        <span>Credits / Returns</span>
+                        <?= icon('receipt', 16) ?>
+                    </div>
+                    <div class="hero-value">₹<?= number_format((float) $summary['total_credits'], 2) ?></div>
+                    <div class="hero-sub">Discounts & adjustments</div>
                 </div>
-                <div class="summary-item">
-                    <div class="label">Debit Adjustments</div>
-                    <div class="value">₹<?= number_format((float) $summary['total_debits'], 2) ?></div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">Outstanding Balance</div>
-                    <div class="value <?= (float) $summary['outstanding_balance'] > 0.009 ? 'outstanding' : 'success' ?>">₹<?= number_format((float) $summary['outstanding_balance'], 2) ?></div>
+
+                <div class="hero-card <?= $isPayable ? 'highlight-due' : 'highlight-clear' ?>">
+                    <div class="hero-label">
+                        <span>Net Outstanding Due</span>
+                        <?= icon('alert-triangle', 16) ?>
+                    </div>
+                    <div class="hero-value" style="color: <?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
+                        ₹<?= number_format($outstandingBal, 2) ?>
+                    </div>
+                    <div class="hero-sub" style="font-weight:600; color: <?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
+                        <?= $isPayable ? '⚠️ YOU OWE SUPPLIER' : '✓ ALL CLEAR / SETTLED' ?>
+                    </div>
                 </div>
             </div>
 
-            <!-- ─── Action Buttons ─── -->
-            <?php if ($canFinance): ?>
-                <div class="action-bar">
-                    <button type="button" class="button" onclick="openModal('payment-modal')"><?= icon('wallet', 16) ?> Record Payment</button>
-                    <button type="button" class="button secondary" onclick="openModal('credit-modal')"><?= icon('trending-up', 16) ?> Credit Adjustment</button>
-                    <button type="button" class="button secondary" onclick="openModal('debit-modal')"><?= icon('trending-up', 16) ?> Debit Adjustment</button>
-                    <button type="button" class="button secondary" onclick="openModal('opening-modal')"><?= icon('file-text', 16) ?> Opening Balance</button>
-                    <button type="button" class="button secondary" onclick="openModal('plan-modal')"><?= icon('calendar', 16) ?> Payment Plan</button>
-                    <a href="/api/supplier-statement-export.php?id=<?= $supplierId ?><?= $dateFrom ? '&from=' . urlencode($dateFrom) : '' ?><?= $dateTo ? '&to=' . urlencode($dateTo) : '' ?>" class="button secondary"><?= icon('download', 16) ?> Export Statement</a>
+            <!-- ─── Action Toolbar ─── -->
+            <div class="action-toolbar">
+                <div class="action-group">
+                    <?php if ($canFinance): ?>
+                        <button type="button" class="button" onclick="openUnifiedModal('pay')">
+                            <?= icon('plus', 15) ?> Record Transaction
+                        </button>
+                        <button type="button" class="button secondary" onclick="openModal('plan-modal')">
+                            <?= icon('calendar', 15) ?> + Payment Plan
+                        </button>
+                    <?php endif; ?>
+                </div>
+
+                <div class="action-group">
+                    <a href="/api/supplier-statement-export.php?id=<?= $supplierId ?><?= $dateFrom ? '&from=' . urlencode($dateFrom) : '' ?><?= $dateTo ? '&to=' . urlencode($dateTo) : '' ?>" class="button secondary">
+                        <?= icon('box', 15) ?> Export CSV
+                    </a>
+                </div>
+            </div>
+
+            <!-- ─── Tabbed Navigation ─── -->
+            <div class="tab-nav">
+                <a href="?id=<?= $supplierId ?>&tab=ledger" class="tab-btn <?= $activeTab === 'ledger' ? 'active' : '' ?>">
+                    <?= icon('receipt', 16) ?> Account Ledger
+                    <span class="tab-pill"><?= $ledgerTotal ?></span>
+                </a>
+                <a href="?id=<?= $supplierId ?>&tab=bills" class="tab-btn <?= $activeTab === 'bills' ? 'active' : '' ?>">
+                    <?= icon('truck', 16) ?> Purchase Bills
+                    <span class="tab-pill"><?= count($allPurchases) ?></span>
+                </a>
+                <a href="?id=<?= $supplierId ?>&tab=plans" class="tab-btn <?= $activeTab === 'plans' ? 'active' : '' ?>">
+                    <?= icon('calendar', 16) ?> Payment Plans
+                    <span class="tab-pill"><?= count($paymentPlans) ?></span>
+                </a>
+                <a href="?id=<?= $supplierId ?>&tab=profile" class="tab-btn <?= $activeTab === 'profile' ? 'active' : '' ?>">
+                    <?= icon('building', 16) ?> Supplier Profile
+                </a>
+            </div>
+
+            <!-- ─── TAB 1: Statement & Ledger ─── -->
+            <?php if ($activeTab === 'ledger'): ?>
+                <div class="card">
+                    <div class="card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('receipt', 15) ?></span>
+                            Transaction History & Statement
+                        </div>
+
+                        <!-- Date Range Preset Chips -->
+                        <div class="chip-group">
+                            <a href="?id=<?= $supplierId ?>&tab=ledger" class="filter-chip <?= (!$periodPreset && !$dateFrom && !$dateTo) ? 'active' : '' ?>">All Time</a>
+                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_month" class="filter-chip <?= $periodPreset === 'this_month' ? 'active' : '' ?>">This Month</a>
+                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=last_30" class="filter-chip <?= $periodPreset === 'last_30' ? 'active' : '' ?>">Last 30 Days</a>
+                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_fy" class="filter-chip <?= $periodPreset === 'this_fy' ? 'active' : '' ?>">This FY</a>
+                        </div>
+                    </div>
+
+                    <!-- Custom Filter Row -->
+                    <div style="padding:12px 18px; background:var(--hover); border-bottom:1px solid var(--border);">
+                        <form method="GET" action="" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                            <input type="hidden" name="id" value="<?= $supplierId ?>">
+                            <input type="hidden" name="tab" value="ledger">
+                            <label style="font-size:12px; color:var(--muted);">From:</label>
+                            <input type="date" name="from" value="<?= htmlspecialchars($dateFrom ?? '') ?>" style="padding:5px 8px; font-size:13px;">
+                            <label style="font-size:12px; color:var(--muted);">To:</label>
+                            <input type="date" name="to" value="<?= htmlspecialchars($dateTo ?? '') ?>" style="padding:5px 8px; font-size:13px;">
+                            <select name="type" style="padding:5px 8px; font-size:13px;">
+                                <option value="">All transaction types</option>
+                                <?php foreach ($txnTypeLabels as $code => $label): ?>
+                                    <option value="<?= $code ?>" <?= $typeFilter === $code ? 'selected' : '' ?>><?= $label ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="button secondary sm"><?= icon('search', 13) ?> Filter</button>
+                            <?php if ($dateFrom || $dateTo || $typeFilter || $periodPreset): ?>
+                                <a href="?id=<?= $supplierId ?>&tab=ledger" class="link-action" style="font-size:13px;">Reset</a>
+                            <?php endif; ?>
+                        </form>
+                    </div>
+
+                    <div class="card-body" style="padding:0;">
+                        <?php if (empty($ledgerEntries)): ?>
+                            <div class="empty-state">
+                                <?= icon('receipt', 28) ?>
+                                No transactions recorded for this period.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-wrap">
+                                <table class="data-table ledger-table">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Reference</th>
+                                        <th>Description</th>
+                                        <th style="text-align:right;">Debit (Payable +)</th>
+                                        <th style="text-align:right;">Credit (Paid -)</th>
+                                        <th style="text-align:right;">Balance</th>
+                                        <?php if ($canFinance): ?>
+                                            <th style="text-align:center; width:50px;"></th>
+                                        <?php endif; ?>
+                                    </tr>
+                                    <?php foreach ($ledgerEntries as $entry): ?>
+                                        <tr>
+                                            <td style="white-space:nowrap; font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($entry['transaction_date']))) ?></td>
+                                            <td>
+                                                <span class="badge <?= $txnTypeBadge[$entry['transaction_type']] ?? 'badge-neutral' ?>" style="font-size:11px;">
+                                                    <?= htmlspecialchars($txnTypeLabels[$entry['transaction_type']] ?? $entry['transaction_type']) ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <?php if ($entry['reference_type'] === 'purchase' && $entry['reference_id']): ?>
+                                                    <a href="/purchases.php" class="link-action"><strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong></a>
+                                                <?php else: ?>
+                                                    <strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td style="font-size:13px; color:var(--text);"><?= htmlspecialchars($entry['description']) ?></td>
+                                            <td class="num <?= (float) $entry['debit'] > 0 ? 'debit' : '' ?>">
+                                                <?= (float) $entry['debit'] > 0 ? '₹' . number_format((float) $entry['debit'], 2) : '—' ?>
+                                            </td>
+                                            <td class="num <?= (float) $entry['credit'] > 0 ? 'credit' : '' ?>">
+                                                <?= (float) $entry['credit'] > 0 ? '₹' . number_format((float) $entry['credit'], 2) : '—' ?>
+                                            </td>
+                                            <td class="num" style="font-weight:700;">
+                                                ₹<?= number_format((float) $entry['running_balance'], 2) ?>
+                                            </td>
+                                            <?php if ($canFinance): ?>
+                                                <td style="text-align:center;">
+                                                    <?php if (!str_ends_with($entry['transaction_type'], '_REVERSAL')): ?>
+                                                        <button type="button" class="link-action" style="color:var(--muted); font-size:12px;" onclick="openReversalModal(<?= (int) $entry['id'] ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entry['id'])) ?>')" title="Reverse transaction">
+                                                            <?= icon('trash', 13) ?>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </td>
+                                            <?php endif; ?>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </table>
+                            </div>
+
+                            <?php if ($ledgerTotalPages > 1): ?>
+                                <div style="display:flex; justify-content:center; align-items:center; gap:8px; padding:16px;">
+                                    <?php
+                                    $pageUrl = '?id=' . $supplierId . '&tab=ledger';
+                                    if ($dateFrom) $pageUrl .= '&from=' . urlencode($dateFrom);
+                                    if ($dateTo)   $pageUrl .= '&to=' . urlencode($dateTo);
+                                    if ($typeFilter) $pageUrl .= '&type=' . urlencode($typeFilter);
+                                    if ($periodPreset) $pageUrl .= '&preset=' . urlencode($periodPreset);
+                                    ?>
+                                    <?php if ($ledgerPage > 1): ?>
+                                        <a href="<?= $pageUrl ?>&lp=<?= $ledgerPage - 1 ?>" class="button secondary sm">← Previous</a>
+                                    <?php endif; ?>
+                                    <span style="font-size:13px; color:var(--muted);">Page <?= $ledgerPage ?> of <?= $ledgerTotalPages ?></span>
+                                    <?php if ($ledgerPage < $ledgerTotalPages): ?>
+                                        <a href="<?= $pageUrl ?>&lp=<?= $ledgerPage + 1 ?>" class="button secondary sm">Next →</a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             <?php endif; ?>
 
-            <div class="content-grid content-grid-aside">
-
-                <div class="stack">
-
-                    <!-- ─── Ledger ─── -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                                Transaction Ledger
-                            </div>
-                            <div class="ledger-filters">
-                                <form method="GET" action="" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                                    <input type="hidden" name="id" value="<?= $supplierId ?>">
-                                    <input type="date" name="from" value="<?= htmlspecialchars($dateFrom ?? '') ?>" placeholder="From" title="From date">
-                                    <input type="date" name="to" value="<?= htmlspecialchars($dateTo ?? '') ?>" placeholder="To" title="To date">
-                                    <select name="type" title="Type filter">
-                                        <option value="">All types</option>
-                                        <?php foreach ($txnTypeLabels as $code => $label): ?>
-                                            <option value="<?= $code ?>" <?= $typeFilter === $code ? 'selected' : '' ?>><?= $label ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <button type="submit" class="button secondary sm"><?= icon('search', 14) ?> Filter</button>
-                                    <?php if ($dateFrom || $dateTo || $typeFilter): ?>
-                                        <a href="/supplier.php?id=<?= $supplierId ?>" class="link-action">Clear</a>
-                                    <?php endif; ?>
-                                </form>
-                            </div>
+            <!-- ─── TAB 2: Purchase Bills ─── -->
+            <?php if ($activeTab === 'bills'): ?>
+                <div class="card">
+                    <div class="card-header" style="justify-content:space-between;">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('truck', 15) ?></span>
+                            Purchase Invoices & Orders
                         </div>
-                        <div class="card-body" style="padding:0;">
-                            <?php if (empty($ledgerEntries)): ?>
-                                <div class="empty-state">
-                                    <?= icon('receipt', 28) ?>
-                                    No transactions recorded yet.
-                                </div>
-                            <?php else: ?>
-                                <div class="table-wrap">
-                                    <table class="data-table ledger-table">
+                        <a href="/purchase-new.php" class="button secondary sm"><?= icon('plus', 14) ?> New Purchase</a>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <?php if (empty($allPurchases)): ?>
+                            <div class="empty-state">
+                                <?= icon('truck', 28) ?>
+                                No purchase bills found for this supplier.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <tr>
+                                        <th>Purchase No</th>
+                                        <th>Date</th>
+                                        <th style="text-align:right;">Bill Total</th>
+                                        <th style="text-align:right;">Paid</th>
+                                        <th style="text-align:right;">Balance Due</th>
+                                        <th>Status</th>
+                                        <th style="text-align:right;"></th>
+                                    </tr>
+                                    <?php foreach ($allPurchases as $bill): ?>
+                                        <?php
+                                        $due = (float) $bill['balance_due'];
+                                        $statusClass = match ($bill['payment_status']) {
+                                            'paid'    => 'badge-success',
+                                            'partial' => 'badge-warning',
+                                            default   => 'badge-danger'
+                                        };
+                                        ?>
                                         <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Reference</th>
-                                            <th>Description</th>
-                                            <th>Debit</th>
-                                            <th>Credit</th>
-                                            <th>Balance</th>
+                                            <td><strong><?= htmlspecialchars($bill['purchase_no']) ?></strong></td>
+                                            <td style="font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($bill['created_at']))) ?></td>
+                                            <td class="num">₹<?= number_format((float) $bill['total'], 2) ?></td>
+                                            <td class="num" style="color:var(--success);">₹<?= number_format((float) $bill['amount_paid'], 2) ?></td>
+                                            <td class="num" style="font-weight:700; color: <?= $due > 0.009 ? 'var(--danger)' : 'var(--success)' ?>;">
+                                                ₹<?= number_format($due, 2) ?>
+                                            </td>
+                                            <td>
+                                                <span class="badge <?= $statusClass ?>" style="font-size:11px;">
+                                                    <?= ucfirst($bill['payment_status']) ?>
+                                                </span>
+                                            </td>
+                                            <td style="text-align:right;">
+                                                <?php if ($canFinance && $due > 0.009): ?>
+                                                    <button type="button" class="button secondary sm" onclick="paySpecificBill(<?= (int) $bill['id'] ?>, <?= $due ?>, '<?= htmlspecialchars(addslashes($bill['purchase_no'])) ?>')">
+                                                        <?= icon('wallet', 13) ?> Pay Bill
+                                                    </button>
+                                                <?php endif; ?>
+                                            </td>
                                         </tr>
-                                        <?php foreach ($ledgerEntries as $entry): ?>
-                                            <tr>
-                                                <td><?= htmlspecialchars(date('d M Y', strtotime($entry['transaction_date']))) ?></td>
-                                                <td>
-                                                    <span class="badge <?= $txnTypeBadge[$entry['transaction_type']] ?? '' ?>" style="font-size:11px;">
-                                                        <?= htmlspecialchars($txnTypeLabels[$entry['transaction_type']] ?? $entry['transaction_type']) ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php if ($entry['reference_type'] === 'purchase' && $entry['reference_id']): ?>
-                                                        <a href="/purchases.php" class="link-action"><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></a>
-                                                    <?php else: ?>
-                                                        <?= htmlspecialchars($entry['reference_no'] ?? '—') ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td><?= htmlspecialchars($entry['description']) ?></td>
-                                                <td class="num <?= (float) $entry['debit'] > 0 ? 'debit' : '' ?>">
-                                                    <?= (float) $entry['debit'] > 0 ? '₹' . number_format((float) $entry['debit'], 2) : '—' ?>
-                                                </td>
-                                                <td class="num <?= (float) $entry['credit'] > 0 ? 'credit' : '' ?>">
-                                                    <?= (float) $entry['credit'] > 0 ? '₹' . number_format((float) $entry['credit'], 2) : '—' ?>
-                                                </td>
-                                                <td class="num" style="font-weight:600;">
-                                                    ₹<?= number_format((float) $entry['running_balance'], 2) ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </table>
-                                </div>
-
-                                <?php if ($ledgerTotalPages > 1): ?>
-                                    <div class="ledger-pagination">
-                                        <?php
-                                        $baseUrl = '/supplier.php?id=' . $supplierId;
-                                        if ($dateFrom) $baseUrl .= '&from=' . urlencode($dateFrom);
-                                        if ($dateTo)   $baseUrl .= '&to=' . urlencode($dateTo);
-                                        if ($typeFilter) $baseUrl .= '&type=' . urlencode($typeFilter);
-                                        ?>
-                                        <?php if ($ledgerPage > 1): ?>
-                                            <a href="<?= $baseUrl ?>&lp=<?= $ledgerPage - 1 ?>">← Previous</a>
-                                        <?php endif; ?>
-
-                                        <?php
-                                        $start = max(1, $ledgerPage - 2);
-                                        $end   = min($ledgerTotalPages, $ledgerPage + 2);
-                                        for ($i = $start; $i <= $end; $i++):
-                                        ?>
-                                            <a href="<?= $baseUrl ?>&lp=<?= $i ?>" class="<?= $i === $ledgerPage ? 'current' : '' ?>"><?= $i ?></a>
-                                        <?php endfor; ?>
-
-                                        <?php if ($ledgerPage < $ledgerTotalPages): ?>
-                                            <a href="<?= $baseUrl ?>&lp=<?= $ledgerPage + 1 ?>">Next →</a>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endif; ?>
-
-                            <?php endif; ?>
-                        </div>
+                                    <?php endforeach; ?>
+                                </table>
+                            </div>
+                        <?php endif; ?>
                     </div>
-
                 </div>
+            <?php endif; ?>
 
-                <div class="stack">
-
-                    <!-- ─── Contact Info ─── -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
-                                Supplier Info
-                            </div>
+            <!-- ─── TAB 3: Payment Plans ─── -->
+            <?php if ($activeTab === 'plans'): ?>
+                <div class="card">
+                    <div class="card-header" style="justify-content:space-between;">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('calendar', 15) ?></span>
+                            Scheduled Payment Plans & Installments
                         </div>
-                        <div class="card-body">
-                            <?php if ($supplier['phone']): ?>
-                                <p class="result-meta" style="margin-bottom:4px;">Phone</p>
-                                <p style="margin-bottom:14px;"><?= htmlspecialchars($supplier['phone']) ?></p>
-                            <?php endif; ?>
-
-                            <?php if ($supplier['email']): ?>
-                                <p class="result-meta" style="margin-bottom:4px;">Email</p>
-                                <p style="margin-bottom:14px;"><?= htmlspecialchars($supplier['email']) ?></p>
-                            <?php endif; ?>
-
-                            <?php if ($supplier['address']): ?>
-                                <p class="result-meta" style="margin-bottom:4px;">Address</p>
-                                <p style="margin-bottom:14px;"><?= nl2br(htmlspecialchars($supplier['address'])) ?></p>
-                            <?php endif; ?>
-
-                            <?php if ($supplier['gstin']): ?>
-                                <p class="result-meta" style="margin-bottom:4px;">GSTIN</p>
-                                <p style="margin-bottom:14px;"><?= htmlspecialchars($supplier['gstin']) ?></p>
-                            <?php endif; ?>
-
-                            <p class="result-meta" style="margin-bottom:4px;">Supplier since</p>
-                            <p><?= htmlspecialchars(date('d M Y', strtotime($supplier['created_at']))) ?></p>
-                        </div>
+                        <?php if ($canFinance): ?>
+                            <button type="button" class="button secondary sm" onclick="openModal('plan-modal')">
+                                <?= icon('plus', 14) ?> Create Plan
+                            </button>
+                        <?php endif; ?>
                     </div>
-
-                    <!-- ─── Payment Plans ─── -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-header-title">
-                                <span class="icon-badge"><?= icon('calendar', 15) ?></span>
-                                Payment Plans
+                    <div class="card-body">
+                        <?php if (empty($paymentPlans)): ?>
+                            <div class="empty-state">
+                                <?= icon('calendar', 28) ?>
+                                No active or past payment plans configured.
                             </div>
-                        </div>
-                        <div class="card-body">
-                            <?php if (empty($paymentPlans)): ?>
-                                <div class="empty-state" style="padding:14px 0;">
-                                    <?= icon('calendar', 22) ?>
-                                    <span style="font-size:13px;">No payment plans.</span>
-                                </div>
-                            <?php else: ?>
+                        <?php else: ?>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:14px;">
                                 <?php foreach ($paymentPlans as $plan): ?>
-                                    <div class="plan-card">
-                                        <div class="plan-header">
-                                            <strong>₹<?= number_format((float) $plan['amount_per_installment'], 2) ?> / <?= frequency_label($plan['frequency']) ?></strong>
-                                            <span class="badge <?= $plan['status'] === 'active' ? 'badge-success' : 'badge-warning' ?>" style="font-size:11px;">
+                                    <?php
+                                    $nextDate = next_payment_date($plan);
+                                    $planStatusBadge = match ($plan['status']) {
+                                        'active'    => 'badge-success',
+                                        'paused'    => 'badge-warning',
+                                        'completed' => 'badge-neutral',
+                                        default     => 'badge-danger'
+                                    };
+                                    ?>
+                                    <div class="plan-item-card">
+                                        <div class="plan-top">
+                                            <div>
+                                                <strong style="font-size:16px;">₹<?= number_format((float) $plan['amount_per_installment'], 2) ?></strong>
+                                                <span style="font-size:13px; color:var(--muted);">/ <?= frequency_label($plan['frequency']) ?></span>
+                                            </div>
+                                            <span class="badge <?= $planStatusBadge ?>" style="font-size:11px;">
                                                 <?= ucfirst($plan['status']) ?>
                                             </span>
                                         </div>
+
+                                        <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">
+                                            Start: <?= date('d M Y', strtotime($plan['start_date'])) ?>
+                                            <?= $plan['end_date'] ? ' · End: ' . date('d M Y', strtotime($plan['end_date'])) : '' ?>
+                                        </div>
+
                                         <?php if ($plan['payment_method']): ?>
-                                            <div class="plan-detail">Method: <?= ucfirst(str_replace('_', ' ', $plan['payment_method'])) ?></div>
-                                        <?php endif; ?>
-                                        <div class="plan-detail">Start: <?= date('d M Y', strtotime($plan['start_date'])) ?></div>
-                                        <?php if ($plan['end_date']): ?>
-                                            <div class="plan-detail">End: <?= date('d M Y', strtotime($plan['end_date'])) ?></div>
-                                        <?php endif; ?>
-                                        <?php if ($plan['total_planned']): ?>
-                                            <div class="plan-detail">Total Planned: ₹<?= number_format((float) $plan['total_planned'], 2) ?></div>
-                                        <?php endif; ?>
-                                        <?php
-                                        $nextDate = next_payment_date($plan);
-                                        if ($nextDate && $plan['status'] === 'active'):
-                                        ?>
-                                            <div class="plan-detail" style="color:var(--accent); font-weight:600;">Next: <?= $nextDate ?></div>
-                                        <?php endif; ?>
-                                        <?php if ($plan['notes']): ?>
-                                            <div class="plan-detail"><?= htmlspecialchars($plan['notes']) ?></div>
+                                            <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">
+                                                Preferred Method: <strong><?= strtoupper(str_replace('_', ' ', $plan['payment_method'])) ?></strong>
+                                            </div>
                                         <?php endif; ?>
 
-                                        <?php if ($canFinance && $plan['status'] === 'active'): ?>
-                                            <div style="margin-top:8px; display:flex; gap:6px;">
-                                                <form method="POST" action="" style="display:inline;">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="action" value="update_plan_status">
-                                                    <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
-                                                    <input type="hidden" name="plan_status" value="paused">
-                                                    <button type="submit" class="button secondary sm"><?= icon('pause', 12) ?> Pause</button>
-                                                </form>
-                                                <form method="POST" action="" style="display:inline;">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="action" value="update_plan_status">
-                                                    <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
-                                                    <input type="hidden" name="plan_status" value="completed">
-                                                    <button type="submit" class="button secondary sm"><?= icon('check', 12) ?> Complete</button>
-                                                </form>
+                                        <?php if ($nextDate && $plan['status'] === 'active'): ?>
+                                            <div style="margin-top:8px; padding:6px 10px; background:rgba(79,70,229,0.08); border-radius:6px; font-size:13px; color:var(--accent); font-weight:600;">
+                                                🗓️ Next Due: <?= $nextDate ?>
                                             </div>
-                                        <?php elseif ($canFinance && $plan['status'] === 'paused'): ?>
-                                            <div style="margin-top:8px;">
-                                                <form method="POST" action="" style="display:inline;">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="action" value="update_plan_status">
-                                                    <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
-                                                    <input type="hidden" name="plan_status" value="active">
-                                                    <button type="submit" class="button secondary sm"><?= icon('trending-up', 12) ?> Resume</button>
-                                                </form>
+                                        <?php endif; ?>
+
+                                        <?php if ($plan['notes']): ?>
+                                            <p style="font-size:12px; color:var(--muted); margin-top:8px;"><?= htmlspecialchars($plan['notes']) ?></p>
+                                        <?php endif; ?>
+
+                                        <?php if ($canFinance): ?>
+                                            <div style="margin-top:12px; display:flex; gap:8px; border-top:1px solid var(--border); padding-top:10px;">
+                                                <?php if ($plan['status'] === 'active'): ?>
+                                                    <form method="POST" action="" style="display:inline;">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="update_plan_status">
+                                                        <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
+                                                        <input type="hidden" name="plan_status" value="paused">
+                                                        <button type="submit" class="button secondary sm"><?= icon('pause', 12) ?> Pause</button>
+                                                    </form>
+                                                    <form method="POST" action="" style="display:inline;">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="update_plan_status">
+                                                        <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
+                                                        <input type="hidden" name="plan_status" value="completed">
+                                                        <button type="submit" class="button secondary sm"><?= icon('check', 12) ?> Complete</button>
+                                                    </form>
+                                                <?php elseif ($plan['status'] === 'paused'): ?>
+                                                    <form method="POST" action="" style="display:inline;">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="update_plan_status">
+                                                        <input type="hidden" name="plan_id" value="<?= (int) $plan['id'] ?>">
+                                                        <input type="hidden" name="plan_status" value="active">
+                                                        <button type="submit" class="button secondary sm"><?= icon('trending-up', 12) ?> Resume</button>
+                                                    </form>
+                                                <?php endif; ?>
                                             </div>
                                         <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
-                            <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- ─── TAB 4: Supplier Profile ─── -->
+            <?php if ($activeTab === 'profile'): ?>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <span class="icon-badge"><?= icon('building', 15) ?></span>
+                            Supplier Contact & Tax Information
                         </div>
                     </div>
-
-                    <!-- ─── Unpaid Purchases ─── -->
-                    <?php if (!empty($unpaidPurchases)): ?>
-                        <div class="card">
-                            <div class="card-header">
-                                <div class="card-header-title">
-                                    <span class="icon-badge"><?= icon('truck', 15) ?></span>
-                                    Unpaid Purchases
-                                </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:20px;">
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">Full Name</p>
+                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['name']) ?></p>
                             </div>
-                            <div class="card-body" style="padding:0;">
-                                <div class="table-wrap">
-                                    <table class="data-table">
-                                        <tr><th>Purchase</th><th>Total</th><th>Due</th></tr>
-                                        <?php foreach ($unpaidPurchases as $up): ?>
-                                            <tr>
-                                                <td><strong><?= htmlspecialchars($up['purchase_no']) ?></strong></td>
-                                                <td class="num">₹<?= number_format((float) $up['total'], 2) ?></td>
-                                                <td class="num" style="color:var(--danger); font-weight:600;">₹<?= number_format((float) $up['balance_due'], 2) ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </table>
-                                </div>
+
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">Supplier Code</p>
+                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['code']) ?></p>
+                            </div>
+
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">Phone Number</p>
+                                <p style="font-size:15px;">
+                                    <?php if ($supplier['phone']): ?>
+                                        <a href="tel:<?= htmlspecialchars($supplier['phone']) ?>" class="link-action"><?= htmlspecialchars($supplier['phone']) ?></a>
+                                    <?php else: ?>
+                                        —
+                                    <?php endif; ?>
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">Email Address</p>
+                                <p style="font-size:15px;">
+                                    <?php if ($supplier['email']): ?>
+                                        <a href="mailto:<?= htmlspecialchars($supplier['email']) ?>" class="link-action"><?= htmlspecialchars($supplier['email']) ?></a>
+                                    <?php else: ?>
+                                        —
+                                    <?php endif; ?>
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">GSTIN</p>
+                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['gstin'] ?: 'Unregistered / Not Provided') ?></p>
+                            </div>
+
+                            <div>
+                                <p class="result-meta" style="margin-bottom:4px;">Supplier Since</p>
+                                <p style="font-size:15px;"><?= htmlspecialchars(date('d M Y', strtotime($supplier['created_at']))) ?></p>
+                            </div>
+
+                            <div style="grid-column: 1 / -1;">
+                                <p class="result-meta" style="margin-bottom:4px;">Office / Warehouse Address</p>
+                                <p style="font-size:14px;"><?= $supplier['address'] ? nl2br(htmlspecialchars($supplier['address'])) : '—' ?></p>
                             </div>
                         </div>
-                    <?php endif; ?>
 
+                        <?php if ($canManage): ?>
+                            <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:16px;">
+                                <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary"><?= icon('settings', 15) ?> Edit Information</a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
-
-            </div>
+            <?php endif; ?>
 
         </section>
 
@@ -728,224 +1013,215 @@ $topbarTitle = $supplier['name'];
 
 </div>
 
-<!-- ─── Modals ─── -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  MODALS                                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
 
 <?php if ($canFinance): ?>
 
-    <!-- Record Payment Modal -->
-    <div class="modal-backdrop" id="payment-modal">
+    <!-- 1. UNIFIED RECORD TRANSACTION MODAL -->
+    <div class="modal-backdrop" id="unified-modal">
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
                     <span class="icon-badge"><?= icon('wallet', 16) ?></span>
-                    Record Payment
+                    Record Transaction
                 </div>
-                <button type="button" class="modal-close" data-close-modal="payment-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+                <button type="button" class="modal-close" data-close-modal="unified-modal" aria-label="Close"><?= icon('x', 18) ?></button>
             </div>
             <div class="modal-body">
-                <form method="POST" action="">
+
+                <!-- Segmented Tab Header -->
+                <div class="modal-tabs">
+                    <div class="modal-tab-item active" id="mtab-pay" onclick="switchModalTab('pay')">💸 Pay Supplier</div>
+                    <div class="modal-tab-item" id="mtab-adj" onclick="switchModalTab('adj')">⚖️ Adjustment</div>
+                    <div class="modal-tab-item" id="mtab-open" onclick="switchModalTab('open')">🏁 Opening Balance</div>
+                </div>
+
+                <!-- SUB-FORM 1: PAY SUPPLIER -->
+                <form method="POST" action="" id="form-pay">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="record_payment">
                     <div class="form-grid single">
                         <div class="form-field">
-                            <label>Amount</label>
-                            <input type="number" name="amount" min="0.01" step="0.01" required>
+                            <label>Amount to Pay (₹)</label>
+                            <input type="number" name="amount" id="pay-amount" min="0.01" step="0.01" required value="<?= $outstandingBal > 0 ? htmlspecialchars((string) $outstandingBal) : '' ?>">
                         </div>
                         <div class="form-field">
-                            <label>Method</label>
+                            <label>Payment Method</label>
                             <select name="method" required>
                                 <option value="cash">Cash</option>
-                                <option value="upi">UPI</option>
+                                <option value="upi" selected>UPI</option>
+                                <option value="bank_transfer">Bank Transfer / NEFT</option>
                                 <option value="card">Card</option>
-                                <option value="bank_transfer">Bank transfer</option>
                             </select>
                         </div>
                         <div class="form-field">
-                            <label>Reference no. (optional)</label>
-                            <input type="text" name="reference_no">
-                        </div>
-                        <div class="form-field">
-                            <label>Payment date</label>
+                            <label>Payment Date</label>
                             <input type="date" name="payment_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                         </div>
                         <div class="form-field">
-                            <label>Allocate to purchase (optional)</label>
-                            <select name="purchase_id">
-                                <option value="">General balance payment</option>
+                            <label>Bill Allocation</label>
+                            <select name="purchase_id" id="pay-purchase-id">
+                                <option value="">Auto-Settle Oldest Bills First (FIFO)</option>
                                 <?php foreach ($unpaidPurchases as $up): ?>
-                                    <option value="<?= (int) $up['id'] ?>"><?= htmlspecialchars($up['purchase_no']) ?> — Due ₹<?= number_format((float) $up['balance_due'], 2) ?></option>
+                                    <option value="<?= (int) $up['id'] ?>">
+                                        <?= htmlspecialchars($up['purchase_no']) ?> (Due: ₹<?= number_format((float) $up['balance_due'], 2) ?>)
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <div class="form-field">
+                            <label>Reference / UTR / Txn No. (Optional)</label>
+                            <input type="text" name="reference_no" placeholder="e.g. UTR12345678">
+                        </div>
                     </div>
-                    <div class="form-actions">
+                    <div class="form-actions" style="margin-top:16px;">
                         <button type="submit" class="button"><?= icon('check', 16) ?> Record Payment</button>
                     </div>
                 </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Credit Adjustment Modal -->
-    <div class="modal-backdrop" id="credit-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-header-title">
-                    <span class="icon-badge"><?= icon('trending-up', 16) ?></span>
-                    Credit Adjustment
-                </div>
-                <button type="button" class="modal-close" data-close-modal="credit-modal" aria-label="Close"><?= icon('x', 18) ?></button>
-            </div>
-            <div class="modal-body">
-                <p class="result-meta" style="margin-bottom:14px;">Reduces the amount you owe this supplier (e.g. discount, return, compensation).</p>
-                <form method="POST" action="">
+                <!-- SUB-FORM 2: ADJUSTMENT (CREDIT/DEBIT) -->
+                <form method="POST" action="" id="form-adj" style="display:none;">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="credit_adjustment">
+                    <input type="hidden" name="action" value="adjustment">
                     <div class="form-grid single">
                         <div class="form-field">
-                            <label>Amount</label>
+                            <label>Adjustment Type</label>
+                            <select name="adjustment_type" required>
+                                <option value="credit">Credit (Reduces what you owe — discount / return)</option>
+                                <option value="debit">Debit (Increases what you owe — extra freight / charges)</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>Amount (₹)</label>
                             <input type="number" name="amount" min="0.01" step="0.01" required>
                         </div>
                         <div class="form-field">
-                            <label>Reason</label>
-                            <input type="text" name="reason" required placeholder="e.g. Volume discount, returned item">
+                            <label>Reason / Note</label>
+                            <input type="text" name="reason" required placeholder="e.g. Volume discount on brake pads, returned defective piece">
                         </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="button"><?= icon('check', 16) ?> Save Credit</button>
+                    <div class="form-actions" style="margin-top:16px;">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save Adjustment</button>
                     </div>
                 </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Debit Adjustment Modal -->
-    <div class="modal-backdrop" id="debit-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-header-title">
-                    <span class="icon-badge"><?= icon('trending-up', 16) ?></span>
-                    Debit Adjustment
-                </div>
-                <button type="button" class="modal-close" data-close-modal="debit-modal" aria-label="Close"><?= icon('x', 18) ?></button>
-            </div>
-            <div class="modal-body">
-                <p class="result-meta" style="margin-bottom:14px;">Increases the amount you owe this supplier (e.g. freight charge, pricing correction).</p>
-                <form method="POST" action="">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="debit_adjustment">
-                    <div class="form-grid single">
-                        <div class="form-field">
-                            <label>Amount</label>
-                            <input type="number" name="amount" min="0.01" step="0.01" required>
-                        </div>
-                        <div class="form-field">
-                            <label>Reason</label>
-                            <input type="text" name="reason" required placeholder="e.g. Additional freight, missing charge">
-                        </div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit" class="button"><?= icon('check', 16) ?> Save Debit</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Opening Balance Modal -->
-    <div class="modal-backdrop" id="opening-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-header-title">
-                    <span class="icon-badge"><?= icon('file-text', 16) ?></span>
-                    Opening Balance
-                </div>
-                <button type="button" class="modal-close" data-close-modal="opening-modal" aria-label="Close"><?= icon('x', 18) ?></button>
-            </div>
-            <div class="modal-body">
-                <p class="result-meta" style="margin-bottom:14px;">Set the amount you already owed this supplier before GarageOS started tracking.</p>
-                <form method="POST" action="">
+                <!-- SUB-FORM 3: OPENING BALANCE -->
+                <form method="POST" action="" id="form-open" style="display:none;">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="opening_balance">
+                    <p class="result-meta" style="margin-bottom:12px;">Set the amount owed prior to tracking in GarageOS.</p>
                     <div class="form-grid single">
                         <div class="form-field">
-                            <label>Amount</label>
+                            <label>Opening Amount Owed (₹)</label>
                             <input type="number" name="amount" min="0.01" step="0.01" required>
                         </div>
                         <div class="form-field">
-                            <label>As of date</label>
+                            <label>As of Date</label>
                             <input type="date" name="as_of_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                         </div>
                         <div class="form-field">
-                            <label>Description (optional)</label>
-                            <input type="text" name="description" placeholder="Opening balance">
+                            <label>Note (Optional)</label>
+                            <input type="text" name="description" placeholder="Opening balance as per ledger">
                         </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="button"><?= icon('check', 16) ?> Save</button>
+                    <div class="form-actions" style="margin-top:16px;">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Set Opening Balance</button>
                     </div>
                 </form>
+
             </div>
         </div>
     </div>
 
-    <!-- Payment Plan Modal -->
+    <!-- 2. PAYMENT PLAN MODAL -->
     <div class="modal-backdrop" id="plan-modal">
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
                     <span class="icon-badge"><?= icon('calendar', 16) ?></span>
-                    New Payment Plan
+                    Schedule Payment Plan
                 </div>
                 <button type="button" class="modal-close" data-close-modal="plan-modal" aria-label="Close"><?= icon('x', 18) ?></button>
             </div>
             <div class="modal-body">
-                <p class="result-meta" style="margin-bottom:14px;">Schedule a payment arrangement. This does <strong>not</strong> record actual payments — it's a plan for future reference.</p>
                 <form method="POST" action="">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="create_plan">
                     <div class="form-grid single">
                         <div class="form-field">
-                            <label>Amount per installment</label>
+                            <label>Installment Amount (₹)</label>
                             <input type="number" name="plan_amount" min="0.01" step="0.01" required>
                         </div>
                         <div class="form-field">
                             <label>Frequency</label>
                             <select name="frequency" required>
-                                <option value="monthly">Monthly</option>
+                                <option value="monthly" selected>Monthly</option>
                                 <option value="weekly">Weekly</option>
                                 <option value="quarterly">Quarterly</option>
                             </select>
                         </div>
                         <div class="form-field">
-                            <label>Payment method (optional)</label>
+                            <label>Preferred Payment Mode</label>
                             <select name="plan_method">
                                 <option value="">Not specified</option>
-                                <option value="cash">Cash</option>
                                 <option value="upi">UPI</option>
+                                <option value="bank_transfer">Bank Transfer / NEFT</option>
+                                <option value="cash">Cash</option>
                                 <option value="card">Card</option>
-                                <option value="bank_transfer">Bank transfer</option>
                             </select>
                         </div>
                         <div class="form-field">
-                            <label>Start date</label>
-                            <input type="date" name="start_date" required>
+                            <label>Start Date</label>
+                            <input type="date" name="start_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                         </div>
                         <div class="form-field">
-                            <label>End date (optional)</label>
+                            <label>End Date (Optional)</label>
                             <input type="date" name="end_date">
                         </div>
                         <div class="form-field">
-                            <label>Total planned amount (optional)</label>
+                            <label>Total Planned Amount (Optional)</label>
                             <input type="number" name="total_planned" min="0" step="0.01">
                         </div>
                         <div class="form-field">
-                            <label>Notes (optional)</label>
-                            <textarea name="plan_notes"></textarea>
+                            <label>Notes (Optional)</label>
+                            <textarea name="plan_notes" placeholder="e.g. Settle ₹50,000 outstanding across 5 monthly installments"></textarea>
                         </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="button"><?= icon('check', 16) ?> Create Plan</button>
+                    <div class="form-actions" style="margin-top:16px;">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Save Payment Plan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. REVERSAL CONFIRMATION MODAL -->
+    <div class="modal-backdrop" id="reversal-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge" style="background:#fee2e2; color:#b91c1c;"><?= icon('trash', 16) ?></span>
+                    Reverse Transaction
+                </div>
+                <button type="button" class="modal-close" data-close-modal="reversal-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:14px; margin-bottom:14px;">
+                    Are you sure you want to reverse <strong id="reversal-ref-text">this entry</strong>?
+                    This will post an opposing transaction to preserve audit integrity and reopen linked bills.
+                </p>
+                <form method="POST" action="">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="reverse_transaction">
+                    <input type="hidden" name="transaction_id" id="reversal-txn-id" value="">
+                    <div class="form-field">
+                        <label>Reason for Reversal</label>
+                        <input type="text" name="reversal_reason" required placeholder="e.g. Wrong amount entered, duplicate entry">
+                    </div>
+                    <div class="form-actions" style="margin-top:16px;">
+                        <button type="submit" class="button" style="background:var(--danger); border-color:var(--danger); color:#fff;">Confirm Reversal</button>
                     </div>
                 </form>
             </div>
@@ -953,6 +1229,34 @@ $topbarTitle = $supplier['name'];
     </div>
 
 <?php endif; ?>
+
+<script>
+function switchModalTab(tabKey) {
+    document.querySelectorAll('.modal-tab-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('mtab-' + tabKey).classList.add('active');
+
+    document.getElementById('form-pay').style.display = tabKey === 'pay' ? 'block' : 'none';
+    document.getElementById('form-adj').style.display = tabKey === 'adj' ? 'block' : 'none';
+    document.getElementById('form-open').style.display = tabKey === 'open' ? 'block' : 'none';
+}
+
+function openUnifiedModal(tabKey) {
+    switchModalTab(tabKey || 'pay');
+    openModal('unified-modal');
+}
+
+function paySpecificBill(purchaseId, dueAmount, purchaseNo) {
+    document.getElementById('pay-purchase-id').value = purchaseId;
+    document.getElementById('pay-amount').value = dueAmount.toFixed(2);
+    openUnifiedModal('pay');
+}
+
+function openReversalModal(txnId, refText) {
+    document.getElementById('reversal-txn-id').value = txnId;
+    document.getElementById('reversal-ref-text').innerText = refText;
+    openModal('reversal-modal');
+}
+</script>
 
 </body>
 </html>
