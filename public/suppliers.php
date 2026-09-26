@@ -314,6 +314,20 @@ $topbarTitle = 'Suppliers';
                                     <?php
                                     $due = (float) $s['outstanding_balance'];
                                     $hasDue = $due > 0.009;
+                                    $hasSurplus = $due < -0.009;
+                                    if ($hasSurplus) {
+                                        $balColor = 'var(--info, #2563eb)';
+                                        $balLabel = 'Credit Surplus';
+                                        $balDisplay = '₹' . number_format(abs($due), 2);
+                                    } elseif ($hasDue) {
+                                        $balColor = 'var(--danger)';
+                                        $balLabel = 'Due';
+                                        $balDisplay = '₹' . number_format($due, 2);
+                                    } else {
+                                        $balColor = 'var(--success)';
+                                        $balLabel = 'Settled';
+                                        $balDisplay = '₹0.00';
+                                    }
                                     ?>
                                     <tr class="clickable" data-href="/supplier.php?id=<?= (int) $s['id'] ?>">
                                         <td>
@@ -339,10 +353,10 @@ $topbarTitle = 'Suppliers';
                                         <td style="font-size:12px;">
                                             <?= $s['gstin'] ? htmlspecialchars($s['gstin']) : '<span style="color:var(--muted);">Unregistered</span>' ?>
                                         </td>
-                                        <td class="num" style="font-weight:700; font-size:14px; color: <?= $hasDue ? 'var(--danger)' : 'var(--success)' ?>;">
-                                            ₹<?= number_format($due, 2) ?>
-                                            <div style="font-size:10px; font-weight:500; text-transform:uppercase; color: <?= $hasDue ? 'var(--danger)' : 'var(--success)' ?>;">
-                                                <?= $hasDue ? 'Due' : 'Settled' ?>
+                                        <td class="num" style="font-weight:700; font-size:14px; color: <?= $balColor ?>;">
+                                            <?= $balDisplay ?>
+                                            <div style="font-size:10px; font-weight:500; text-transform:uppercase; color: <?= $balColor ?>;">
+                                                <?= $balLabel ?>
                                             </div>
                                         </td>
                                         <td style="text-align: right; white-space: nowrap;">

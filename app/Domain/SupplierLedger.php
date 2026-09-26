@@ -266,6 +266,23 @@ class SupplierLedger
     ): int {
         $paymentDate = $paymentDate ?: date('Y-m-d');
 
+        // Guard: prevent payments when supplier already has a credit surplus
+        $currentBalance = $this->getOutstandingBalance($organizationId, $supplierId);
+        if ($currentBalance <= 0) {
+            throw new RuntimeException(
+                'This supplier has a credit surplus of ₹' . number_format(abs($currentBalance), 2)
+                . '. No payment is due. Reverse the excess credit first if needed.'
+            );
+        }
+
+        // Guard: warn if payment exceeds outstanding (creates advance/credit surplus)
+        if ($amount > $currentBalance + 0.01) {
+            throw new RuntimeException(
+                'Payment of ₹' . number_format($amount, 2) . ' exceeds the outstanding balance of ₹'
+                . number_format($currentBalance, 2) . '. Reduce the amount or record a credit adjustment instead.'
+            );
+        }
+
         // Generate reference number
         $payRefNo = $this->generateReferenceNo($organizationId, 'PAY');
 
@@ -395,6 +412,22 @@ class SupplierLedger
         string $reason,
         array $user
     ): int {
+        // Guard: prevent credit adjustments that exceed the outstanding balance
+        $currentBalance = $this->getOutstandingBalance($organizationId, $supplierId);
+        if ($currentBalance <= 0) {
+            throw new RuntimeException(
+                'This supplier already has a credit surplus of ₹' . number_format(abs($currentBalance), 2)
+                . '. A credit adjustment is not applicable.'
+            );
+        }
+        if ($amount > $currentBalance + 0.01) {
+            throw new RuntimeException(
+                'Credit adjustment of ₹' . number_format($amount, 2) . ' exceeds the outstanding balance of ₹'
+                . number_format($currentBalance, 2) . '. The maximum credit you can apply is ₹'
+                . number_format($currentBalance, 2) . '.'
+            );
+        }
+
         $refNo = $this->generateReferenceNo($organizationId, 'ADJ');
 
         return $this->insertTransaction(
@@ -776,8 +809,13 @@ class SupplierLedger
     private function generateReferenceNo(int $organizationId, string $prefix): string
     {
         $pattern = '^' . preg_quote($prefix, '/') . '-([0-9]+)$';
+        // Use SUBSTR(col, pos) instead of SUBSTRING(col FROM pos) — PostgreSQL
+        // treats a parameterized FROM value as a regex pattern rather than a
+        // positional offset, which silently returns an empty string and causes
+        // every generated reference to be PREFIX-0001.
+        $skip = strlen($prefix) + 2;  // 'PAY-' = 4 chars → start at position 5
         $statement = $this->pdo->prepare("
-            SELECT COALESCE(MAX(CAST(SUBSTRING(reference_no FROM :skip) AS INT)), 0) + 1
+            SELECT COALESCE(MAX(CAST(SUBSTR(reference_no, :skip) AS INT)), 0) + 1
             FROM supplier_transactions
             WHERE organization_id = :organization_id
               AND reference_no ~ :pattern
@@ -785,7 +823,7 @@ class SupplierLedger
         $statement->execute([
             'organization_id' => $organizationId,
             'pattern'         => $pattern,
-            'skip'            => strlen($prefix) + 2  // 'PAY-' = 4+1 chars to skip
+            'skip'            => $skip
         ]);
         $next = (int) $statement->fetchColumn();
 

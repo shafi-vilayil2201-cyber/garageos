@@ -314,6 +314,7 @@ function next_payment_date(array $plan): ?string {
 
 $outstandingBal = (float) $summary['outstanding_balance'];
 $isPayable = $outstandingBal > 0.009;
+$isCreditSurplus = $outstandingBal < -0.009;
 
 // WhatsApp text generator
 $waPhone = preg_replace('/[^0-9]/', '', $supplier['phone'] ?? '');
@@ -321,10 +322,20 @@ if ($waPhone && strlen($waPhone) === 10) {
     $waPhone = '91' . $waPhone;
 }
 $orgName = $user['organization_name'] ?? 'GarageOS';
+if ($isCreditSurplus) {
+    $balanceLabel = 'Credit Surplus (Advance)';
+    $balanceAmount = '₹' . number_format(abs($outstandingBal), 2);
+} elseif ($isPayable) {
+    $balanceLabel = 'Outstanding Balance';
+    $balanceAmount = '₹' . number_format($outstandingBal, 2);
+} else {
+    $balanceLabel = 'Outstanding Balance';
+    $balanceAmount = '₹0.00 (Settled)';
+}
 $waText = "Hello {$supplier['name']},\n\nAccount Summary from {$orgName}:\n"
     . "• Total Purchases: ₹" . number_format((float) $summary['total_purchases'], 2) . "\n"
     . "• Total Paid: ₹" . number_format((float) $summary['total_payments'], 2) . "\n"
-    . "• Outstanding Balance: ₹" . number_format($outstandingBal, 2) . "\n\n"
+    . "• {$balanceLabel}: {$balanceAmount}\n\n"
     . "As of: " . date('d M Y') . "\nThank you!";
 $waUrl = "https://wa.me/{$waPhone}?text=" . urlencode($waText);
 
@@ -563,15 +574,21 @@ $topbarTitle = $supplier['name'];
                 <div class="card stat-card">
                     <div class="stat-top">
                         <div>
-                            <div class="stat-label">Outstanding Due</div>
-                            <div class="stat-value" style="color:<?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
-                                ₹<?= number_format($outstandingBal, 2) ?>
+                <div class="stat-label"><?= $isCreditSurplus ? 'Credit Surplus' : 'Outstanding Due' ?></div>
+                            <div class="stat-value" style="color:<?= $isCreditSurplus ? 'var(--info, #2563eb)' : ($isPayable ? 'var(--danger)' : 'var(--success)') ?>;">
+                                <?= $isCreditSurplus ? '' : '' ?>₹<?= number_format(abs($outstandingBal), 2) ?>
                             </div>
                         </div>
-                        <div class="stat-icon <?= $isPayable ? 'warning' : 'success' ?>"><?= icon($isPayable ? 'alert-triangle' : 'check-circle', 17) ?></div>
+                        <div class="stat-icon <?= $isCreditSurplus ? '' : ($isPayable ? 'warning' : 'success') ?>"><?= icon($isCreditSurplus ? 'info' : ($isPayable ? 'alert-triangle' : 'check-circle'), 17) ?></div>
                     </div>
                     <div class="stat-meta <?= $isPayable ? 'warning' : '' ?>">
-                        <?= $isPayable ? 'You owe this supplier' : 'All clear / Settled' ?>
+                        <?php if ($isCreditSurplus): ?>
+                            Supplier owes you this amount
+                        <?php elseif ($isPayable): ?>
+                            You owe this supplier
+                        <?php else: ?>
+                            All clear / Settled
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
