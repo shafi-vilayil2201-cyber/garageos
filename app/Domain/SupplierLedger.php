@@ -110,26 +110,31 @@ class SupplierLedger
         $statement->execute($countParams);
         $totalCount = (int) $statement->fetchColumn();
 
-        // Ledger rows with window-function running balance
+        // Ledger rows with window-function running balance computed across all transactions
         $sql = "
-            SELECT
-                id,
-                transaction_type,
-                transaction_date,
-                reference_no,
-                description,
-                debit,
-                credit,
-                reference_type,
-                reference_id,
-                SUM(debit - credit) OVER (
-                    ORDER BY transaction_date, id
-                    ROWS UNBOUNDED PRECEDING
-                ) AS running_balance,
-                created_at
-            FROM supplier_transactions
-            WHERE organization_id = :organization_id
-              AND supplier_id     = :supplier_id
+            WITH full_ledger AS (
+                SELECT
+                    id,
+                    transaction_type,
+                    transaction_date,
+                    reference_no,
+                    description,
+                    debit,
+                    credit,
+                    reference_type,
+                    reference_id,
+                    SUM(debit - credit) OVER (
+                        ORDER BY transaction_date ASC, id ASC
+                        ROWS UNBOUNDED PRECEDING
+                    ) AS running_balance,
+                    created_at
+                FROM supplier_transactions
+                WHERE organization_id = :organization_id
+                  AND supplier_id     = :supplier_id
+            )
+            SELECT *
+            FROM full_ledger
+            WHERE 1=1
         ";
         $params = [
             'organization_id' => $organizationId,
@@ -243,9 +248,8 @@ class SupplierLedger
      * This method creates:
      * 1. A supplier_payments row
      * 2. A supplier_transactions ledger entry
-     * 3. Payment allocation(s) if purchase IDs are provided
-     * 4. Updates purchases.amount_paid cache for allocated purchases
-     * 5. Audit log
+     * 3. Payment allocation(s) if purchase IDs are provided or FIFO auto-allocated
+     * 4. Updates purchases.amount_paid and payment_status
      *
      * The caller must have already begun a transaction.
      */
@@ -257,13 +261,49 @@ class SupplierLedger
         string $method,
         ?string $referenceNo,
         ?string $paymentDate,
-        array $allocations,  // [{purchase_id, amount}] or empty for general
+        array $allocations,  // [{purchase_id, amount}] or empty for auto-FIFO
         array $user
     ): int {
         $paymentDate = $paymentDate ?: date('Y-m-d');
 
         // Generate reference number
         $payRefNo = $this->generateReferenceNo($organizationId, 'PAY');
+
+        // Resolve allocations: if empty, auto-allocate to unpaid purchases in FIFO order
+        $resolvedAllocations = [];
+        $unallocatedAmount = $amount;
+
+        if (!empty($allocations)) {
+            foreach ($allocations as $alloc) {
+                $pId = (int) ($alloc['purchase_id'] ?? 0);
+                $pAmt = (float) ($alloc['amount'] ?? 0);
+                if ($pId > 0 && $pAmt > 0) {
+                    $resolvedAllocations[] = ['purchase_id' => $pId, 'amount' => $pAmt];
+                    $unallocatedAmount -= $pAmt;
+                }
+            }
+        } else {
+            // Auto FIFO allocation
+            $unpaid = $this->getUnpaidPurchases($organizationId, $supplierId);
+            foreach ($unpaid as $bill) {
+                if ($unallocatedAmount <= 0.009) {
+                    break;
+                }
+                $due = (float) $bill['balance_due'];
+                $allocAmt = min($unallocatedAmount, $due);
+                if ($allocAmt > 0) {
+                    $resolvedAllocations[] = [
+                        'purchase_id' => (int) $bill['id'],
+                        'amount'      => $allocAmt
+                    ];
+                    $unallocatedAmount -= $allocAmt;
+                }
+            }
+        }
+
+        $firstPurchaseId = count($resolvedAllocations) === 1
+            ? $resolvedAllocations[0]['purchase_id']
+            : null;
 
         // 1. Insert supplier_payments
         $statement = $this->pdo->prepare("
@@ -273,10 +313,6 @@ class SupplierLedger
                 (:organization_id, :branch_id, :supplier_id, :purchase_id, :method, :amount, :reference_no, :paid_by, :payment_date)
             RETURNING id
         ");
-
-        $firstPurchaseId = !empty($allocations) && count($allocations) === 1
-            ? $allocations[0]['purchase_id']
-            : null;
 
         $statement->execute([
             'organization_id' => $organizationId,
@@ -292,7 +328,7 @@ class SupplierLedger
         $paymentId = (int) $statement->fetchColumn();
 
         // 2. Description for ledger
-        $desc = 'Payment via ' . $method;
+        $desc = 'Payment via ' . strtoupper(str_replace('_', ' ', $method));
         if ($referenceNo) {
             $desc .= ' — ' . $referenceNo;
         }
@@ -312,8 +348,8 @@ class SupplierLedger
             $user['id']
         );
 
-        // 4. Payment allocations + update purchase amount_paid cache
-        if (!empty($allocations)) {
+        // 4. Payment allocations + update purchase amount_paid cache & status
+        if (!empty($resolvedAllocations)) {
             $allocStatement = $this->pdo->prepare("
                 INSERT INTO supplier_payment_allocations (supplier_payment_id, purchase_id, amount)
                 VALUES (:payment_id, :purchase_id, :amount)
@@ -321,15 +357,16 @@ class SupplierLedger
 
             $updatePurchase = $this->pdo->prepare("
                 UPDATE purchases
-                SET amount_paid = amount_paid + :amount,
+                SET amount_paid = LEAST(total, amount_paid + :amount),
                     payment_status = CASE
                         WHEN amount_paid + :amount2 >= total - 0.01 THEN 'paid'
                         ELSE 'partial'
-                    END
-                WHERE id = :id
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND organization_id = :organization_id
             ");
 
-            foreach ($allocations as $alloc) {
+            foreach ($resolvedAllocations as $alloc) {
                 $allocStatement->execute([
                     'payment_id'  => $paymentId,
                     'purchase_id' => $alloc['purchase_id'],
@@ -337,9 +374,10 @@ class SupplierLedger
                 ]);
 
                 $updatePurchase->execute([
-                    'amount'  => $alloc['amount'],
-                    'amount2' => $alloc['amount'],
-                    'id'      => $alloc['purchase_id']
+                    'amount'          => $alloc['amount'],
+                    'amount2'         => $alloc['amount'],
+                    'id'              => $alloc['purchase_id'],
+                    'organization_id' => $organizationId
                 ]);
             }
         }
@@ -430,7 +468,7 @@ class SupplierLedger
 
     /**
      * Reverse a posted transaction — creates a new opposing entry
-     * rather than deleting the original, preserving audit trail.
+     * and rolls back any purchase allocations.
      */
     public function reverseTransaction(
         int $organizationId,
@@ -452,13 +490,46 @@ class SupplierLedger
             throw new RuntimeException('Transaction not found.');
         }
 
+        // If reversing a payment, roll back the allocations in purchases
+        if ($original['reference_type'] === 'supplier_payment' && $original['reference_id']) {
+            $allocStmt = $this->pdo->prepare("
+                SELECT purchase_id, amount
+                FROM supplier_payment_allocations
+                WHERE supplier_payment_id = :payment_id
+            ");
+            $allocStmt->execute(['payment_id' => $original['reference_id']]);
+            $allocations = $allocStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $rollbackPurchase = $this->pdo->prepare("
+                UPDATE purchases
+                SET amount_paid = GREATEST(0, amount_paid - :amount),
+                    payment_status = CASE
+                        WHEN GREATEST(0, amount_paid - :amount2) <= 0.009 THEN 'unpaid'
+                        WHEN GREATEST(0, amount_paid - :amount3) >= total - 0.01 THEN 'paid'
+                        ELSE 'partial'
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND organization_id = :organization_id
+            ");
+
+            foreach ($allocations as $alloc) {
+                $rollbackPurchase->execute([
+                    'amount'          => $alloc['amount'],
+                    'amount2'         => $alloc['amount'],
+                    'amount3'         => $alloc['amount'],
+                    'id'              => $alloc['purchase_id'],
+                    'organization_id' => $organizationId
+                ]);
+            }
+        }
+
         // Swap debit/credit to reverse
         $reversalType = $original['transaction_type'] . '_REVERSAL';
         if (!in_array($reversalType, ['PAYMENT_REVERSAL', 'PURCHASE_REVERSAL'])) {
             $reversalType = $original['debit'] > 0 ? 'CREDIT_ADJUSTMENT' : 'DEBIT_ADJUSTMENT';
         }
 
-        $desc = 'Reversal of ' . $original['reference_no'] . ': ' . $reason;
+        $desc = 'Reversal of ' . ($original['reference_no'] ?? 'transaction') . ': ' . $reason;
 
         return $this->insertTransaction(
             $organizationId,
@@ -521,11 +592,11 @@ class SupplierLedger
             'supplier_id'     => $supplierId,
             'amount'          => $amountPerInstallment,
             'frequency'       => $frequency,
-            'method'          => $paymentMethod ?: null,
+            'method'          => $paymentMethod,
             'start_date'      => $startDate,
-            'end_date'        => $endDate ?: null,
-            'total_planned'   => $totalPlanned ?: null,
-            'notes'           => $notes ?: null,
+            'end_date'        => $endDate,
+            'total_planned'   => $totalPlanned,
+            'notes'           => $notes,
             'created_by'      => $user['id']
         ]);
 
@@ -535,14 +606,15 @@ class SupplierLedger
     public function updatePaymentPlanStatus(
         int $organizationId,
         int $planId,
-        string $status
+        string $newStatus
     ): void {
-        $this->pdo->prepare("
+        $statement = $this->pdo->prepare("
             UPDATE supplier_payment_plans
             SET status = :status, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND organization_id = :organization_id
-        ")->execute([
-            'status'          => $status,
+        ");
+        $statement->execute([
+            'status'          => $newStatus,
             'id'              => $planId,
             'organization_id' => $organizationId
         ]);
@@ -559,6 +631,23 @@ class SupplierLedger
         ?string $dateTo = null
     ): array {
         $sql = "
+            WITH full_ledger AS (
+                SELECT
+                    id,
+                    transaction_type,
+                    transaction_date,
+                    reference_no,
+                    description,
+                    debit,
+                    credit,
+                    SUM(debit - credit) OVER (
+                        ORDER BY transaction_date ASC, id ASC
+                        ROWS UNBOUNDED PRECEDING
+                    ) AS running_balance
+                FROM supplier_transactions
+                WHERE organization_id = :organization_id
+                  AND supplier_id     = :supplier_id
+            )
             SELECT
                 transaction_type,
                 transaction_date,
@@ -566,13 +655,9 @@ class SupplierLedger
                 description,
                 debit,
                 credit,
-                SUM(debit - credit) OVER (
-                    ORDER BY transaction_date, id
-                    ROWS UNBOUNDED PRECEDING
-                ) AS running_balance
-            FROM supplier_transactions
-            WHERE organization_id = :organization_id
-              AND supplier_id     = :supplier_id
+                running_balance
+            FROM full_ledger
+            WHERE 1=1
         ";
         $params = [
             'organization_id' => $organizationId,
@@ -588,7 +673,7 @@ class SupplierLedger
             $params['date_to'] = $dateTo;
         }
 
-        $sql .= " ORDER BY transaction_date, id";
+        $sql .= " ORDER BY transaction_date ASC, id ASC";
 
         $statement = $this->pdo->prepare($sql);
         $statement->execute($params);
@@ -598,7 +683,7 @@ class SupplierLedger
 
     /**
      * Unpaid purchases for a given supplier — for the payment
-     * allocation dropdown in the "Record Payment" modal.
+     * allocation dropdown in the 'Record Payment' modal.
      */
     public function getUnpaidPurchases(int $organizationId, int $supplierId): array
     {
@@ -665,20 +750,21 @@ class SupplierLedger
 
     /**
      * Auto-increment reference numbers: PAY-0001, ADJ-0001, REV-0001.
+     * Uses regex match to prevent syntax crashes on non-numeric suffixes.
      */
     private function generateReferenceNo(int $organizationId, string $prefix): string
     {
-        $pattern = $prefix . '-%';
+        $pattern = '^' . preg_quote($prefix, '/') . '-([0-9]+)$';
         $statement = $this->pdo->prepare("
             SELECT COALESCE(MAX(CAST(SUBSTRING(reference_no FROM :skip) AS INT)), 0) + 1
             FROM supplier_transactions
             WHERE organization_id = :organization_id
-              AND reference_no LIKE :pattern
+              AND reference_no ~ :pattern
         ");
         $statement->execute([
             'organization_id' => $organizationId,
             'pattern'         => $pattern,
-            'skip'            => strlen($prefix) + 2  // "PAY-" = 4+1 chars to skip
+            'skip'            => strlen($prefix) + 2  // 'PAY-' = 4+1 chars to skip
         ]);
         $next = (int) $statement->fetchColumn();
 
