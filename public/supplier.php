@@ -41,7 +41,7 @@ if (!$supplier) {
 
 $ledger = new SupplierLedger($pdo);
 
-$error   = null;
+$error     = null;
 $activeTab = $_GET['tab'] ?? 'ledger';
 if (!in_array($activeTab, ['ledger', 'bills', 'plans', 'profile'], true)) {
     $activeTab = 'ledger';
@@ -343,108 +343,53 @@ $topbarTitle = $supplier['name'];
     <link rel="stylesheet" href="/css/app.css">
     <?= favicon_tag($user['organization_logo_url'] ?? null) ?>
     <style>
-        .supplier-hero-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .hero-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px 18px;
-            position: relative;
-            overflow: hidden;
-        }
-        .hero-card .hero-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: var(--muted);
-            margin-bottom: 6px;
+        /* Modern, app-consistent tab bar */
+        .tab-bar-nav {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .hero-card .hero-value {
-            font-size: 22px;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-        .hero-card .hero-sub {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-        .hero-card.highlight-due {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, var(--card) 100%);
-            border-color: rgba(239, 68, 68, 0.3);
-        }
-        .hero-card.highlight-clear {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, var(--card) 100%);
-            border-color: rgba(16, 185, 129, 0.3);
-        }
-
-        .action-toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
+            gap: 6px;
+            margin-top: 20px;
+            margin-bottom: 16px;
             border-bottom: 1px solid var(--border);
-        }
-        .action-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-        }
-
-        /* Modern Tabs */
-        .tab-nav {
-            display: flex;
-            gap: 4px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
+            padding-bottom: 0;
             overflow-x: auto;
         }
-        .tab-btn {
-            padding: 10px 18px;
+        .tab-nav-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
             font-size: 14px;
             font-weight: 500;
             color: var(--muted);
             text-decoration: none;
             border-bottom: 2px solid transparent;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            white-space: nowrap;
+            margin-bottom: -1px;
             transition: all 0.15s ease;
+            white-space: nowrap;
         }
-        .tab-btn:hover {
+        .tab-nav-item:hover {
             color: var(--text);
         }
-        .tab-btn.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
+        .tab-nav-item.active {
+            color: var(--text);
+            font-weight: 600;
+            border-bottom-color: var(--text);
+        }
+        .tab-nav-count {
+            display: inline-block;
+            padding: 1px 7px;
+            font-size: 11px;
+            border-radius: 10px;
+            background: var(--surface-sunken);
+            color: var(--muted);
             font-weight: 600;
         }
-        .tab-pill {
-            font-size: 11px;
-            padding: 2px 7px;
-            border-radius: 10px;
-            background: var(--hover);
-            color: var(--text);
-        }
-        .tab-btn.active .tab-pill {
-            background: rgba(79, 70, 229, 0.12);
-            color: var(--accent);
+        .tab-nav-item.active .tab-nav-count {
+            background: var(--text);
+            color: var(--surface);
         }
 
-        /* Preset Chips */
+        /* Chips for filtering */
         .chip-group {
             display: flex;
             gap: 6px;
@@ -458,23 +403,23 @@ $topbarTitle = $supplier['name'];
             font-size: 12px;
             text-decoration: none;
             color: var(--text);
-            background: var(--card);
+            background: var(--surface);
             transition: all 0.15s ease;
         }
         .filter-chip:hover {
-            background: var(--hover);
+            background: var(--surface-sunken);
         }
         .filter-chip.active {
-            background: var(--accent);
-            color: #fff;
-            border-color: var(--accent);
+            background: var(--text);
+            color: var(--surface);
+            border-color: var(--text);
             font-weight: 600;
         }
 
         /* Modal Segmented Tabs */
         .modal-tabs {
             display: flex;
-            background: var(--hover);
+            background: var(--surface-sunken);
             padding: 4px;
             border-radius: 8px;
             margin-bottom: 18px;
@@ -493,26 +438,20 @@ $topbarTitle = $supplier['name'];
             user-select: none;
         }
         .modal-tab-item.active {
-            background: var(--card);
+            background: var(--surface);
             color: var(--text);
             font-weight: 600;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-
-        .badge-neutral { background: var(--hover); color: var(--text); }
-        .badge-success { background: #dcfce7; color: #15803d; }
-        .badge-warning { background: #fef9c3; color: #a16207; }
-        .badge-danger  { background: #fee2e2; color: #b91c1c; }
 
         .ledger-table td.debit  { color: var(--danger); font-weight: 600; }
         .ledger-table td.credit { color: var(--success); font-weight: 600; }
 
         .plan-item-card {
             border: 1px solid var(--border);
-            border-radius: 10px;
+            border-radius: var(--radius);
             padding: 16px;
-            margin-bottom: 12px;
-            background: var(--card);
+            background: var(--surface);
         }
         .plan-item-card .plan-top {
             display: flex;
@@ -538,12 +477,12 @@ $topbarTitle = $supplier['name'];
                 <?= icon('arrow-left', 14) ?> Back to Suppliers
             </a>
 
-            <!-- Page Title & Meta Header -->
-            <div class="page-header" style="margin-bottom:16px;">
+            <!-- Page Title & Header Actions -->
+            <div class="page-header" style="margin-bottom:18px;">
                 <div>
                     <h1 class="page-title" style="display:flex; align-items:center; gap:10px;">
                         <?= htmlspecialchars($supplier['name']) ?>
-                        <span class="badge badge-neutral" style="font-size:12px;"><?= htmlspecialchars($supplier['code']) ?></span>
+                        <span class="badge badge-subtle" style="font-size:12px;"><?= htmlspecialchars($supplier['code']) ?></span>
                     </h1>
                     <p class="page-description">
                         <?= $supplier['phone'] ? '📞 ' . htmlspecialchars($supplier['phone']) : '' ?>
@@ -552,14 +491,26 @@ $topbarTitle = $supplier['name'];
                     </p>
                 </div>
 
-                <div class="action-group">
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <?php if ($canFinance): ?>
+                        <button type="button" class="button" onclick="openUnifiedModal('pay')">
+                            <?= icon('plus', 16) ?> Record Transaction
+                        </button>
+                        <button type="button" class="button secondary" onclick="openModal('plan-modal')">
+                            <?= icon('calendar', 16) ?> Payment Plan
+                        </button>
+                    <?php endif; ?>
+
                     <?php if ($supplier['phone']): ?>
                         <a href="<?= $waUrl ?>" target="_blank" rel="noopener" class="button secondary" title="Share balance statement via WhatsApp">
                             <?= brand_icon('whatsapp', 15) ?> Share Statement
                         </a>
                     <?php endif; ?>
+
                     <?php if ($canManage): ?>
-                        <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary"><?= icon('settings', 15) ?> Edit Profile</a>
+                        <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary">
+                            <?= icon('settings', 16) ?> Edit Profile
+                        </a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -568,85 +519,77 @@ $topbarTitle = $supplier['name'];
                 <div class="form-error" style="margin-bottom:16px;"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <!-- ─── Financial Summary Cards ─── -->
-            <div class="supplier-hero-grid">
-                <div class="hero-card">
-                    <div class="hero-label">
-                        <span>Total Purchases</span>
-                        <?= icon('truck', 16) ?>
+            <!-- ─── Consistent GarageOS Stats Row ─── -->
+            <div class="stats">
+                <div class="card stat-card">
+                    <div class="stat-top">
+                        <div>
+                            <div class="stat-label">Total Purchases</div>
+                            <div class="stat-value">₹<?= number_format((float) $summary['total_purchases'], 2) ?></div>
+                        </div>
+                        <div class="stat-icon"><?= icon('truck', 17) ?></div>
                     </div>
-                    <div class="hero-value">₹<?= number_format((float) $summary['total_purchases'], 2) ?></div>
-                    <div class="hero-sub"><?= count($allPurchases) ?> total bill<?= count($allPurchases) === 1 ? '' : 's' ?></div>
+                    <div class="stat-meta"><?= count($allPurchases) ?> total purchase bill<?= count($allPurchases) === 1 ? '' : 's' ?></div>
                 </div>
 
-                <div class="hero-card">
-                    <div class="hero-label">
-                        <span>Total Paid</span>
-                        <?= icon('wallet', 16) ?>
+                <div class="card stat-card">
+                    <div class="stat-top">
+                        <div>
+                            <div class="stat-label">Total Paid</div>
+                            <div class="stat-value" style="color:var(--success);">₹<?= number_format((float) $summary['total_payments'], 2) ?></div>
+                        </div>
+                        <div class="stat-icon success"><?= icon('wallet', 17) ?></div>
                     </div>
-                    <div class="hero-value" style="color:var(--success);">₹<?= number_format((float) $summary['total_payments'], 2) ?></div>
-                    <div class="hero-sub">Settled amount</div>
+                    <div class="stat-meta">Total amount settled</div>
                 </div>
 
-                <div class="hero-card">
-                    <div class="hero-label">
-                        <span>Credits / Returns</span>
-                        <?= icon('receipt', 16) ?>
+                <div class="card stat-card">
+                    <div class="stat-top">
+                        <div>
+                            <div class="stat-label">Credits / Returns</div>
+                            <div class="stat-value">₹<?= number_format((float) $summary['total_credits'], 2) ?></div>
+                        </div>
+                        <div class="stat-icon"><?= icon('receipt', 17) ?></div>
                     </div>
-                    <div class="hero-value">₹<?= number_format((float) $summary['total_credits'], 2) ?></div>
-                    <div class="hero-sub">Discounts & adjustments</div>
+                    <div class="stat-meta">Discounts & adjustments</div>
                 </div>
 
-                <div class="hero-card <?= $isPayable ? 'highlight-due' : 'highlight-clear' ?>">
-                    <div class="hero-label">
-                        <span>Net Outstanding Due</span>
-                        <?= icon('alert-triangle', 16) ?>
+                <div class="card stat-card">
+                    <div class="stat-top">
+                        <div>
+                            <div class="stat-label">Outstanding Due</div>
+                            <div class="stat-value" style="color:<?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
+                                ₹<?= number_format($outstandingBal, 2) ?>
+                            </div>
+                        </div>
+                        <div class="stat-icon <?= $isPayable ? 'warning' : 'success' ?>"><?= icon($isPayable ? 'alert-triangle' : 'check-circle', 17) ?></div>
                     </div>
-                    <div class="hero-value" style="color: <?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
-                        ₹<?= number_format($outstandingBal, 2) ?>
+                    <div class="stat-meta <?= $isPayable ? 'warning' : '' ?>">
+                        <?= $isPayable ? 'You owe this supplier' : 'All clear / Settled' ?>
                     </div>
-                    <div class="hero-sub" style="font-weight:600; color: <?= $isPayable ? 'var(--danger)' : 'var(--success)' ?>;">
-                        <?= $isPayable ? '⚠️ YOU OWE SUPPLIER' : '✓ ALL CLEAR / SETTLED' ?>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── Action Toolbar ─── -->
-            <div class="action-toolbar">
-                <div class="action-group">
-                    <?php if ($canFinance): ?>
-                        <button type="button" class="button" onclick="openUnifiedModal('pay')">
-                            <?= icon('plus', 15) ?> Record Transaction
-                        </button>
-                        <button type="button" class="button secondary" onclick="openModal('plan-modal')">
-                            <?= icon('calendar', 15) ?> + Payment Plan
-                        </button>
-                    <?php endif; ?>
-                </div>
-
-                <div class="action-group">
-                    <a href="/api/supplier-statement-export.php?id=<?= $supplierId ?><?= $dateFrom ? '&from=' . urlencode($dateFrom) : '' ?><?= $dateTo ? '&to=' . urlencode($dateTo) : '' ?>" class="button secondary">
-                        <?= icon('box', 15) ?> Export CSV
-                    </a>
                 </div>
             </div>
 
-            <!-- ─── Tabbed Navigation ─── -->
-            <div class="tab-nav">
-                <a href="?id=<?= $supplierId ?>&tab=ledger" class="tab-btn <?= $activeTab === 'ledger' ? 'active' : '' ?>">
-                    <?= icon('receipt', 16) ?> Account Ledger
-                    <span class="tab-pill"><?= $ledgerTotal ?></span>
+            <!-- ─── Tab Navigation ─── -->
+            <div class="tab-bar-nav">
+                <a href="?id=<?= $supplierId ?>&tab=ledger" class="tab-nav-item <?= $activeTab === 'ledger' ? 'active' : '' ?>">
+                    <?= icon('receipt', 15) ?>
+                    Account Ledger
+                    <span class="tab-nav-count"><?= $ledgerTotal ?></span>
                 </a>
-                <a href="?id=<?= $supplierId ?>&tab=bills" class="tab-btn <?= $activeTab === 'bills' ? 'active' : '' ?>">
-                    <?= icon('truck', 16) ?> Purchase Bills
-                    <span class="tab-pill"><?= count($allPurchases) ?></span>
+                <a href="?id=<?= $supplierId ?>&tab=bills" class="tab-nav-item <?= $activeTab === 'bills' ? 'active' : '' ?>">
+                    <?= icon('truck', 15) ?>
+                    Purchase Bills
+                    <span class="tab-nav-count"><?= count($allPurchases) ?></span>
                 </a>
-                <a href="?id=<?= $supplierId ?>&tab=plans" class="tab-btn <?= $activeTab === 'plans' ? 'active' : '' ?>">
-                    <?= icon('calendar', 16) ?> Payment Plans
-                    <span class="tab-pill"><?= count($paymentPlans) ?></span>
+                <a href="?id=<?= $supplierId ?>&tab=plans" class="tab-nav-item <?= $activeTab === 'plans' ? 'active' : '' ?>">
+                    <?= icon('calendar', 15) ?>
+                    Payment Plans
+                    <span class="tab-nav-count"><?= count($paymentPlans) ?></span>
                 </a>
-                <a href="?id=<?= $supplierId ?>&tab=profile" class="tab-btn <?= $activeTab === 'profile' ? 'active' : '' ?>">
-                    <?= icon('building', 16) ?> Supplier Profile
+                <a href="?id=<?= $supplierId ?>&tab=profile" class="tab-nav-item <?= $activeTab === 'profile' ? 'active' : '' ?>">
+                    <?= icon('warehouse', 15) ?>
+                    Supplier Profile
                 </a>
             </div>
 
@@ -656,20 +599,26 @@ $topbarTitle = $supplier['name'];
                     <div class="card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
                         <div class="card-header-title">
                             <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                            Transaction History & Statement
+                            Transaction Statement & Ledger
                         </div>
 
-                        <!-- Date Range Preset Chips -->
-                        <div class="chip-group">
-                            <a href="?id=<?= $supplierId ?>&tab=ledger" class="filter-chip <?= (!$periodPreset && !$dateFrom && !$dateTo) ? 'active' : '' ?>">All Time</a>
-                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_month" class="filter-chip <?= $periodPreset === 'this_month' ? 'active' : '' ?>">This Month</a>
-                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=last_30" class="filter-chip <?= $periodPreset === 'last_30' ? 'active' : '' ?>">Last 30 Days</a>
-                            <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_fy" class="filter-chip <?= $periodPreset === 'this_fy' ? 'active' : '' ?>">This FY</a>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <!-- Date Range Preset Chips -->
+                            <div class="chip-group">
+                                <a href="?id=<?= $supplierId ?>&tab=ledger" class="filter-chip <?= (!$periodPreset && !$dateFrom && !$dateTo) ? 'active' : '' ?>">All Time</a>
+                                <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_month" class="filter-chip <?= $periodPreset === 'this_month' ? 'active' : '' ?>">This Month</a>
+                                <a href="?id=<?= $supplierId ?>&tab=ledger&preset=last_30" class="filter-chip <?= $periodPreset === 'last_30' ? 'active' : '' ?>">Last 30 Days</a>
+                                <a href="?id=<?= $supplierId ?>&tab=ledger&preset=this_fy" class="filter-chip <?= $periodPreset === 'this_fy' ? 'active' : '' ?>">This FY</a>
+                            </div>
+
+                            <a href="/api/supplier-statement-export.php?id=<?= $supplierId ?><?= $dateFrom ? '&from=' . urlencode($dateFrom) : '' ?><?= $dateTo ? '&to=' . urlencode($dateTo) : '' ?>" class="button secondary sm">
+                                <?= icon('box', 14) ?> Export CSV
+                            </a>
                         </div>
                     </div>
 
                     <!-- Custom Filter Row -->
-                    <div style="padding:12px 18px; background:var(--hover); border-bottom:1px solid var(--border);">
+                    <div style="padding:12px 20px; background:var(--surface-sunken); border-bottom:1px solid var(--border);">
                         <form method="GET" action="" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                             <input type="hidden" name="id" value="<?= $supplierId ?>">
                             <input type="hidden" name="tab" value="ledger">
@@ -867,7 +816,7 @@ $topbarTitle = $supplier['name'];
                                     $planStatusBadge = match ($plan['status']) {
                                         'active'    => 'badge-success',
                                         'paused'    => 'badge-warning',
-                                        'completed' => 'badge-neutral',
+                                        'completed' => 'badge-subtle',
                                         default     => 'badge-danger'
                                     };
                                     ?>
@@ -894,7 +843,7 @@ $topbarTitle = $supplier['name'];
                                         <?php endif; ?>
 
                                         <?php if ($nextDate && $plan['status'] === 'active'): ?>
-                                            <div style="margin-top:8px; padding:6px 10px; background:rgba(79,70,229,0.08); border-radius:6px; font-size:13px; color:var(--accent); font-weight:600;">
+                                            <div style="margin-top:8px; padding:6px 10px; background:var(--surface-sunken); border-radius:6px; font-size:13px; font-weight:600;">
                                                 🗓️ Next Due: <?= $nextDate ?>
                                             </div>
                                         <?php endif; ?>
@@ -944,63 +893,65 @@ $topbarTitle = $supplier['name'];
                 <div class="card">
                     <div class="card-header">
                         <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('building', 15) ?></span>
+                            <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
                             Supplier Contact & Tax Information
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:20px;">
+                        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:24px;">
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">Full Name</p>
-                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['name']) ?></p>
+                                <p class="stat-label" style="margin-bottom:4px;">Full Name</p>
+                                <p style="font-size:15px; font-weight:600; margin:0;"><?= htmlspecialchars($supplier['name']) ?></p>
                             </div>
 
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">Supplier Code</p>
-                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['code']) ?></p>
+                                <p class="stat-label" style="margin-bottom:4px;">Supplier Code</p>
+                                <p style="font-size:15px; font-weight:600; margin:0;"><?= htmlspecialchars($supplier['code']) ?></p>
                             </div>
 
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">Phone Number</p>
-                                <p style="font-size:15px;">
+                                <p class="stat-label" style="margin-bottom:4px;">Phone Number</p>
+                                <p style="font-size:15px; margin:0;">
                                     <?php if ($supplier['phone']): ?>
-                                        <a href="tel:<?= htmlspecialchars($supplier['phone']) ?>" class="link-action"><?= htmlspecialchars($supplier['phone']) ?></a>
+                                        <a href="tel:<?= htmlspecialchars($supplier['phone']) ?>" class="link-action" style="font-weight:600;"><?= htmlspecialchars($supplier['phone']) ?></a>
                                     <?php else: ?>
-                                        —
+                                        <span class="muted">—</span>
                                     <?php endif; ?>
                                 </p>
                             </div>
 
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">Email Address</p>
-                                <p style="font-size:15px;">
+                                <p class="stat-label" style="margin-bottom:4px;">Email Address</p>
+                                <p style="font-size:15px; margin:0;">
                                     <?php if ($supplier['email']): ?>
                                         <a href="mailto:<?= htmlspecialchars($supplier['email']) ?>" class="link-action"><?= htmlspecialchars($supplier['email']) ?></a>
                                     <?php else: ?>
-                                        —
+                                        <span class="muted">—</span>
                                     <?php endif; ?>
                                 </p>
                             </div>
 
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">GSTIN</p>
-                                <p style="font-size:15px; font-weight:600;"><?= htmlspecialchars($supplier['gstin'] ?: 'Unregistered / Not Provided') ?></p>
+                                <p class="stat-label" style="margin-bottom:4px;">GSTIN</p>
+                                <p style="font-size:15px; font-weight:600; margin:0;"><?= htmlspecialchars($supplier['gstin'] ?: 'Unregistered') ?></p>
                             </div>
 
                             <div>
-                                <p class="result-meta" style="margin-bottom:4px;">Supplier Since</p>
-                                <p style="font-size:15px;"><?= htmlspecialchars(date('d M Y', strtotime($supplier['created_at']))) ?></p>
+                                <p class="stat-label" style="margin-bottom:4px;">Supplier Since</p>
+                                <p style="font-size:15px; margin:0;"><?= htmlspecialchars(date('d M Y', strtotime($supplier['created_at']))) ?></p>
                             </div>
 
                             <div style="grid-column: 1 / -1;">
-                                <p class="result-meta" style="margin-bottom:4px;">Office / Warehouse Address</p>
-                                <p style="font-size:14px;"><?= $supplier['address'] ? nl2br(htmlspecialchars($supplier['address'])) : '—' ?></p>
+                                <p class="stat-label" style="margin-bottom:4px;">Office / Warehouse Address</p>
+                                <p style="font-size:14px; margin:0; line-height:1.5;"><?= $supplier['address'] ? nl2br(htmlspecialchars($supplier['address'])) : '<span class="muted">—</span>' ?></p>
                             </div>
                         </div>
 
                         <?php if ($canManage): ?>
                             <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:16px;">
-                                <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary"><?= icon('settings', 15) ?> Edit Information</a>
+                                <a href="/suppliers.php?edit=<?= (int) $supplier['id'] ?>" class="button secondary">
+                                    <?= icon('settings', 15) ?> Edit Profile Details
+                                </a>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -1111,7 +1062,7 @@ $topbarTitle = $supplier['name'];
                 <form method="POST" action="" id="form-open" style="display:none;">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="opening_balance">
-                    <p class="result-meta" style="margin-bottom:12px;">Set the amount owed prior to tracking in GarageOS.</p>
+                    <p class="muted" style="font-size:13px; margin-bottom:12px;">Set the amount owed prior to tracking in GarageOS.</p>
                     <div class="form-grid single">
                         <div class="form-field">
                             <label>Opening Amount Owed (₹)</label>
@@ -1202,7 +1153,7 @@ $topbarTitle = $supplier['name'];
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-header-title">
-                    <span class="icon-badge" style="background:#fee2e2; color:#b91c1c;"><?= icon('trash', 16) ?></span>
+                    <span class="icon-badge" style="background:var(--warning-soft); color:var(--danger);"><?= icon('trash', 16) ?></span>
                     Reverse Transaction
                 </div>
                 <button type="button" class="modal-close" data-close-modal="reversal-modal" aria-label="Close"><?= icon('x', 18) ?></button>
