@@ -8,6 +8,7 @@ require_once __DIR__ . '/../app/Domain/PartUnit.php';
 require_once __DIR__ . '/../app/Domain/Accessory.php';
 require_once __DIR__ . '/../app/View/JobCardIntakeExtras.php';
 require_once __DIR__ . '/../app/Support/Flash.php';
+require_once __DIR__ . '/../app/Domain/InvoiceService.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -183,6 +184,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     "Added service '$addedServiceName' to job card {$jobCard['job_no']}" . ($price != $catalogService['standard_price'] ? " (price adjusted to ₹$price)" : '')
                 );
 
+                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                }
+
                 flash_set("Added \"$addedServiceName\".");
                 header('Location: /job-card.php?id=' . $jobCardId);
                 exit;
@@ -211,6 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo, $user, 'create', 'job_card_item', $jobCardId,
                     "Added custom service '$customName' (₹$price) to job card {$jobCard['job_no']}"
                 );
+
+                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                }
 
                 flash_set("Added \"$customName\".");
                 header('Location: /job-card.php?id=' . $jobCardId);
@@ -302,6 +311,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
 
                 $pdo->commit();
+
+                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                }
 
             } catch (Throwable $e) {
                 $pdo->rollBack();
@@ -488,10 +501,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        // Once an invoice exists, what's on the job card must stay exactly
-        // what was actually invoiced — same boundary as GST on an invoice
-        // locking once a payment exists.
-        if (!$invoice) {
+        if ($invoice && (float) $invoice['amount_paid'] > 0.009) {
+            $error = 'Services cannot be removed because a payment has already been recorded on the invoice.';
+        } else {
             $removedItemId = (int) ($_POST['item_id'] ?? 0);
 
             $statement = $pdo->prepare("
@@ -512,6 +524,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 flash_set("Removed \"$removedServiceName\".");
             }
+
+            if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+            }
         }
 
         header('Location: /job-card.php?id=' . $jobCardId);
@@ -521,7 +537,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        if (!$invoice) {
+        if ($invoice && (float) $invoice['amount_paid'] > 0.009) {
+            $error = 'Parts cannot be removed because a payment has already been recorded on the invoice.';
+        } else {
 
             $pdo->beginTransaction();
 
@@ -572,6 +590,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $pdo->commit();
+
+                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                }
 
             } catch (Throwable $e) {
                 $pdo->rollBack();

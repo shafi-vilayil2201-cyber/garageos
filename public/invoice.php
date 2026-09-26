@@ -4,6 +4,8 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Gst.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/InvoiceService.php';
+require_once __DIR__ . '/../app/Support/Flash.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -133,6 +135,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+    } elseif ($action === 'sync_job_card') {
+
+        if ((float) $invoice['amount_paid'] > 0.009) {
+            $error = 'Invoice cannot be re-synced — a payment has already been recorded against it.';
+        } else {
+            $synced = InvoiceService::syncInvoiceFromJobCard($pdo, $invoiceId, $user);
+            if ($synced) {
+                flash_set('Invoice refreshed and synced with Job Card items and labour.');
+                header('Location: /invoice.php?id=' . $invoiceId);
+                exit;
+            } else {
+                $error = 'Could not sync invoice from Job Card.';
+            }
+        }
+
     } else {
 
         $method = $_POST['method'] ?? '';
@@ -197,6 +214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statement = $pdo->prepare("SELECT * FROM invoice_items WHERE invoice_id = :invoice_id ORDER BY id");
 $statement->execute(['invoice_id' => $invoiceId]);
 $items = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+$groupedItems = InvoiceService::groupItems($items);
 
 $statement = $pdo->prepare("SELECT * FROM payments WHERE invoice_id = :invoice_id ORDER BY created_at");
 $statement->execute(['invoice_id' => $invoiceId]);
@@ -282,6 +301,10 @@ if ($hasWhatsappNumber) {
 
         <section class="page">
 
+            <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="link-action" style="margin-bottom:16px;">
+                <?= icon('arrow-left', 14) ?> Back to Job Card (<?= htmlspecialchars($invoice['job_no']) ?>)
+            </a>
+
             <div class="page-header">
                 <div>
                     <h1 class="page-title">
@@ -299,7 +322,40 @@ if ($hasWhatsappNumber) {
                 </div>
 
                 <div style="display:flex; flex-wrap:wrap; gap:10px;">
-                    <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>" target="_blank" class="button secondary"><?= icon('printer', 16) ?> Print Invoice</a>
+                    <div class="user-menu-trigger" style="display:inline-flex; align-items:stretch;">
+                        <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>" target="_blank" id="main-print-btn" class="button secondary" style="border-top-right-radius:0; border-bottom-right-radius:0; border-right:none;">
+                            <?= icon('printer', 16) ?> <span id="print-btn-label">Print (A4 Invoice)</span>
+                        </a>
+                        <button type="button" id="print-format-toggle" class="button secondary" style="border-top-left-radius:0; border-bottom-left-radius:0; padding:0 10px; display:inline-flex; align-items:center; justify-content:center;" aria-label="Print Settings" title="Print settings and format options">
+                            <?= icon('settings', 15) ?>
+                        </button>
+                        <div id="print-format-dropdown" class="user-menu-dropdown" style="min-width:250px; right:0; top:calc(100% + 6px);" hidden>
+                            <div style="padding:6px 10px 4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">
+                                <?= icon('settings', 12) ?> Print Format Settings
+                            </div>
+                            <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>&format=a4" target="_blank" class="user-menu-item" onclick="setInvoicePrintFormat('a4')">
+                                <div style="flex:1;">
+                                    <div style="font-weight:600;">Print (A4 Invoice)</div>
+                                    <div style="font-size:11.5px; color:var(--muted);">Standard full-page detailed invoice</div>
+                                </div>
+                                <span class="format-check" data-format="a4" style="color:var(--accent); font-weight:700; font-size:14px; display:none;">&#10003;</span>
+                            </a>
+                            <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>&format=thermal80" target="_blank" class="user-menu-item" onclick="setInvoicePrintFormat('thermal80')">
+                                <div style="flex:1;">
+                                    <div style="font-weight:600;">Print (Thermal 80mm)</div>
+                                    <div style="font-size:11.5px; color:var(--muted);">Standard POS receipt roll</div>
+                                </div>
+                                <span class="format-check" data-format="thermal80" style="color:var(--accent); font-weight:700; font-size:14px; display:none;">&#10003;</span>
+                            </a>
+                            <a href="/invoice-print.php?id=<?= (int) $invoice['id'] ?>&format=thermal58" target="_blank" class="user-menu-item" onclick="setInvoicePrintFormat('thermal58')">
+                                <div style="flex:1;">
+                                    <div style="font-weight:600;">Print (Thermal 58mm)</div>
+                                    <div style="font-size:11.5px; color:var(--muted);">Compact mini receipt roll</div>
+                                </div>
+                                <span class="format-check" data-format="thermal58" style="color:var(--accent); font-weight:700; font-size:14px; display:none;">&#10003;</span>
+                            </a>
+                        </div>
+                    </div>
                     <?php if ($hasWhatsappNumber): ?>
                         <button
                             type="button"
@@ -313,72 +369,198 @@ if ($hasWhatsappNumber) {
                     <?php else: ?>
                         <span class="button secondary" aria-disabled="true" title="No phone number on file for this customer"><?= brand_icon('whatsapp', 16) ?> Share via WhatsApp</span>
                     <?php endif; ?>
-                    <a href="/job-card.php?id=<?= (int) $invoice['job_card_id'] ?>" class="button secondary"><?= icon('arrow-left', 16) ?> Back to job card</a>
                 </div>
             </div>
 
             <div class="content-grid content-grid-aside">
 
-                <div class="card">
-                    <div class="card-header" style="flex-direction:column; align-items:flex-start; gap:4px;">
-                        <div class="card-header-title">
-                            <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                            Tax Invoice — <?= htmlspecialchars($invoice['organization_name']) ?>
+                <div class="stack" style="gap:20px;">
+
+                    <!-- SECTION 1: PARTS & MATERIALS TABLE (IF PARTS EXIST) -->
+                    <?php if (!empty($groupedItems['parts'])): ?>
+                        <div class="card">
+                            <div class="card-header" style="padding:12px 18px;">
+                                <div class="card-header-title" style="font-size:13.5px; text-transform:uppercase; letter-spacing:0.04em;">
+                                    <span class="icon-badge"><?= icon('package', 15) ?></span>
+                                    Parts &amp; Materials
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:40px; text-align:center;">#</th>
+                                                <th>Part Name</th>
+                                                <th>Description</th>
+                                                <th class="num">Quantity</th>
+                                                <th class="num">Unit Price (₹)</th>
+                                                <?php if ($hasGst): ?><th class="num">GST</th><?php endif; ?>
+                                                <th class="num">Amount (₹)</th>
+                                                <th class="num">Parts Total (₹)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php $partIdx = 1; foreach ($groupedItems['parts'] as $item): ?>
+                                                <?php
+                                                    $lineTaxable = (float) $item['quantity'] * (float) $item['unit_price'];
+                                                    $lineTotal = (float) $item['total'];
+                                                ?>
+                                                <tr>
+                                                    <td style="text-align:center; color:var(--muted); font-size:12px;"><?= $partIdx++ ?></td>
+                                                    <td><strong><?= htmlspecialchars($item['description']) ?></strong></td>
+                                                    <td style="color:var(--muted); font-size:12px;"><?= $item['hsn_sac_code'] ? 'HSN: ' . htmlspecialchars($item['hsn_sac_code']) : 'Part' ?></td>
+                                                    <td class="num"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
+                                                    <td class="num">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
+                                                    <?php if ($hasGst): ?><td class="num"><?= number_format((float)$item['tax_rate'], 0) ?>%</td><?php endif; ?>
+                                                    <td class="num">₹<?= number_format($lineTaxable, 2) ?></td>
+                                                    <td class="num" style="font-weight:700;">₹<?= number_format($lineTotal, 2) ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style="padding:12px 18px; border-top:1px solid var(--border); display:flex; justify-content:flex-end;">
+                                    <div style="width:240px;">
+                                        <div style="display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; color:var(--muted);">
+                                            <span>Taxable Value</span>
+                                            <strong style="color:var(--text);">₹<?= number_format($groupedItems['parts_taxable'], 2) ?></strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; color:var(--muted);">
+                                            <span>Discount Total</span>
+                                            <strong style="color:var(--text);">₹0.00</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; font-size:13.5px; padding:5px 0; border-top:1px solid var(--border); margin-top:4px;">
+                                            <span style="font-weight:700;">Parts Total</span>
+                                            <strong style="color:var(--text);">₹<?= number_format($groupedItems['parts_total'], 2) ?></strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div style="font-weight:400; color:var(--muted); font-size:12.5px;">
-                            <?php if ($invoice['organization_tax_number'] && $hasGst): ?>
-                                <?= htmlspecialchars($invoice['organization_tax_label']) ?>IN: <?= htmlspecialchars($invoice['organization_tax_number']) ?> ·
-                            <?php endif; ?>
-                            Billed to <?= htmlspecialchars($invoice['customer_name']) ?>
-                            <?php if ($invoice['customer_gstin']): ?>
-                                (GSTIN: <?= htmlspecialchars($invoice['customer_gstin']) ?>)
-                            <?php endif; ?>
+                    <?php endif; ?>
+
+                    <!-- SECTION 2: LABOUR & SERVICES TABLE -->
+                    <?php if (!empty($groupedItems['labour'])): ?>
+                        <div class="card">
+                            <div class="card-header" style="padding:12px 18px;">
+                                <div class="card-header-title" style="font-size:13.5px; text-transform:uppercase; letter-spacing:0.04em;">
+                                    <span class="icon-badge"><?= icon('wrench', 15) ?></span>
+                                    Labour &amp; Services
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:40px; text-align:center;">#</th>
+                                                <th>Service</th>
+                                                <th>Description</th>
+                                                <th class="num">Quantity</th>
+                                                <th class="num">Unit Price (₹)</th>
+                                                <?php if ($hasGst): ?><th class="num">GST</th><?php endif; ?>
+                                                <th class="num">Amount (₹)</th>
+                                                <th class="num">Labour Total (₹)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php $labourIdx = count($groupedItems['parts']) + 1; foreach ($groupedItems['labour'] as $item): ?>
+                                                <?php
+                                                    $lineTaxable = (float) $item['quantity'] * (float) $item['unit_price'];
+                                                    $lineTotal = (float) $item['total'];
+                                                ?>
+                                                <tr>
+                                                    <td style="text-align:center; color:var(--muted); font-size:12px;"><?= $labourIdx++ ?></td>
+                                                    <td><strong><?= htmlspecialchars($item['description']) ?></strong></td>
+                                                    <td style="color:var(--muted); font-size:12px;"><?= $item['hsn_sac_code'] ? 'SAC: ' . htmlspecialchars($item['hsn_sac_code']) : 'Labour' ?></td>
+                                                    <td class="num"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
+                                                    <td class="num">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
+                                                    <?php if ($hasGst): ?><td class="num"><?= number_format((float)$item['tax_rate'], 0) ?>%</td><?php endif; ?>
+                                                    <td class="num">₹<?= number_format($lineTaxable, 2) ?></td>
+                                                    <td class="num" style="font-weight:700;">₹<?= number_format($lineTotal, 2) ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style="padding:12px 18px; border-top:1px solid var(--border); display:flex; justify-content:flex-end;">
+                                    <div style="width:240px;">
+                                        <div style="display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; color:var(--muted);">
+                                            <span>Taxable Value</span>
+                                            <strong style="color:var(--text);">₹<?= number_format($groupedItems['labour_taxable'], 2) ?></strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; color:var(--muted);">
+                                            <span>Discount Total</span>
+                                            <strong style="color:var(--text);">₹0.00</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; font-size:13.5px; padding:5px 0; border-top:1px solid var(--border); margin-top:4px;">
+                                            <span style="font-weight:700;">Labour Total</span>
+                                            <strong style="color:var(--text);">₹<?= number_format($groupedItems['labour_total'], 2) ?></strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- SECTION 3: GRAND SUMMARY & AMOUNT IN WORDS -->
+                    <div class="card">
+                        <div class="card-body" style="padding:18px 20px;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:20px;">
+                                <div style="flex:1; min-width:260px;">
+                                    <div style="font-size:13.5px; font-weight:700; color:var(--text); margin-bottom:4px;">
+                                        Amount ( in Words ):
+                                    </div>
+                                    <div style="font-size:14px; color:var(--text); font-style:italic;">
+                                        <?= htmlspecialchars(InvoiceService::numberToWordsInr((float) $invoice['total'])) ?>
+                                    </div>
+                                    <?php if ($hasGst && (!$invoice['organization_state'] || !$invoice['customer_state'])): ?>
+                                        <p class="result-meta" style="margin-top:12px;">
+                                            GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? 'your organization\'s' : 'this customer\'s' ?> state isn't set.
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div style="width:280px; border-left:1px solid var(--border); padding-left:20px;">
+                                    <?php if (!empty($groupedItems['parts'])): ?>
+                                        <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px;">
+                                            <span style="color:var(--muted);">Parts Total</span><strong class="num">₹<?= number_format($groupedItems['parts_total'], 2) ?></strong>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($groupedItems['labour'])): ?>
+                                        <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px;">
+                                            <span style="color:var(--muted);">Labour Total</span><strong class="num">₹<?= number_format($groupedItems['labour_total'], 2) ?></strong>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($hasGst): ?>
+                                        <?php if ($isInterState): ?>
+                                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px;">
+                                                <span style="color:var(--muted);">IGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px;">
+                                                <span style="color:var(--muted);">CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                            </div>
+                                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px;">
+                                                <span style="color:var(--muted);">SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:8px 0; border-top:1.5px solid var(--border); margin-top:6px; font-size:16px;">
+                                        <span style="font-weight:700;">Grand Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
+                                    </div>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; color:var(--muted);">
+                                        <span>Round off</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
+                                    </div>
+                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px; font-weight:700; color:<?= $balanceDue > 0.009 ? 'var(--danger)' : 'var(--success)' ?>;">
+                                        <span>Balance Due</span><strong class="num">₹<?= number_format($balanceDue, 2) ?></strong>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-body" style="padding:0;">
-                        <div class="table-wrap">
-                            <table class="data-table">
-                                <tr><th>Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit price</th><?php if ($hasGst): ?><th>GST</th><?php endif; ?><th>Total</th></tr>
-                                <?php foreach ($items as $item): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($item['description']) ?></td>
-                                        <td><?= htmlspecialchars($item['hsn_sac_code'] ?? '—') ?></td>
-                                        <td class="num"><?= rtrim(rtrim(number_format($item['quantity'], 2), '0'), '.') ?></td>
-                                        <td class="num">₹<?= number_format($item['unit_price'], 2) ?></td>
-                                        <?php if ($hasGst): ?><td class="num"><?= number_format($item['tax_rate'], 0) ?>%</td><?php endif; ?>
-                                        <td class="num">₹<?= number_format($item['total'], 2) ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </table>
-                        </div>
-                        <div style="padding:18px 20px; border-top:1px solid var(--border);">
-                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                <span>Subtotal</span><strong class="num">₹<?= number_format($invoice['subtotal'], 2) ?></strong>
-                            </div>
-                            <?php if ($hasGst): ?>
-                                <?php if ($isInterState): ?>
-                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                        <span>IGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'], 2) ?></strong>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                        <span>CGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                                    </div>
-                                    <div class="summary-row" style="display:flex; justify-content:space-between; padding:5px 0;">
-                                        <span>SGST</span><strong class="num">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></strong>
-                                    </div>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                            <div class="summary-row" style="display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); margin-top:6px; font-size:18px;">
-                                <span>Total</span><strong class="num">₹<?= number_format($invoice['total'], 2) ?></strong>
-                            </div>
-                            <?php if ($hasGst && (!$invoice['organization_state'] || !$invoice['customer_state'])): ?>
-                                <p class="result-meta" style="margin-top:10px;">
-                                    GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? 'your organization\'s' : 'this customer\'s' ?> state isn't set, so this couldn't be verified. Set it in <?= !$invoice['organization_state'] ? '<a href="/settings.php">Settings</a>' : '<a href="/customers.php?edit=' . (int) $invoice['customer_id'] . '">Customers</a>' ?> to switch to IGST automatically for inter-state sales.
-                                </p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+
                 </div>
 
                 <div class="stack">
@@ -396,43 +578,6 @@ if ($hasWhatsappNumber) {
                         </div>
                     </div>
 
-                    <?php if (user_can($user, 'invoices.manage') && (float) $invoice['amount_paid'] <= 0.009): ?>
-                        <div class="card">
-                            <div class="card-header">
-                                <div class="card-header-title">
-                                    <span class="icon-badge"><?= icon('receipt', 15) ?></span>
-                                    Adjust GST
-                                </div>
-                            </div>
-                            <div class="card-body">
-
-                                <?php if ($error && $errorAction === 'update_gst'): ?>
-                                    <div class="form-error"><?= htmlspecialchars($error) ?></div>
-                                <?php endif; ?>
-
-                                <form method="POST" action="">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="action" value="update_gst">
-                                    <div class="form-grid single">
-                                        <div class="form-field">
-                                            <label>GST rate</label>
-                                            <?php $orgDefaultRate = (float) $invoice['organization_default_tax_rate']; ?>
-                                            <select name="gst_rate">
-                                                <option value="<?= $orgDefaultRate ?>" selected><?= rtrim(rtrim(number_format($orgDefaultRate, 2), '0'), '.') ?>% (your organization's rate)</option>
-                                                <?php if ($orgDefaultRate !== 0.0): ?>
-                                                    <option value="0">No GST (0%)</option>
-                                                <?php endif; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-actions">
-                                        <button type="submit" class="button secondary"><?= icon('check', 16) ?> Update GST</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-
                     <?php if ($balanceDue > 0.009): ?>
                         <div class="card">
                             <div class="card-header">
@@ -443,8 +588,24 @@ if ($hasWhatsappNumber) {
                             </div>
                             <div class="card-body">
 
-                                <?php if ($error && $errorAction === 'record_payment'): ?>
+                                <?php if ($error && ($errorAction === 'record_payment' || $errorAction === 'update_gst')): ?>
                                     <div class="form-error"><?= htmlspecialchars($error) ?></div>
+                                <?php endif; ?>
+
+                                <?php if (user_can($user, 'invoices.manage') && (float) $invoice['amount_paid'] <= 0.009): ?>
+                                    <?php $orgDefaultRate = (float) $invoice['organization_default_tax_rate']; ?>
+                                    <form method="POST" action="" id="gst-toggle-form" style="margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border);">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="update_gst">
+                                        <input type="hidden" name="gst_rate" id="gst-rate-val" value="<?= $hasGst ? '0' : (string)$orgDefaultRate ?>">
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;">
+                                            <div>
+                                                <span style="font-size:13.5px; font-weight:600; color:var(--text);">Apply GST</span>
+                                                <span style="font-size:12px; color:var(--muted); margin-left:4px;">(<?= rtrim(rtrim(number_format($orgDefaultRate, 2), '0'), '.') ?>%)</span>
+                                            </div>
+                                            <input type="checkbox" <?= $hasGst ? 'checked' : '' ?> onchange="document.getElementById('gst-rate-val').value = this.checked ? '<?= $orgDefaultRate ?>' : '0'; this.form.submit();" style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer;">
+                                        </label>
+                                    </form>
                                 <?php endif; ?>
 
                                 <form method="POST" action="">
@@ -532,6 +693,62 @@ if ($hasWhatsappNumber) {
     <script src="/js/vendor/html2canvas.min.js?v=<?= filemtime($html2canvasPath) ?>"></script>
     <script src="/js/invoice-share.js?v=<?= filemtime($invoiceSharePath) ?>"></script>
 <?php endif; ?>
+
+<script>
+(function() {
+    const STORAGE_KEY = 'garageos_invoice_print_format';
+    const mainBtn = document.getElementById('main-print-btn');
+    const labelSpan = document.getElementById('print-btn-label');
+    const toggleBtn = document.getElementById('print-format-toggle');
+    const dropdown = document.getElementById('print-format-dropdown');
+    const invoiceId = <?= (int) $invoice['id'] ?>;
+
+    const formatNames = {
+        'a4': 'Print (A4 Invoice)',
+        'thermal80': 'Print (Thermal 80mm)',
+        'thermal58': 'Print (Thermal 58mm)'
+    };
+
+    function getSavedFormat() {
+        return localStorage.getItem(STORAGE_KEY) || 'a4';
+    }
+
+    function syncPrintButton() {
+        const fmt = getSavedFormat();
+        if (mainBtn) {
+            mainBtn.href = '/invoice-print.php?id=' + invoiceId + '&format=' + fmt;
+        }
+        if (labelSpan && formatNames[fmt]) {
+            labelSpan.textContent = formatNames[fmt];
+        }
+        document.querySelectorAll('.format-check').forEach(el => {
+            el.style.display = (el.dataset.format === fmt) ? 'inline-block' : 'none';
+        });
+    }
+
+    window.setInvoicePrintFormat = function(fmt) {
+        localStorage.setItem(STORAGE_KEY, fmt);
+        syncPrintButton();
+        if (dropdown) dropdown.hidden = true;
+    };
+
+    if (toggleBtn && dropdown) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.hidden = !dropdown.hidden;
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && e.target !== toggleBtn) {
+                dropdown.hidden = true;
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', syncPrintButton);
+    syncPrintButton();
+})();
+</script>
 
 </body>
 </html>

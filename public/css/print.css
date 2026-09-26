@@ -11,7 +11,7 @@ body {
     margin: 0;
     padding: 24px 0 48px;
     background: #e5e3dd;
-    color: #1c1a17;
+    color: #000000;
     font-family:
         Inter,
         -apple-system,
@@ -37,7 +37,7 @@ body {
     padding: 0 18px;
     border: none;
     border-radius: 8px;
-    background: #c2660a;
+    background: #1c1a17;
     color: #ffffff;
     font-weight: 600;
     font-size: 14px;
@@ -55,6 +55,7 @@ body {
     background: #ffffff;
     padding: 14mm;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    color: #000000;
 }
 
 /* Letterhead */
@@ -65,7 +66,7 @@ body {
     align-items: flex-start;
     gap: 18px;
     padding-bottom: 10px;
-    border-bottom: 2px solid #1c1a17;
+    border-bottom: 2px solid #000000;
     margin-bottom: 14px;
 }
 
@@ -73,18 +74,20 @@ body {
     display: block;
     max-height: 46px;
     margin-bottom: 5px;
+    filter: grayscale(100%) contrast(150%);
 }
 
 .org-name {
     font-size: 18px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: -0.3px;
+    color: #000000;
 }
 
 .org-meta {
     margin-top: 3px;
-    color: #6b6660;
-    font-size: 10.5px;
+    color: #000000;
+    font-size: 11px;
     line-height: 1.4;
 }
 
@@ -94,49 +97,45 @@ body {
 
 .doc-title h1 {
     margin: 0;
-    font-size: 17px;
+    font-size: 18px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    font-weight: 800;
+    color: #000000;
 }
 
 .doc-title .job-no {
     margin-top: 4px;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 800;
+    color: #000000;
 }
 
 .doc-title .job-date {
     margin-top: 2px;
-    font-size: 10.5px;
-    color: #6b6660;
+    font-size: 11px;
+    color: #000000;
 }
 
 .status-stamp {
     display: inline-block;
     margin-top: 10px;
     padding: 4px 12px;
-    border: 1.5px solid currentColor;
+    border: 1.5px solid #000000;
     border-radius: 4px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    color: #000000;
 }
 
-.status-stamp-paid {
-    color: #1a7f4b;
-}
-
-.status-stamp-partial {
-    color: #a86400;
-}
-
-.status-stamp-unpaid {
-    color: #b3261e;
-}
-
+.status-stamp-paid,
+.status-stamp-partial,
+.status-stamp-unpaid,
 .status-stamp-void {
-    color: #6b6660;
+    color: #000000;
+    border-color: #000000;
 }
 
 /* Info grid */
@@ -151,18 +150,18 @@ body {
 .info-block h2 {
     margin: 0 0 8px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b6660;
+    color: #000000;
 }
 
 .info-row {
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    padding: 3px 0;
-    border-bottom: 1px solid #f0efeb;
+    padding: 4px 0;
+    border-bottom: 1px solid #000000;
 }
 
 .info-row:last-child {
@@ -170,14 +169,15 @@ body {
 }
 
 .info-row .label {
-    color: #6b6660;
+    color: #000000;
 }
 
 .info-row .value {
-    font-weight: 600;
+    font-weight: 700;
     text-align: right;
     min-width: 0;
     overflow-wrap: anywhere;
+    color: #000000;
 }
 
 /* Sections */
@@ -189,25 +189,26 @@ body {
 .section h2 {
     margin: 0 0 8px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b6660;
+    color: #000000;
 }
 
 .section-box {
-    border: 1px solid #e5e3dd;
-    border-radius: 6px;
+    border: 1px solid #000000;
+    border-radius: 4px;
     padding: 12px 14px;
     font-size: 12.5px;
     white-space: pre-line;
+    color: #000000;
 }
 
 .customer-voice-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 22px;
-    border-top: 1px solid #e5e3dd;
+    border-top: 1px solid #000000;
 }
 
 .customer-voice-item {
@@ -216,16 +217,16 @@ body {
     gap: 7px;
     min-width: 0;
     padding: 7px 0;
-    border-bottom: 1px solid #f0efeb;
+    border-bottom: 1px solid #000000;
     line-height: 1.35;
     overflow-wrap: anywhere;
 }
 
 .customer-voice-number,
 .damage-mark-number {
-    color: #c2660a;
+    color: #000000;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.04em;
 }
 
@@ -247,12 +248,12 @@ body {
 }
 
 .checkbox-grid-readonly .checkbox-grid-item {
-    color: #a39d94;
+    color: #555555;
 }
 
 .checkbox-grid-readonly .checkbox-grid-item.checked {
-    color: #1c1a17;
-    font-weight: 600;
+    color: #000000;
+    font-weight: 700;
 }
 
 .damage-image-readonly {
@@ -261,6 +262,7 @@ body {
     height: auto;
     display: block;
     margin: 0 auto;
+    filter: grayscale(100%) contrast(150%);
 }
 
 .inspection-grid {
@@ -282,10 +284,10 @@ body {
 .inspection-panel h2 {
     margin: 0 0 8px;
     font-size: 10.5px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b6660;
+    color: #000000;
 }
 
 .condition-panel {
@@ -296,6 +298,7 @@ body {
     width: 175px;
     max-width: 100%;
     margin: 0 auto 8px;
+    filter: grayscale(100%) contrast(150%);
 }
 
 .damage-mark-list {
@@ -311,37 +314,41 @@ body {
     align-items: baseline;
     gap: 7px;
     min-width: 0;
-    border-bottom: 1px solid #e5e3dd;
+    border-bottom: 1px solid #000000;
     padding: 5px 0;
     font-size: 10.5px;
     line-height: 1.3;
+    color: #000000;
 }
 
 .damage-mark-item strong {
     min-width: 0;
     overflow-wrap: anywhere;
+    color: #000000;
 }
 
 .damage-mark-item span {
-    color: #6b6660;
+    color: #000000;
 }
 
 .damage-mark-item .damage-mark-number {
-    color: #c2660a;
+    color: #000000;
+    font-weight: 800;
 }
 
 .recorded-at-label {
     display: block;
     margin-top: 6px;
-    color: #6b6660;
+    color: #000000;
     font-size: 10px;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12.5px;
+    font-size: 12px;
     page-break-inside: auto;
+    color: #000000;
 }
 
 thead {
@@ -359,17 +366,20 @@ tr {
 
 th {
     text-align: left;
-    padding: 7px 8px;
-    font-size: 10.5px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #6b6660;
-    border-bottom: 1px solid #1c1a17;
+    color: #000000;
+    border: 1px solid #000000;
+    background: transparent;
 }
 
 td {
     padding: 6px 8px;
-    border-bottom: 1px solid #f0efeb;
+    border: 1px solid #000000;
+    color: #000000;
 }
 
 .num {
@@ -378,9 +388,9 @@ td {
 }
 
 .labour-line td {
-    padding: 3px 8px 8px 24px;
-    border-bottom: 1px solid #f0efeb;
-    color: #6b6660;
+    padding: 4px 8px 8px 24px;
+    border: 1px solid #000000;
+    color: #000000;
     font-size: 11.5px;
 }
 
@@ -390,9 +400,10 @@ td {
     gap: 16px;
     padding: 10px 8px 0;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 800;
     page-break-inside: avoid;
     break-inside: avoid;
+    color: #000000;
 }
 
 /* Invoice totals box */
@@ -400,6 +411,7 @@ td {
 .totals-box {
     margin: 0 0 6px auto;
     width: 260px;
+    border: 1.5px solid #000000;
 }
 
 .totals-row {
@@ -408,32 +420,34 @@ td {
     gap: 16px;
     padding: 5px 8px;
     font-size: 12.5px;
-    color: #3a362f;
+    color: #000000;
+    border-bottom: 1px solid #000000;
 }
 
 .totals-grand {
-    margin-top: 4px;
-    border-top: 1.5px solid #1c1a17;
-    padding-top: 8px;
-    font-size: 15px;
-    font-weight: 700;
-    color: #1c1a17;
+    margin-top: 0;
+    border-top: 1.5px solid #000000;
+    border-bottom: 1.5px solid #000000;
+    padding: 8px 8px;
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #000000;
 }
 
 .totals-balance {
-    font-weight: 700;
-    color: #b3261e;
+    font-weight: 800;
+    color: #000000;
 }
 
 .totals-settled {
-    font-weight: 700;
-    color: #1a7f4b;
+    font-weight: 800;
+    color: #000000;
 }
 
 .tax-note {
     margin: 0 0 18px;
     font-size: 11px;
-    color: #6b6660;
+    color: #000000;
     text-align: right;
 }
 
@@ -442,9 +456,9 @@ td {
 .declaration {
     margin-top: 22px;
     padding-top: 14px;
-    border-top: 1px solid #e5e3dd;
+    border-top: 1px solid #000000;
     font-size: 11.5px;
-    color: #3a362f;
+    color: #000000;
     text-align: justify;
     page-break-inside: avoid;
     break-inside: avoid;
@@ -465,10 +479,11 @@ td {
 }
 
 .signature-line {
-    border-top: 1px solid #1c1a17;
+    border-top: 1.5px solid #000000;
     padding-top: 6px;
     font-size: 11.5px;
-    color: #6b6660;
+    color: #000000;
+    font-weight: 600;
 }
 
 @media print {
