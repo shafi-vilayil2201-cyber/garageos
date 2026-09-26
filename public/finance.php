@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/Auth/Auth.php';
+require_once __DIR__ . '/../app/Domain/SupplierLedger.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -73,12 +74,8 @@ $statement = $pdo->prepare("
 $statement->execute(['organization_id' => $organizationId]);
 $totalReceivable = (float) $statement->fetchColumn();
 
-$statement = $pdo->prepare("
-    SELECT COALESCE(SUM(total - amount_paid), 0) FROM purchases
-    WHERE organization_id = :organization_id AND payment_status != 'paid'
-");
-$statement->execute(['organization_id' => $organizationId]);
-$totalPayable = (float) $statement->fetchColumn();
+$supplierLedger = new SupplierLedger($pdo);
+$totalPayable = $supplierLedger->getTotalPayable($organizationId);
 
 $activeNav = 'finance_overview';
 $topbarTitle = 'Finance';

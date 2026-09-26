@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
+require_once __DIR__ . '/../app/Domain/SupplierLedger.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -20,6 +21,7 @@ require_permission($user, 'finance.view');
 $organizationId = $user['organization_id'];
 $branchId = $user['branch_id'];
 
+$ledger = new SupplierLedger($pdo);
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -47,31 +49,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         try {
-            $statement = $pdo->prepare("
-                INSERT INTO supplier_payments (organization_id, branch_id, purchase_id, method, amount, reference_no, paid_by)
-                VALUES (:organization_id, :branch_id, :purchase_id, :method, :amount, :reference_no, :paid_by)
-            ");
-            $statement->execute([
-                'organization_id' => $organizationId,
-                'branch_id' => $purchase['branch_id'],
-                'purchase_id' => $purchaseId,
-                'method' => $method,
-                'amount' => $amount,
-                'reference_no' => $referenceNo ?: null,
-                'paid_by' => $user['id']
-            ]);
-
-            $newAmountPaid = (float) $purchase['amount_paid'] + $amount;
-            $newStatus = $newAmountPaid >= (float) $purchase['total'] - 0.01 ? 'paid' : 'partial';
-
-            $statement = $pdo->prepare("
-                UPDATE purchases SET amount_paid = :amount_paid, payment_status = :payment_status WHERE id = :id
-            ");
-            $statement->execute([
-                'amount_paid' => $newAmountPaid,
-                'payment_status' => $newStatus,
-                'id' => $purchaseId
-            ]);
+            $allocations = [['purchase_id' => $purchaseId, 'amount' => $amount]];
+            $ledger->recordPayment(
+                $organizationId,
+                (int) $purchase['branch_id'],
+                (int) $purchase['supplier_id'],
+                $amount,
+                $method,
+                $referenceNo ?: null,
+                date('Y-m-d'),
+                $allocations,
+                $user
+            );
 
             log_audit_event(
                 $pdo, $user, 'create', 'supplier_payment', $purchaseId,
@@ -84,14 +73,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } catch (Throwable $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             $error = $e->getMessage();
         }
     }
 }
 
+// Supplier-level payables from ledger
+$supplierPayables = $ledger->getOrganizationPayables($organizationId);
+$totalPayable = $ledger->getTotalPayable($organizationId);
+
 $statement = $pdo->prepare("
-    SELECT p.id, p.purchase_no, p.total, p.amount_paid, p.payment_status, p.created_at, s.name AS supplier_name
+    SELECT p.id, p.purchase_no, p.total, p.amount_paid, p.payment_status, p.created_at, p.supplier_id, s.name AS supplier_name
     FROM purchases p
     INNER JOIN suppliers s ON s.id = p.supplier_id
     WHERE p.organization_id = :organization_id AND p.payment_status != 'paid'
@@ -99,8 +94,6 @@ $statement = $pdo->prepare("
 ");
 $statement->execute(['organization_id' => $organizationId]);
 $payableRows = $statement->fetchAll(PDO::FETCH_ASSOC);
-
-$totalPayable = array_sum(array_map(fn($r) => $r['total'] - $r['amount_paid'], $payableRows));
 
 $statement = $pdo->prepare("
     SELECT i.id, i.invoice_no, i.total, i.amount_paid, i.status, c.name AS customer_name
@@ -174,15 +167,54 @@ $topbarTitle = 'Debt';
             <div class="card" style="margin-top:16px;">
                 <div class="card-header">
                     <div class="card-header-title">
+                        <span class="icon-badge"><?= icon('warehouse', 15) ?></span>
+                        Supplier Accounts Overview
+                    </div>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <?php if (empty($supplierPayables)): ?>
+                        <div class="empty-state">
+                            <?= icon('check-circle', 28) ?>
+                            No outstanding supplier payables.
+                        </div>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <tr><th>Supplier</th><th>Code</th><th>Outstanding Balance</th><th></th></tr>
+                                <?php foreach ($supplierPayables as $sp): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" style="font-weight: 600; color: var(--color-primary, #4f46e5); text-decoration: none;">
+                                                <?= htmlspecialchars($sp['supplier_name']) ?>
+                                            </a>
+                                        </td>
+                                        <td><span class="badge badge-subtle"><?= htmlspecialchars($sp['supplier_code'] ?? '—') ?></span></td>
+                                        <td class="num" style="font-weight: 600; color: var(--color-danger, #ef4444);">₹<?= number_format((float) $sp['outstanding_balance'], 2) ?></td>
+                                        <td style="text-align: right;">
+                                            <a href="/supplier.php?id=<?= (int) $sp['supplier_id'] ?>" class="button secondary" style="padding: 4px 10px; font-size: 12px;">
+                                                <?= icon('file-text', 14) ?> View Ledger
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header">
+                    <div class="card-header-title">
                         <span class="icon-badge"><?= icon('truck', 15) ?></span>
-                        Payables — what you owe suppliers
+                        Unpaid Purchases Breakdown
                     </div>
                 </div>
                 <div class="card-body" style="padding:0;">
                     <?php if (empty($payableRows)): ?>
                         <div class="empty-state">
                             <?= icon('check-circle', 28) ?>
-                            No outstanding supplier payments.
+                            No outstanding purchase bills.
                         </div>
                     <?php else: ?>
                         <div class="table-wrap">
@@ -191,11 +223,15 @@ $topbarTitle = 'Debt';
                                 <?php foreach ($payableRows as $row): ?>
                                     <?php $rowBalance = (float) $row['total'] - (float) $row['amount_paid']; ?>
                                     <tr>
-                                        <td><?= htmlspecialchars($row['purchase_no']) ?></td>
-                                        <td><?= htmlspecialchars($row['supplier_name']) ?></td>
-                                        <td style="text-transform:capitalize;"><?= htmlspecialchars($row['payment_status']) ?></td>
-                                        <td class="num">₹<?= number_format($rowBalance, 2) ?></td>
+                                        <td><strong><?= htmlspecialchars($row['purchase_no']) ?></strong></td>
                                         <td>
+                                            <a href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>" style="text-decoration: none; color: inherit; font-weight: 500;">
+                                                <?= htmlspecialchars($row['supplier_name']) ?>
+                                            </a>
+                                        </td>
+                                        <td style="text-transform:capitalize;"><span class="badge badge-warning"><?= htmlspecialchars($row['payment_status']) ?></span></td>
+                                        <td class="num" style="font-weight: 600;">₹<?= number_format($rowBalance, 2) ?></td>
+                                        <td style="text-align: right;">
                                             <?php if (user_can($user, 'finance.manage')): ?>
                                                 <button type="button" class="button secondary"
                                                         onclick="openPayableModal(<?= (int) $row['id'] ?>, '<?= htmlspecialchars(addslashes($row['purchase_no'])) ?>', <?= $rowBalance ?>)">

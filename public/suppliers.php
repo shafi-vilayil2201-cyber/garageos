@@ -201,14 +201,19 @@ $topbarTitle = 'Suppliers';
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <tr><th>Name</th><th>Phone</th><th></th></tr>
+                                <tr><th>Supplier</th><th>Phone</th><th>Email</th><th></th></tr>
                                 <?php foreach ($suppliers as $supplier): ?>
                                     <tr>
-                                        <td><strong><?= htmlspecialchars($supplier['name']) ?></strong>
+                                        <td>
+                                            <a href="/supplier.php?id=<?= (int) $supplier['id'] ?>" style="font-weight: 600; color: var(--color-primary, #4f46e5); text-decoration: none;">
+                                                <?= htmlspecialchars($supplier['name']) ?>
+                                            </a>
                                             <div class="result-meta"><?= htmlspecialchars($supplier['code']) ?></div>
                                         </td>
                                         <td><?= htmlspecialchars($supplier['phone'] ?? '—') ?></td>
-                                        <td>
+                                        <td><?= htmlspecialchars($supplier['email'] ?? '—') ?></td>
+                                        <td style="text-align: right; white-space: nowrap;">
+                                            <a href="/supplier.php?id=<?= (int) $supplier['id'] ?>" class="link-action" style="margin-right: 12px;"><?= icon('file-text', 14) ?> Account & Ledger</a>
                                             <?php if ($canManageSuppliers): ?>
                                                 <a href="?edit=<?= (int) $supplier['id'] ?>" class="link-action"><?= icon('settings', 14) ?> Edit</a>
                                             <?php endif; ?>

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Auth/Auth.php';
 require_once __DIR__ . '/../app/Security/Csrf.php';
 require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/PartUnit.php';
+require_once __DIR__ . '/../app/Domain/SupplierLedger.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -59,25 +60,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $taxAmount = 0;
             $preparedLines = [];
 
-            $statement = $pdo->prepare("SELECT tax_rate FROM parts WHERE id = :id AND organization_id = :organization_id");
-
             foreach ($lines as $line) {
-                $statement->execute(['id' => $line['part_id'], 'organization_id' => $organizationId]);
-                $taxRate = (float) $statement->fetchColumn();
-
                 $lineTotal = $line['quantity'] * $line['unit_cost'];
-                $lineTax = $lineTotal * ($taxRate / 100);
-
                 $subtotal += $lineTotal;
-                $taxAmount += $lineTax;
 
                 $preparedLines[] = $line + [
-                    'tax_rate' => $taxRate,
-                    'total' => $lineTotal + $lineTax
+                    'tax_rate' => 0,
+                    'total' => $lineTotal
                 ];
             }
 
-            $total = $subtotal + $taxAmount;
+            $total = $subtotal;
 
             $statement = $pdo->prepare("
                 SELECT COALESCE(MAX(CAST(SUBSTRING(purchase_no FROM 5) AS INT)), 0) + 1
@@ -146,6 +139,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'created_by' => $user['id']
                 ]);
             }
+
+            // Record in central Supplier Ledger
+            $supplierLedger = new SupplierLedger($pdo);
+            $supplierLedger->createLedgerEntryForPurchase(
+                $organizationId,
+                $supplierId,
+                (int) $purchaseId,
+                $purchaseNo,
+                $total,
+                "Purchase $purchaseNo",
+                $user['id']
+            );
 
             $statement = $pdo->prepare("SELECT name FROM suppliers WHERE id = :id");
             $statement->execute(['id' => $supplierId]);
