@@ -78,7 +78,7 @@ $statusLabels = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>GarageOS — <?= htmlspecialchars($invoice['invoice_no']) ?> — <?= $isThermal ? 'Receipt' : 'Invoice' ?></title>
+    <title>GarageOS — <?= htmlspecialchars($invoice['invoice_no']) ?> — <?= $isThermal ? 'Receipt' : ($hasGst ? 'Tax Invoice' : 'Invoice') ?></title>
 
     <?php if ($isThermal): ?>
         <link rel="stylesheet" href="/css/thermal-print.css">
@@ -111,7 +111,7 @@ $statusLabels = [
         </button>
         <button type="button" class="print-button" onclick="window.print()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-            Print <?= $isThermal ? 'Receipt' : 'Invoice' ?>
+            Print <?= $isThermal ? 'Receipt' : ($hasGst ? 'Tax Invoice' : 'Invoice') ?>
         </button>
     </div>
 </div>
@@ -354,7 +354,7 @@ $statusLabels = [
                 </div>
             </div>
             <div class="doc-title">
-                <h1>Tax Invoice</h1>
+                <h1><?= $hasGst ? 'Tax Invoice' : 'Invoice' ?></h1>
                 <div class="job-no"><?= htmlspecialchars($invoice['invoice_no']) ?></div>
                 <div class="job-date">Dated <?= htmlspecialchars(date('d M Y', strtotime($invoice['created_at']))) ?></div>
                 <div class="status-stamp status-stamp-<?= htmlspecialchars($invoice['status']) ?>">
@@ -363,39 +363,90 @@ $statusLabels = [
             </div>
         </div>
 
-        <div class="info-grid">
-            <div class="info-block">
-                <h2>Billed to</h2>
-                <div class="info-row"><span class="label">Name</span><span class="value"><?= htmlspecialchars($invoice['customer_name']) ?></span></div>
-                <div class="info-row"><span class="label">Phone</span><span class="value"><?= htmlspecialchars($invoice['customer_phone']) ?></span></div>
-                <?php if ($invoice['customer_address']): ?>
-                    <div class="info-row"><span class="label">Address</span><span class="value"><?= htmlspecialchars($invoice['customer_address']) ?></span></div>
-                <?php endif; ?>
-                <?php if ($invoice['customer_gstin']): ?>
-                    <div class="info-row"><span class="label">GSTIN</span><span class="value"><?= htmlspecialchars($invoice['customer_gstin']) ?></span></div>
-                <?php endif; ?>
-            </div>
-            <div class="info-block">
-                <h2>Vehicle &amp; job reference</h2>
-                <div class="info-row"><span class="label">Job card</span><span class="value"><?= htmlspecialchars($invoice['job_no']) ?></span></div>
-                <div class="info-row"><span class="label">Registration</span><span class="value"><?= htmlspecialchars($invoice['registration_no']) ?></span></div>
-                <div class="info-row"><span class="label">Make / Model</span><span class="value"><?= htmlspecialchars($invoice['make'] . ' ' . $invoice['model']) ?></span></div>
-            </div>
-        </div>
+        <!-- BILLED TO & VEHICLE INFO TABULAR BOX -->
+        <table style="width:100%; border:1.5px solid #000000; border-collapse:collapse; margin-bottom:16px; font-size:11.5px;">
+            <thead>
+                <tr>
+                    <th style="width:50%; border-right:1.5px solid #000000; border-bottom:1.5px solid #000000; padding:6px 10px; font-size:11px; font-weight:800; text-transform:uppercase; color:#000000;">
+                        Billed To
+                    </th>
+                    <th style="width:50%; border-bottom:1.5px solid #000000; padding:6px 10px; font-size:11px; font-weight:800; text-transform:uppercase; color:#000000;">
+                        Vehicle &amp; Job Reference
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="border-right:1.5px solid #000000; padding:8px 10px; vertical-align:top; border-bottom:none;">
+                        <table style="width:100%; border:none; font-size:11.5px; border-collapse:collapse;">
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; width:65px; color:#000000;">Name</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['customer_name']) ?></td>
+                            </tr>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">Phone</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['customer_phone']) ?></td>
+                            </tr>
+                            <?php if ($invoice['customer_address']): ?>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; vertical-align:top; color:#000000;">Address</td>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">: <?= nl2br(htmlspecialchars($invoice['customer_address'])) ?></td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if ($invoice['customer_gstin']): ?>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">GSTIN</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['customer_gstin']) ?></td>
+                            </tr>
+                            <?php endif; ?>
+                        </table>
+                    </td>
+                    <td style="padding:8px 10px; vertical-align:top; border-bottom:none;">
+                        <table style="width:100%; border:none; font-size:11.5px; border-collapse:collapse;">
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; width:90px; color:#000000;">Job Card</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['job_no']) ?></td>
+                            </tr>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">Registration</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['registration_no']) ?></td>
+                            </tr>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">Make / Model</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars($invoice['make'] . ' ' . $invoice['model']) ?></td>
+                            </tr>
+                            <tr>
+                                <td style="border:none; padding:2px 0; font-weight:600; color:#000000;">Invoice Date</td>
+                                <td style="border:none; padding:2px 0; font-weight:700; color:#000000;">: <?= htmlspecialchars(date('d M Y', strtotime($invoice['created_at']))) ?></td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
 
         <!-- SECTION 1: PARTS TABLE (IF PARTS EXIST) -->
         <?php if (!empty($groupedItems['parts'])): ?>
-            <div class="section" style="margin-bottom:16px;">
-                <table style="border:1px solid #000000; border-collapse:collapse; width:100%;">
+            <div style="margin-bottom:16px;">
+                <table style="table-layout:fixed; width:100%; border:1.5px solid #000000; border-collapse:collapse;">
+                    <colgroup>
+                        <col style="width:4%;">
+                        <col style="width:30%;">
+                        <col style="width:14%;">
+                        <col style="width:9%;">
+                        <col style="width:14%;">
+                        <col style="width:14%;">
+                        <col style="width:15%;">
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th style="width:32px; text-align:center; border:1px solid #000000; color:#000000; font-weight:800;">#</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Part Name</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Description</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Quantity</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Unit Price (₹)</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Amount (₹)</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Parts Total (₹)</th>
+                            <th style="text-align:center; border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 4px;">#</th>
+                            <th style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Part Name</th>
+                            <th style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Description</th>
+                            <th style="text-align:center; border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 4px;">Quantity</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Unit Price (₹)</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Amount (₹)</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Parts Total (₹)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -405,49 +456,58 @@ $statusLabels = [
                                 $lineTotal = (float) $item['total'];
                             ?>
                             <tr>
-                                <td style="text-align:center; border:1px solid #000000; color:#000000;"><?= $pIdx++ ?></td>
-                                <td style="border:1px solid #000000; color:#000000;"><strong><?= htmlspecialchars($item['description']) ?></strong></td>
+                                <td style="text-align:center; border:1px solid #000000; color:#000000; font-size:11px;"><?= $pIdx++ ?></td>
+                                <td style="border:1px solid #000000; color:#000000; font-size:11.5px;"><strong><?= htmlspecialchars($item['description']) ?></strong></td>
                                 <td style="border:1px solid #000000; color:#000000; font-size:11px;"><?= $item['hsn_sac_code'] ? 'HSN ' . htmlspecialchars($item['hsn_sac_code']) : 'Part' ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;">₹<?= number_format($lineTaxable, 2) ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000; font-weight:700;">₹<?= number_format($lineTotal, 2) ?></td>
+                                <td style="text-align:center; border:1px solid #000000; color:#000000; font-size:11.5px;"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-size:11.5px;">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-size:11.5px;">₹<?= number_format($lineTaxable, 2) ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:11.5px;">₹<?= number_format($lineTotal, 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
+                        <!-- Integrated Subtotals within table grid -->
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:1px solid #000000; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Taxable Value</td>
+                            <td class="num" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($groupedItems['parts_taxable'], 2) ?></td>
+                        </tr>
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Discount Total</td>
+                            <td class="num" style="border:1px solid #000000; padding:5px 8px; font-size:11.5px; color:#000000;">₹0.00</td>
+                        </tr>
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">Round off</td>
+                            <td class="num" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">₹<?= number_format($groupedItems['parts_total'], 2) ?></td>
+                        </tr>
                     </tbody>
                 </table>
-                <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-                    <table style="width:280px; border:1px solid #000000; border-collapse:collapse; font-size:11.5px;">
-                        <tr>
-                            <td style="padding:4px 8px; border:1px solid #000000; font-weight:600; color:#000000;">Taxable Value</td>
-                            <td class="num" style="padding:4px 8px; border:1px solid #000000; font-weight:700; color:#000000;">₹<?= number_format($groupedItems['parts_taxable'], 2) ?></td>
-                        </tr>
-                        <tr>
-                            <td style="padding:4px 8px; border:1px solid #000000; font-weight:600; color:#000000;">Discount Total</td>
-                            <td class="num" style="padding:4px 8px; border:1px solid #000000; color:#000000;">₹0.00</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 8px; border:1.5px solid #000000; font-weight:800; color:#000000;">Parts Total</td>
-                            <td class="num" style="padding:5px 8px; border:1.5px solid #000000; font-weight:800; color:#000000;">₹<?= number_format($groupedItems['parts_total'], 2) ?></td>
-                        </tr>
-                    </table>
-                </div>
             </div>
         <?php endif; ?>
 
         <!-- SECTION 2: LABOUR & SERVICES TABLE -->
         <?php if (!empty($groupedItems['labour'])): ?>
-            <div class="section" style="margin-bottom:16px;">
-                <table style="border:1px solid #000000; border-collapse:collapse; width:100%;">
+            <div style="margin-bottom:16px;">
+                <table style="table-layout:fixed; width:100%; border:1.5px solid #000000; border-collapse:collapse;">
+                    <colgroup>
+                        <col style="width:4%;">
+                        <col style="width:30%;">
+                        <col style="width:14%;">
+                        <col style="width:9%;">
+                        <col style="width:14%;">
+                        <col style="width:14%;">
+                        <col style="width:15%;">
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th style="width:32px; text-align:center; border:1px solid #000000; color:#000000; font-weight:800;">#</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Service</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Description</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Quantity</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Unit Price (₹)</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Amount (₹)</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Labour Total (₹)</th>
+                            <th style="text-align:center; border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 4px;">#</th>
+                            <th style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Service</th>
+                            <th style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Description</th>
+                            <th style="text-align:center; border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 4px;">Quantity</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Unit Price (₹)</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Amount (₹)</th>
+                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:10px; padding:6px 5px;">Labour Total (₹)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -457,104 +517,119 @@ $statusLabels = [
                                 $lineTotal = (float) $item['total'];
                             ?>
                             <tr>
-                                <td style="text-align:center; border:1px solid #000000; color:#000000;"><?= $lIdx++ ?></td>
-                                <td style="border:1px solid #000000; color:#000000;"><strong><?= htmlspecialchars($item['description']) ?></strong></td>
+                                <td style="text-align:center; border:1px solid #000000; color:#000000; font-size:11px;"><?= $lIdx++ ?></td>
+                                <td style="border:1px solid #000000; color:#000000; font-size:11.5px;"><strong><?= htmlspecialchars($item['description']) ?></strong></td>
                                 <td style="border:1px solid #000000; color:#000000; font-size:11px;"><?= $item['hsn_sac_code'] ? 'SAC ' . htmlspecialchars($item['hsn_sac_code']) : 'Labour' ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;">₹<?= number_format($lineTaxable, 2) ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000; font-weight:700;">₹<?= number_format($lineTotal, 2) ?></td>
+                                <td style="text-align:center; border:1px solid #000000; color:#000000; font-size:11.5px;"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-size:11.5px;">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-size:11.5px;">₹<?= number_format($lineTaxable, 2) ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-weight:700; font-size:11.5px;">₹<?= number_format($lineTotal, 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
+                        <!-- Integrated Subtotals within table grid -->
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:1px solid #000000; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Taxable Value</td>
+                            <td class="num" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($groupedItems['labour_taxable'], 2) ?></td>
+                        </tr>
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Discount Total</td>
+                            <td class="num" style="border:1px solid #000000; padding:5px 8px; font-size:11.5px; color:#000000;">₹0.00</td>
+                        </tr>
+                        <tr>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">Round off</td>
+                            <td class="num" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">₹<?= number_format($groupedItems['labour_total'], 2) ?></td>
+                        </tr>
                     </tbody>
                 </table>
-                <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-                    <table style="width:280px; border:1px solid #000000; border-collapse:collapse; font-size:11.5px;">
-                        <tr>
-                            <td style="padding:4px 8px; border:1px solid #000000; font-weight:600; color:#000000;">Taxable Value</td>
-                            <td class="num" style="padding:4px 8px; border:1px solid #000000; font-weight:700; color:#000000;">₹<?= number_format($groupedItems['labour_taxable'], 2) ?></td>
-                        </tr>
-                        <tr>
-                            <td style="padding:4px 8px; border:1px solid #000000; font-weight:600; color:#000000;">Discount Total</td>
-                            <td class="num" style="padding:4px 8px; border:1px solid #000000; color:#000000;">₹0.00</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 8px; border:1.5px solid #000000; font-weight:800; color:#000000;">Labour Total</td>
-                            <td class="num" style="padding:5px 8px; border:1.5px solid #000000; font-weight:800; color:#000000;">₹<?= number_format($groupedItems['labour_total'], 2) ?></td>
-                        </tr>
-                    </table>
-                </div>
             </div>
         <?php endif; ?>
 
-        <!-- SECTION 3: GRAND TOTALS BLOCK -->
-        <div style="display:flex; justify-content:flex-end; margin-top:14px;">
-            <table style="width:300px; border:1.5px solid #000000; border-collapse:collapse; font-size:12.5px;">
+        <!-- SECTION 3: GRAND TOTALS BOX (MATCHING IDENTICAL COLUMN GRID) -->
+        <table style="table-layout:fixed; width:100%; border:1.5px solid #000000; border-collapse:collapse; margin-bottom:16px;">
+            <colgroup>
+                <col style="width:4%;">
+                <col style="width:30%;">
+                <col style="width:14%;">
+                <col style="width:9%;">
+                <col style="width:14%;">
+                <col style="width:14%;">
+                <col style="width:15%;">
+            </colgroup>
+            <tbody>
                 <?php if (!empty($groupedItems['parts'])): ?>
                     <tr>
-                        <td style="padding:5px 10px; border:1px solid #000000; font-weight:600; color:#000000;">Parts Total</td>
-                        <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($groupedItems['parts_total'], 2) ?></td>
+                        <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                        <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Parts Total</td>
+                        <td class="num" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($groupedItems['parts_total'], 2) ?></td>
                     </tr>
                 <?php endif; ?>
                 <?php if (!empty($groupedItems['labour'])): ?>
                     <tr>
-                        <td style="padding:5px 10px; border:1px solid #000000; font-weight:600; color:#000000;">Labour Total</td>
-                        <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($groupedItems['labour_total'], 2) ?></td>
+                        <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                        <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Labour Total</td>
+                        <td class="num" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($groupedItems['labour_total'], 2) ?></td>
                     </tr>
                 <?php endif; ?>
                 <?php if ($hasGst): ?>
                     <?php if ($isInterState): ?>
                         <tr>
-                            <td style="padding:5px 10px; border:1px solid #000000; color:#000000;">IGST</td>
-                            <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($invoice['tax_amount'], 2) ?></td>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">IGST</td>
+                            <td class="num" style="border:1px solid #000000; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($invoice['tax_amount'], 2) ?></td>
                         </tr>
                     <?php else: ?>
                         <tr>
-                            <td style="padding:5px 10px; border:1px solid #000000; color:#000000;">CGST</td>
-                            <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></td>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">CGST</td>
+                            <td class="num" style="border:1px solid #000000; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></td>
                         </tr>
                         <tr>
-                            <td style="padding:5px 10px; border:1px solid #000000; color:#000000;">SGST</td>
-                            <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></td>
+                            <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                            <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">SGST</td>
+                            <td class="num" style="border:1px solid #000000; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($invoice['tax_amount'] / 2, 2) ?></td>
                         </tr>
                     <?php endif; ?>
                 <?php endif; ?>
-                <tr style="font-weight:800; font-size:13.5px;">
-                    <td style="padding:7px 10px; border:1.5px solid #000000; color:#000000;">Grand Total</td>
-                    <td class="num" style="padding:7px 10px; border:1.5px solid #000000; color:#000000;">₹<?= number_format($invoice['total'], 2) ?></td>
+                <tr>
+                    <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                    <td colspan="2" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12.5px; color:#000000;">Grand Total</td>
+                    <td class="num" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12.5px; color:#000000;">₹<?= number_format($invoice['total'], 2) ?></td>
                 </tr>
                 <tr>
-                    <td style="padding:5px 10px; border:1px solid #000000; color:#000000;">Round off</td>
-                    <td class="num" style="padding:5px 10px; border:1px solid #000000; color:#000000;">₹<?= number_format($invoice['total'], 2) ?></td>
+                    <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                    <td colspan="2" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">Round off</td>
+                    <td class="num" style="border:1px solid #000000; font-weight:700; padding:5px 8px; font-size:11.5px; color:#000000;">₹<?= number_format($invoice['total'], 2) ?></td>
                 </tr>
-                <tr style="font-weight:800;">
-                    <td style="padding:6px 10px; border:1.5px solid #000000; color:#000000;">Balance</td>
-                    <td class="num" style="padding:6px 10px; border:1.5px solid #000000; color:#000000;">₹<?= number_format($balanceDue, 2) ?></td>
+                <tr>
+                    <td colspan="4" style="border-right:1.5px solid #000000; border-top:none; border-bottom:none; border-left:none;"></td>
+                    <td colspan="2" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">Balance</td>
+                    <td class="num" style="border:1.5px solid #000000; font-weight:800; padding:6px 8px; font-size:12px; color:#000000;">₹<?= number_format($balanceDue, 2) ?></td>
                 </tr>
-            </table>
-        </div>
+            </tbody>
+        </table>
 
         <!-- AMOUNT IN WORDS -->
-        <div style="margin-top:16px; padding:8px 12px; border:1.5px solid #000000; font-size:12.5px; color:#000000;">
-            <strong style="text-transform:uppercase; letter-spacing:0.04em;">Amount ( in Words ):</strong> <?= htmlspecialchars(InvoiceService::numberToWordsInr((float) $invoice['total'])) ?>
+        <div style="margin-top:14px; margin-bottom:14px; font-size:13px; font-weight:700; color:#000000;">
+            <span style="font-weight:700;">Amount ( in Words ):</span> <?= htmlspecialchars(InvoiceService::numberToWordsInr((float) $invoice['total'])) ?>
         </div>
 
-        <?php if ($hasGst && (!$invoice['organization_state'] || !$invoice['customer_state'])): ?>
-            <p class="tax-note" style="margin-top:8px; color:#000000;">
-                GST shown as CGST + SGST, assuming an intra-state sale — <?= !$invoice['organization_state'] ? "your organization's" : "this customer's" ?> state isn't set, so this couldn't be verified.
-            </p>
-        <?php endif; ?>
-
         <?php if (!empty($payments)): ?>
-            <div class="section" style="margin-top:16px;">
-                <h2 style="color:#000000; font-weight:800;">Payments received</h2>
-                <table style="border:1px solid #000000; border-collapse:collapse; width:100%;">
+            <div style="margin-top:18px; margin-bottom:14px;">
+                <table style="table-layout:fixed; width:100%; border:1.5px solid #000000; border-collapse:collapse;">
                     <thead>
                         <tr>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Date</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Method</th>
-                            <th style="border:1px solid #000000; color:#000000; font-weight:800;">Reference</th>
-                            <th class="num" style="border:1px solid #000000; color:#000000; font-weight:800;">Amount</th>
+                            <th colspan="4" style="border:1px solid #000000; color:#000000; font-weight:800; padding:6px 10px; font-size:11px; text-transform:uppercase;">
+                                Payments Received Log
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="width:25%; border:1px solid #000000; color:#000000; font-weight:800;">Date</th>
+                            <th style="width:25%; border:1px solid #000000; color:#000000; font-weight:800;">Method</th>
+                            <th style="width:25%; border:1px solid #000000; color:#000000; font-weight:800;">Reference</th>
+                            <th class="num" style="width:25%; border:1px solid #000000; color:#000000; font-weight:800;">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -563,7 +638,7 @@ $statusLabels = [
                                 <td style="border:1px solid #000000; color:#000000;"><?= htmlspecialchars(date('d M Y', strtotime($payment['created_at']))) ?></td>
                                 <td style="border:1px solid #000000; color:#000000; text-transform:capitalize;"><?= htmlspecialchars(str_replace('_', ' ', $payment['method'])) ?></td>
                                 <td style="border:1px solid #000000; color:#000000;"><?= htmlspecialchars($payment['reference_no'] ?? '—') ?></td>
-                                <td class="num" style="border:1px solid #000000; color:#000000;">₹<?= number_format($payment['amount'], 2) ?></td>
+                                <td class="num" style="border:1px solid #000000; color:#000000; font-weight:700;">₹<?= number_format($payment['amount'], 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -571,15 +646,26 @@ $statusLabels = [
             </div>
         <?php endif; ?>
 
-        <div class="declaration" style="border-top:1px solid #000000; color:#000000;">
-            This is a computer-generated invoice and does not require a physical signature. Goods once sold / services once
-            rendered will not be taken back. Any dispute regarding this invoice must be raised within 7 days of issue.
+        <div class="declaration" style="border-top:1px solid #000000; padding-top:10px; margin-top:20px; font-size:11px; line-height:1.45; color:#000000;">
+            I certify that the work has been done to my satisfaction and that I have taken delivery of the vehicle in good
+            condition, with all items / valuables and parts intact. Goods once sold / services rendered will not be taken back.
         </div>
 
-        <div class="signatures">
-            <div class="signature-block"></div>
-            <div class="signature-block">
-                <div class="signature-line" style="border-top:1.5px solid #000000; color:#000000; font-weight:600;">For <?= htmlspecialchars($invoice['organization_name']) ?> — Authorized Signatory</div>
+        <div class="signatures" style="display:flex; justify-content:space-between; gap:24px; margin-top:48px; page-break-inside:avoid;">
+            <div class="signature-block" style="flex:1; text-align:center;">
+                <div class="signature-line" style="border-top:1.5px solid #000000; padding-top:6px; font-size:11px; color:#000000; font-weight:700;">
+                    Customer / Authorized Signatory
+                </div>
+            </div>
+            <div class="signature-block" style="flex:1; text-align:center;">
+                <div class="signature-line" style="border-top:1.5px solid #000000; padding-top:6px; font-size:11px; color:#000000; font-weight:700;">
+                    Service Advisor Signature
+                </div>
+            </div>
+            <div class="signature-block" style="flex:1; text-align:center;">
+                <div class="signature-line" style="border-top:1.5px solid #000000; padding-top:6px; font-size:11px; color:#000000; font-weight:700;">
+                    Cashier / Authorized Signature
+                </div>
             </div>
         </div>
 

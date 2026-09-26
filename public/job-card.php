@@ -46,13 +46,17 @@ if (!$jobCard) {
 }
 
 // Fetched early (not just at render time) so it can also gate the
-// remove_service/remove_part actions below — once an invoice exists,
-// what's on the job card must stay exactly what was actually invoiced.
-$statement = $pdo->prepare("SELECT id, invoice_no, status FROM invoices WHERE job_card_id = :job_card_id");
+// line item actions below — once an invoice is paid or job card is closed,
+// what's on the job card must stay locked to preserve financial records.
+$statement = $pdo->prepare("SELECT id, invoice_no, status, amount_paid, total FROM invoices WHERE job_card_id = :job_card_id");
 $statement->execute(['job_card_id' => $jobCardId]);
 $invoice = $statement->fetch(PDO::FETCH_ASSOC);
 
-$canRemoveLines = $canManageJobCards && !$invoice;
+$isInvoicePaid = $invoice && ((float) ($invoice['amount_paid'] ?? 0) > 0.009 || in_array($invoice['status'], ['paid', 'void'], true));
+$isJobCardClosed = in_array($jobCard['status'], ['delivered', 'cancelled'], true);
+$isLinesLocked = $isInvoicePaid || $isJobCardClosed;
+$canModifyLines = $canManageJobCards && !$isLinesLocked;
+$canRemoveLines = $canModifyLines;
 
 $error = null;
 $errorAction = null;
@@ -148,188 +152,202 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        $serviceId = (int) ($_POST['service_id'] ?? 0) ?: null;
-        $customName = trim($_POST['custom_name'] ?? '');
-        $customPrice = $_POST['custom_price'] ?? '';
-        $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
-
-        if ($serviceId) {
-            // Preset service selected — validate it exists
-            $statement = $pdo->prepare("SELECT name, standard_price FROM services WHERE id = :id AND organization_id = :organization_id");
-            $statement->execute(['id' => $serviceId, 'organization_id' => $organizationId]);
-            $catalogService = $statement->fetch(PDO::FETCH_ASSOC);
-
-            if (!$catalogService) {
-                $error = 'Select a valid service before adding it.';
-                $errorAction = 'add_service';
-            } else {
-                // Use the user-entered price if provided, otherwise fall back to standard price
-                $price = ($customPrice !== '') ? (float) $customPrice : (float) $catalogService['standard_price'];
-                $addedServiceName = $catalogService['name'];
-
-                $statement = $pdo->prepare("
-                    INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_price)
-                    VALUES (:job_card_id, :service_id, :technician_id, :price, :custom_price)
-                ");
-                $statement->execute([
-                    'job_card_id' => $jobCardId,
-                    'service_id' => $serviceId,
-                    'technician_id' => $technicianId,
-                    'price' => $price,
-                    'custom_price' => $price
-                ]);
-
-                log_audit_event(
-                    $pdo, $user, 'create', 'job_card_item', $jobCardId,
-                    "Added service '$addedServiceName' to job card {$jobCard['job_no']}" . ($price != $catalogService['standard_price'] ? " (price adjusted to ₹$price)" : '')
-                );
-
-                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
-                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
-                }
-
-                flash_set("Added \"$addedServiceName\".");
-                header('Location: /job-card.php?id=' . $jobCardId);
-                exit;
-            }
-        } elseif ($customName !== '') {
-            // Custom service — name and price entered manually
-            $price = ($customPrice !== '') ? (float) $customPrice : 0;
-
-            if ($price <= 0) {
-                $error = 'Enter a valid price for the custom service.';
-                $errorAction = 'add_service';
-            } else {
-                $statement = $pdo->prepare("
-                    INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_name, custom_price)
-                    VALUES (:job_card_id, NULL, :technician_id, :price, :custom_name, :custom_price)
-                ");
-                $statement->execute([
-                    'job_card_id' => $jobCardId,
-                    'technician_id' => $technicianId,
-                    'price' => $price,
-                    'custom_name' => $customName,
-                    'custom_price' => $price
-                ]);
-
-                log_audit_event(
-                    $pdo, $user, 'create', 'job_card_item', $jobCardId,
-                    "Added custom service '$customName' (₹$price) to job card {$jobCard['job_no']}"
-                );
-
-                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
-                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
-                }
-
-                flash_set("Added \"$customName\".");
-                header('Location: /job-card.php?id=' . $jobCardId);
-                exit;
-            }
-        } else {
-            $error = 'Enter a service name or select one from the suggestions.';
+        if ($isLinesLocked) {
+            $error = $isInvoicePaid
+                ? "Services cannot be added because invoice {$invoice['invoice_no']} has already received payment."
+                : "Services cannot be added to a delivered or cancelled job card.";
             $errorAction = 'add_service';
+        } else {
+            $serviceId = (int) ($_POST['service_id'] ?? 0) ?: null;
+            $customName = trim($_POST['custom_name'] ?? '');
+            $customPrice = $_POST['custom_price'] ?? '';
+            $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
+
+            if ($serviceId) {
+                // Preset service selected — validate it exists
+                $statement = $pdo->prepare("SELECT name, standard_price FROM services WHERE id = :id AND organization_id = :organization_id");
+                $statement->execute(['id' => $serviceId, 'organization_id' => $organizationId]);
+                $catalogService = $statement->fetch(PDO::FETCH_ASSOC);
+
+                if (!$catalogService) {
+                    $error = 'Select a valid service before adding it.';
+                    $errorAction = 'add_service';
+                } else {
+                    // Use the user-entered price if provided, otherwise fall back to standard price
+                    $price = ($customPrice !== '') ? (float) $customPrice : (float) $catalogService['standard_price'];
+                    $addedServiceName = $catalogService['name'];
+
+                    $statement = $pdo->prepare("
+                        INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_price)
+                        VALUES (:job_card_id, :service_id, :technician_id, :price, :custom_price)
+                    ");
+                    $statement->execute([
+                        'job_card_id' => $jobCardId,
+                        'service_id' => $serviceId,
+                        'technician_id' => $technicianId,
+                        'price' => $price,
+                        'custom_price' => $price
+                    ]);
+
+                    log_audit_event(
+                        $pdo, $user, 'create', 'job_card_item', $jobCardId,
+                        "Added service '$addedServiceName' to job card {$jobCard['job_no']}" . ($price != $catalogService['standard_price'] ? " (price adjusted to ₹$price)" : '')
+                    );
+
+                    if ($invoice && (float) ($invoice['amount_paid'] ?? 0) <= 0.009) {
+                        InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                    }
+
+                    flash_set("Added \"$addedServiceName\".");
+                    header('Location: /job-card.php?id=' . $jobCardId);
+                    exit;
+                }
+            } elseif ($customName !== '') {
+                // Custom service — name and price entered manually
+                $price = ($customPrice !== '') ? (float) $customPrice : 0;
+
+                if ($price <= 0) {
+                    $error = 'Enter a valid price for the custom service.';
+                    $errorAction = 'add_service';
+                } else {
+                    $statement = $pdo->prepare("
+                        INSERT INTO job_card_items (job_card_id, service_id, technician_id, price, custom_name, custom_price)
+                        VALUES (:job_card_id, NULL, :technician_id, :price, :custom_name, :custom_price)
+                    ");
+                    $statement->execute([
+                        'job_card_id' => $jobCardId,
+                        'technician_id' => $technicianId,
+                        'price' => $price,
+                        'custom_name' => $customName,
+                        'custom_price' => $price
+                    ]);
+
+                    log_audit_event(
+                        $pdo, $user, 'create', 'job_card_item', $jobCardId,
+                        "Added custom service '$customName' (₹$price) to job card {$jobCard['job_no']}"
+                    );
+
+                    if ($invoice && (float) ($invoice['amount_paid'] ?? 0) <= 0.009) {
+                        InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                    }
+
+                    flash_set("Added \"$customName\".");
+                    header('Location: /job-card.php?id=' . $jobCardId);
+                    exit;
+                }
+            } else {
+                $error = 'Enter a service name or select one from the suggestions.';
+                $errorAction = 'add_service';
+            }
         }
 
     } elseif ($action === 'add_part') {
 
         require_permission($user, 'job_cards.manage');
 
-        $partId = (int) ($_POST['part_id'] ?? 0);
-        $quantity = (float) ($_POST['quantity'] ?? 0);
-        $labourCharge = (float) ($_POST['labour_charge'] ?? 0);
-        $labourQuantity = (float) ($_POST['labour_quantity'] ?? 1);
-        $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
+        if ($isLinesLocked) {
+            $error = $isInvoicePaid
+                ? "Parts cannot be added because invoice {$invoice['invoice_no']} has already received payment."
+                : "Parts cannot be added to a delivered or cancelled job card.";
+            $errorAction = 'add_part';
+        } else {
+            $partId = (int) ($_POST['part_id'] ?? 0);
+            $quantity = (float) ($_POST['quantity'] ?? 0);
+            $labourCharge = (float) ($_POST['labour_charge'] ?? 0);
+            $labourQuantity = (float) ($_POST['labour_quantity'] ?? 1);
+            $technicianId = (int) ($_POST['technician_id'] ?? 0) ?: null;
 
-        if ($partId && $quantity > 0 && $labourCharge >= 0 && $labourQuantity > 0) {
+            if ($partId && $quantity > 0 && $labourCharge >= 0 && $labourQuantity > 0) {
 
-            $pdo->beginTransaction();
+                $pdo->beginTransaction();
 
-            try {
-                $statement = $pdo->prepare("
-                    SELECT quantity FROM inventory
-                    WHERE part_id = :part_id AND branch_id = :branch_id
-                    FOR UPDATE
-                ");
-                $statement->execute(['part_id' => $partId, 'branch_id' => $branchId]);
-                $available = (float) $statement->fetchColumn();
+                try {
+                    $statement = $pdo->prepare("
+                        SELECT quantity FROM inventory
+                        WHERE part_id = :part_id AND branch_id = :branch_id
+                        FOR UPDATE
+                    ");
+                    $statement->execute(['part_id' => $partId, 'branch_id' => $branchId]);
+                    $available = (float) $statement->fetchColumn();
 
-                if ($available < $quantity) {
-                    throw new RuntimeException('Not enough stock for this part.');
+                    if ($available < $quantity) {
+                        throw new RuntimeException('Not enough stock for this part.');
+                    }
+
+                    $statement = $pdo->prepare("SELECT selling_price, unit FROM parts WHERE id = :id");
+                    $statement->execute(['id' => $partId]);
+                    $partRow = $statement->fetch(PDO::FETCH_ASSOC);
+                    $unitPrice = $partRow['selling_price'];
+
+                    if (part_unit_is_whole($partRow['unit']) && fmod($quantity, 1) !== 0.0) {
+                        throw new RuntimeException('Quantity must be a whole number for this part.');
+                    }
+
+                    $statement = $pdo->prepare("
+                        INSERT INTO job_card_parts (job_card_id, part_id, quantity, unit_price, technician_id, labour_charge, labour_quantity)
+                        VALUES (:job_card_id, :part_id, :quantity, :unit_price, :technician_id, :labour_charge, :labour_quantity)
+                    ");
+                    $statement->execute([
+                        'job_card_id' => $jobCardId,
+                        'part_id' => $partId,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'technician_id' => $technicianId,
+                        'labour_charge' => $labourCharge,
+                        'labour_quantity' => $labourQuantity
+                    ]);
+
+                    $statement = $pdo->prepare("
+                        UPDATE inventory SET quantity = quantity - :quantity, updated_at = CURRENT_TIMESTAMP
+                        WHERE part_id = :part_id AND branch_id = :branch_id
+                    ");
+                    $statement->execute(['quantity' => $quantity, 'part_id' => $partId, 'branch_id' => $branchId]);
+
+                    $statement = $pdo->prepare("
+                        INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, reference_type, reference_id, created_by)
+                        VALUES (:organization_id, :branch_id, :part_id, :quantity, 'out', 'job_card', 'job_card', :reference_id, :created_by)
+                    ");
+                    $statement->execute([
+                        'organization_id' => $organizationId,
+                        'branch_id' => $branchId,
+                        'part_id' => $partId,
+                        'quantity' => $quantity,
+                        'reference_id' => $jobCardId,
+                        'created_by' => $user['id']
+                    ]);
+
+                    $statement = $pdo->prepare("SELECT name FROM parts WHERE id = :id");
+                    $statement->execute(['id' => $partId]);
+                    $addedPartName = $statement->fetchColumn();
+                    $addedPartUnit = part_unit_short($partRow['unit']);
+
+                    log_audit_event(
+                        $pdo, $user, 'create', 'job_card_part', $jobCardId,
+                        "Added part '$addedPartName' (x{$quantity} {$addedPartUnit}) to job card {$jobCard['job_no']}"
+                        . ($labourCharge > 0 ? ", labour ₹{$labourCharge} × {$labourQuantity}" : '')
+                    );
+
+                    $pdo->commit();
+
+                    if ($invoice && (float) ($invoice['amount_paid'] ?? 0) <= 0.009) {
+                        InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
+                    }
+
+                } catch (Throwable $e) {
+                    $pdo->rollBack();
+                    $error = $e->getMessage();
+                    $errorAction = 'add_part';
                 }
-
-                $statement = $pdo->prepare("SELECT selling_price, unit FROM parts WHERE id = :id");
-                $statement->execute(['id' => $partId]);
-                $partRow = $statement->fetch(PDO::FETCH_ASSOC);
-                $unitPrice = $partRow['selling_price'];
-
-                if (part_unit_is_whole($partRow['unit']) && fmod($quantity, 1) !== 0.0) {
-                    throw new RuntimeException('Quantity must be a whole number for this part.');
-                }
-
-                $statement = $pdo->prepare("
-                    INSERT INTO job_card_parts (job_card_id, part_id, quantity, unit_price, technician_id, labour_charge, labour_quantity)
-                    VALUES (:job_card_id, :part_id, :quantity, :unit_price, :technician_id, :labour_charge, :labour_quantity)
-                ");
-                $statement->execute([
-                    'job_card_id' => $jobCardId,
-                    'part_id' => $partId,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'technician_id' => $technicianId,
-                    'labour_charge' => $labourCharge,
-                    'labour_quantity' => $labourQuantity
-                ]);
-
-                $statement = $pdo->prepare("
-                    UPDATE inventory SET quantity = quantity - :quantity, updated_at = CURRENT_TIMESTAMP
-                    WHERE part_id = :part_id AND branch_id = :branch_id
-                ");
-                $statement->execute(['quantity' => $quantity, 'part_id' => $partId, 'branch_id' => $branchId]);
-
-                $statement = $pdo->prepare("
-                    INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, reference_type, reference_id, created_by)
-                    VALUES (:organization_id, :branch_id, :part_id, :quantity, 'out', 'job_card', 'job_card', :reference_id, :created_by)
-                ");
-                $statement->execute([
-                    'organization_id' => $organizationId,
-                    'branch_id' => $branchId,
-                    'part_id' => $partId,
-                    'quantity' => $quantity,
-                    'reference_id' => $jobCardId,
-                    'created_by' => $user['id']
-                ]);
-
-                $statement = $pdo->prepare("SELECT name FROM parts WHERE id = :id");
-                $statement->execute(['id' => $partId]);
-                $addedPartName = $statement->fetchColumn();
-                $addedPartUnit = part_unit_short($partRow['unit']);
-
-                log_audit_event(
-                    $pdo, $user, 'create', 'job_card_part', $jobCardId,
-                    "Added part '$addedPartName' (x{$quantity} {$addedPartUnit}) to job card {$jobCard['job_no']}"
-                    . ($labourCharge > 0 ? ", labour ₹{$labourCharge} × {$labourQuantity}" : '')
-                );
-
-                $pdo->commit();
-
-                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
-                    InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
-                }
-
-            } catch (Throwable $e) {
-                $pdo->rollBack();
-                $error = $e->getMessage();
+            } else {
+                $error = 'Search for a part and enter a quantity before adding it.';
                 $errorAction = 'add_part';
             }
-        } else {
-            $error = 'Search for a part and enter a quantity before adding it.';
-            $errorAction = 'add_part';
-        }
 
-        if (!$error) {
-            flash_set("Added \"$addedPartName\".");
-            header('Location: /job-card.php?id=' . $jobCardId);
-            exit;
+            if (!$error) {
+                flash_set("Added \"$addedPartName\".");
+                header('Location: /job-card.php?id=' . $jobCardId);
+                exit;
+            }
         }
 
     } elseif ($action === 'generate_invoice') {
@@ -501,8 +519,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        if ($invoice && (float) $invoice['amount_paid'] > 0.009) {
-            $error = 'Services cannot be removed because a payment has already been recorded on the invoice.';
+        if ($isLinesLocked) {
+            flash_set($isInvoicePaid
+                ? "Services cannot be removed because invoice {$invoice['invoice_no']} has already received payment."
+                : "Services cannot be removed from a delivered or cancelled job card.");
         } else {
             $removedItemId = (int) ($_POST['item_id'] ?? 0);
 
@@ -525,7 +545,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set("Removed \"$removedServiceName\".");
             }
 
-            if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+            if ($invoice && (float) ($invoice['amount_paid'] ?? 0) <= 0.009) {
                 InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
             }
         }
@@ -537,8 +557,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         require_permission($user, 'job_cards.manage');
 
-        if ($invoice && (float) $invoice['amount_paid'] > 0.009) {
-            $error = 'Parts cannot be removed because a payment has already been recorded on the invoice.';
+        if ($isLinesLocked) {
+            flash_set($isInvoicePaid
+                ? "Parts cannot be removed because invoice {$invoice['invoice_no']} has already received payment."
+                : "Parts cannot be removed from a delivered or cancelled job card.");
         } else {
 
             $pdo->beginTransaction();
@@ -591,12 +613,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $pdo->commit();
 
-                if ($invoice && (float) $invoice['amount_paid'] <= 0.009) {
+                if ($invoice && (float) ($invoice['amount_paid'] ?? 0) <= 0.009) {
                     InvoiceService::syncInvoiceFromJobCard($pdo, (int) $invoice['id'], $user);
                 }
 
             } catch (Throwable $e) {
                 $pdo->rollBack();
+                flash_set("Failed to remove part: " . $e->getMessage());
             }
         }
 
@@ -744,21 +767,49 @@ $topbarTitle = $jobCard['job_no'];
 
                 <div class="stack">
 
+                    <?php if ($invoice): ?>
+                        <div class="card" style="border-left: 3px solid <?= $isInvoicePaid ? 'var(--success, #10b981)' : 'var(--accent)' ?>;">
+                            <div class="card-body" style="padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span class="icon-badge"><?= icon($isInvoicePaid ? 'lock' : 'receipt', 15) ?></span>
+                                    <div>
+                                        <div style="font-weight:600; font-size:13.5px;">
+                                            Invoice <?= htmlspecialchars($invoice['invoice_no']) ?>
+                                            <span class="badge badge-<?= htmlspecialchars($invoice['status']) ?>" style="margin-left:6px; font-size:11px; padding:2px 7px;">
+                                                <?= htmlspecialchars($invoice['status']) ?>
+                                            </span>
+                                        </div>
+                                        <div style="font-size:12px; color:var(--muted);">
+                                            <?= $isInvoicePaid
+                                                ? 'Payment of ₹' . number_format((float) ($invoice['amount_paid'] ?? 0), 2) . ' recorded. Services and parts are locked to maintain financial records.'
+                                                : 'Unpaid invoice. Modifying services or parts will automatically update invoice totals.' ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <a href="/invoice.php?id=<?= (int) $invoice['id'] ?>" class="button secondary" style="padding:6px 12px; font-size:12.5px;">
+                                    <?= icon('receipt', 14) ?> View Invoice
+                                </a>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-header-title">
                                 <span class="icon-badge"><?= icon('settings', 15) ?></span>
                                 Services
                             </div>
-                            <?php if ($canManageJobCards): ?>
+                            <?php if ($canModifyLines): ?>
                                 <button type="button" class="button" onclick="openModal('add-service-modal')"><?= icon('plus', 16) ?> Add Service</button>
+                            <?php elseif ($isInvoicePaid): ?>
+                                <span class="badge" style="color:var(--muted); font-size:11.5px;"><?= icon('lock', 12) ?> Locked</span>
                             <?php endif; ?>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($serviceLines)): ?>
                                 <div class="empty-state">
                                     <?= icon('settings', 26) ?>
-                                    <?= $canManageJobCards ? 'No services added yet — add one above.' : 'No services added yet.' ?>
+                                    <?= $canModifyLines ? 'No services added yet — add one above.' : 'No services added yet.' ?>
                                 </div>
                             <?php else: ?>
                                 <div class="table-wrap">
@@ -796,15 +847,17 @@ $topbarTitle = $jobCard['job_no'];
                                 <span class="icon-badge"><?= icon('box', 15) ?></span>
                                 Parts used
                             </div>
-                            <?php if ($canManageJobCards): ?>
+                            <?php if ($canModifyLines): ?>
                                 <button type="button" class="button" onclick="openModal('add-part-modal')"><?= icon('plus', 16) ?> Add Part</button>
+                            <?php elseif ($isInvoicePaid): ?>
+                                <span class="badge" style="color:var(--muted); font-size:11.5px;"><?= icon('lock', 12) ?> Locked</span>
                             <?php endif; ?>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($partLines)): ?>
                                 <div class="empty-state">
                                     <?= icon('box', 26) ?>
-                                    <?= $canManageJobCards ? 'No parts added yet — add one above.' : 'No parts added yet.' ?>
+                                    <?= $canModifyLines ? 'No parts added yet — add one above.' : 'No parts added yet.' ?>
                                 </div>
                             <?php else: ?>
                                 <div class="table-wrap">
@@ -1061,6 +1114,7 @@ $topbarTitle = $jobCard['job_no'];
 
 <?php if ($canManageJobCards): ?>
 
+    <?php if ($canModifyLines): ?>
     <div class="modal-backdrop<?= $errorAction === 'add_service' ? ' open' : '' ?>" id="add-service-modal">
         <div class="modal">
             <div class="modal-header">
@@ -1172,6 +1226,7 @@ $topbarTitle = $jobCard['job_no'];
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <div class="modal-backdrop" id="add-accessories-modal">
         <div class="modal">

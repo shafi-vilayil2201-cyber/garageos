@@ -366,11 +366,11 @@ tr {
 
 th {
     text-align: left;
-    padding: 6px 8px;
-    font-size: 11px;
-    font-weight: 800;
+    padding: 6px 5px;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
     color: #000000;
     border: 1px solid #000000;
     background: transparent;
