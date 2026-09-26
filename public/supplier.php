@@ -371,9 +371,9 @@ $topbarTitle = $supplier['name'];
             color: var(--text);
         }
         .tab-nav-item.active {
-            color: var(--text);
+            color: var(--primary-dark);
             font-weight: 600;
-            border-bottom-color: var(--text);
+            border-bottom-color: var(--primary);
         }
         .tab-nav-count {
             display: inline-block;
@@ -385,8 +385,8 @@ $topbarTitle = $supplier['name'];
             font-weight: 600;
         }
         .tab-nav-item.active .tab-nav-count {
-            background: var(--text);
-            color: var(--surface);
+            background: var(--primary-soft);
+            color: var(--primary-dark);
         }
 
         /* Chips for filtering */
@@ -408,12 +408,18 @@ $topbarTitle = $supplier['name'];
         }
         .filter-chip:hover {
             background: var(--surface-sunken);
+            color: var(--text);
         }
         .filter-chip.active {
-            background: var(--text);
-            color: var(--surface);
-            border-color: var(--text);
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
             font-weight: 600;
+        }
+        .filter-chip.active:hover {
+            background: var(--primary-dark);
+            color: #ffffff;
+            border-color: var(--primary-dark);
         }
 
         /* Modal Segmented Tabs */

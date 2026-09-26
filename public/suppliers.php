@@ -197,17 +197,23 @@ $topbarTitle = 'Suppliers';
             font-size: 13px;
             text-decoration: none;
             color: var(--text);
-            background: var(--card);
+            background: var(--surface);
             transition: all 0.15s ease;
         }
         .filter-chip:hover {
-            background: var(--hover);
+            background: var(--surface-sunken);
+            color: var(--text);
         }
         .filter-chip.active {
-            background: var(--accent);
-            color: #fff;
-            border-color: var(--accent);
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
             font-weight: 600;
+        }
+        .filter-chip.active:hover {
+            background: var(--primary-dark);
+            color: #ffffff;
+            border-color: var(--primary-dark);
         }
     </style>
 </head>
