@@ -6,7 +6,6 @@ require_once __DIR__ . '/../app/View/Pagination.php';
 $pdo = require __DIR__ . '/../config/database.php';
 
 $auth = new Auth($pdo);
-
 $user = $auth->user();
 
 if (!$user) {
@@ -28,8 +27,11 @@ $statement = $pdo->prepare("
         pu.id,
         pu.purchase_no,
         pu.status,
+        pu.payment_status,
         pu.total,
+        pu.amount_paid,
         pu.created_at,
+        pu.supplier_id,
         s.name AS supplier_name
     FROM purchases pu
     INNER JOIN suppliers s ON s.id = pu.supplier_id
@@ -107,14 +109,34 @@ $topbarTitle = 'Purchases';
                                     <th>Purchase #</th>
                                     <th>Supplier</th>
                                     <th>Date</th>
-                                    <th>Total</th>
+                                    <th style="text-align:right;">Total</th>
+                                    <th>Payment Status</th>
+                                    <th style="text-align:right;"></th>
                                 </tr>
                                 <?php foreach ($purchases as $purchase): ?>
-                                    <tr>
+                                    <?php
+                                    $paymentStatus = $purchase['payment_status'] ?? 'unpaid';
+                                    $statusBadgeClass = match ($paymentStatus) {
+                                        'paid'    => 'badge-success',
+                                        'partial' => 'badge-warning',
+                                        default   => 'badge-danger'
+                                    };
+                                    ?>
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills">
                                         <td><strong><?= htmlspecialchars($purchase['purchase_no']) ?></strong></td>
                                         <td><?= htmlspecialchars($purchase['supplier_name']) ?></td>
                                         <td><?= htmlspecialchars(date('d M Y', strtotime($purchase['created_at']))) ?></td>
-                                        <td class="num">₹<?= number_format($purchase['total'], 2) ?></td>
+                                        <td class="num">₹<?= number_format((float) $purchase['total'], 2) ?></td>
+                                        <td>
+                                            <span class="badge <?= $statusBadgeClass ?>" style="font-size:11px;">
+                                                <?= ucfirst($paymentStatus) ?>
+                                            </span>
+                                        </td>
+                                        <td style="text-align:right;">
+                                            <a href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills" class="link-action" style="font-size:12px;">
+                                                <?= icon('receipt', 13) ?> Bill & Ledger
+                                            </a>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </table>
@@ -130,5 +152,6 @@ $topbarTitle = 'Purchases';
 
 </div>
 
+<script src="/js/clickable-rows.js"></script>
 </body>
 </html>
