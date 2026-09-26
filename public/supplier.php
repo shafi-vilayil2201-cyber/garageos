@@ -208,6 +208,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
             $pdo->rollBack();
         }
         $error = $e->getMessage();
+        // Also set as flash so it shows prominently as a toast
+        flash_set($error, 'error');
     }
 }
 
@@ -711,8 +713,8 @@ $topbarTitle = $supplier['name'];
                                             <?php if ($canFinance): ?>
                                                 <td style="text-align:center;">
                                                     <?php if (!str_ends_with($entry['transaction_type'], '_REVERSAL')): ?>
-                                                        <button type="button" class="link-action" style="color:var(--muted); font-size:12px;" onclick="openReversalModal(<?= (int) $entry['id'] ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entry['id'])) ?>')" title="Reverse transaction">
-                                                            <?= icon('trash', 13) ?>
+                                                        <button type="button" class="link-action" style="color:var(--muted); font-size:12px; padding:8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px;" onclick="openReversalModal(<?= (int) $entry['id'] ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entry['id'])) ?>')" title="Reverse this transaction">
+                                                            <?= icon('rotate-ccw', 14) ?>
                                                         </button>
                                                     <?php endif; ?>
                                                 </td>
@@ -1005,21 +1007,42 @@ $topbarTitle = $supplier['name'];
             </div>
             <div class="modal-body">
 
+                <!-- Balance Context Chip -->
+                <div style="display:flex; align-items:center; gap:8px; padding:10px 14px; margin-bottom:14px; border-radius:8px; font-size:13px;
+                    background:<?= $isCreditSurplus ? '#eff6ff' : ($isPayable ? 'var(--warning-soft)' : '#dcfce7') ?>;
+                    color:<?= $isCreditSurplus ? '#1d4ed8' : ($isPayable ? '#92400e' : '#15803d') ?>;">
+                    <?= icon($isCreditSurplus ? 'info' : ($isPayable ? 'alert-triangle' : 'check-circle'), 14) ?>
+                    <?php if ($isCreditSurplus): ?>
+                        Credit Surplus: <strong>₹<?= number_format(abs($outstandingBal), 2) ?></strong> — supplier owes you
+                    <?php elseif ($isPayable): ?>
+                        Outstanding: <strong>₹<?= number_format($outstandingBal, 2) ?></strong> — you owe this supplier
+                    <?php else: ?>
+                        All settled — no outstanding balance
+                    <?php endif; ?>
+                </div>
+
                 <!-- Segmented Tab Header -->
                 <div class="modal-tabs">
-                    <div class="modal-tab-item active" id="mtab-pay" onclick="switchModalTab('pay')">💸 Pay Supplier</div>
-                    <div class="modal-tab-item" id="mtab-adj" onclick="switchModalTab('adj')">⚖️ Adjustment</div>
+                    <div class="modal-tab-item <?= $isPayable ? 'active' : '' ?>" id="mtab-pay" onclick="<?= $isPayable ? "switchModalTab('pay')" : '' ?>" style="<?= !$isPayable ? 'opacity:0.45; cursor:not-allowed;' : '' ?>" <?= !$isPayable ? 'title="No payment is due"' : '' ?>>💸 Pay Supplier</div>
+                    <div class="modal-tab-item <?= !$isPayable ? 'active' : '' ?>" id="mtab-adj" onclick="switchModalTab('adj')">⚖️ Adjustment</div>
                     <div class="modal-tab-item" id="mtab-open" onclick="switchModalTab('open')">🏁 Opening Balance</div>
                 </div>
 
                 <!-- SUB-FORM 1: PAY SUPPLIER -->
-                <form method="POST" action="" id="form-pay">
+                <form method="POST" action="" id="form-pay" style="<?= !$isPayable ? 'display:none;' : '' ?>">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="record_payment">
+                    <?php if (!$isPayable): ?>
+                        <div style="padding:20px; text-align:center; color:var(--muted); font-size:14px;">
+                            <?= icon('check-circle', 20) ?>
+                            <div style="margin-top:8px;">No payment is due. <?= $isCreditSurplus ? 'This supplier has a credit surplus.' : 'All balances are settled.' ?></div>
+                        </div>
+                    <?php else: ?>
                     <div class="form-grid single">
                         <div class="form-field">
                             <label>Amount to Pay (₹)</label>
-                            <input type="number" name="amount" id="pay-amount" min="0.01" step="0.01" required value="<?= $outstandingBal > 0 ? htmlspecialchars((string) $outstandingBal) : '' ?>">
+                            <input type="number" name="amount" id="pay-amount" min="0.01" step="0.01" max="<?= htmlspecialchars(number_format($outstandingBal, 2, '.', '')) ?>" required value="<?= $outstandingBal > 0 ? htmlspecialchars(number_format($outstandingBal, 2, '.', '')) : '' ?>">
+                            <small style="color:var(--muted); font-size:11.5px; margin-top:3px; display:block;">Maximum payable: ₹<?= number_format($outstandingBal, 2) ?></small>
                         </div>
                         <div class="form-field">
                             <label>Payment Method</label>
@@ -1036,11 +1059,11 @@ $topbarTitle = $supplier['name'];
                         </div>
                         <div class="form-field">
                             <label>Bill Allocation</label>
-                            <select name="purchase_id" id="pay-purchase-id">
-                                <option value="">Auto-Settle Oldest Bills First (FIFO)</option>
+                            <select name="purchase_id" id="pay-purchase-id" onchange="updatePayAmountFromBill(this)">
+                                <option value="" data-due="<?= htmlspecialchars(number_format($outstandingBal, 2, '.', '')) ?>">Auto-Settle All Outstanding Bills (FIFO)</option>
                                 <?php foreach ($unpaidPurchases as $up): ?>
-                                    <option value="<?= (int) $up['id'] ?>">
-                                        <?= htmlspecialchars($up['purchase_no']) ?> (Due: ₹<?= number_format((float) $up['balance_due'], 2) ?>)
+                                    <option value="<?= (int) $up['id'] ?>" data-due="<?= number_format((float) $up['balance_due'], 2, '.', '') ?>">
+                                        <?= htmlspecialchars($up['purchase_no']) ?> — Due: ₹<?= number_format((float) $up['balance_due'], 2) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1053,23 +1076,27 @@ $topbarTitle = $supplier['name'];
                     <div class="form-actions" style="margin-top:16px;">
                         <button type="submit" class="button"><?= icon('check', 16) ?> Record Payment</button>
                     </div>
+                    <?php endif; ?>
                 </form>
 
                 <!-- SUB-FORM 2: ADJUSTMENT (CREDIT/DEBIT) -->
-                <form method="POST" action="" id="form-adj" style="display:none;">
+                <form method="POST" action="" id="form-adj" style="<?= !$isPayable ? '' : 'display:none;' ?>">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="adjustment">
                     <div class="form-grid single">
                         <div class="form-field">
                             <label>Adjustment Type</label>
-                            <select name="adjustment_type" required>
+                            <select name="adjustment_type" id="adj-type-select" required onchange="updateAdjMaxHint()">
                                 <option value="credit">Credit (Reduces what you owe — discount / return)</option>
                                 <option value="debit">Debit (Increases what you owe — extra freight / charges)</option>
                             </select>
                         </div>
                         <div class="form-field">
                             <label>Amount (₹)</label>
-                            <input type="number" name="amount" min="0.01" step="0.01" required>
+                            <input type="number" name="amount" id="adj-amount" min="0.01" step="0.01" required max="<?= $isPayable ? htmlspecialchars(number_format($outstandingBal, 2, '.', '')) : '' ?>">
+                            <small id="adj-max-hint" style="color:var(--muted); font-size:11.5px; margin-top:3px; display:<?= $isPayable ? 'block' : 'none' ?>;">
+                                <?= $isPayable ? 'Max credit: ₹' . number_format($outstandingBal, 2) : '' ?>
+                            </small>
                         </div>
                         <div class="form-field">
                             <label>Reason / Note</label>
@@ -1205,7 +1232,13 @@ $topbarTitle = $supplier['name'];
 <?php endif; ?>
 
 <script>
+const OUTSTANDING_BAL = <?= json_encode($outstandingBal) ?>;
+const IS_PAYABLE = <?= json_encode($isPayable) ?>;
+
 function switchModalTab(tabKey) {
+    // Prevent switching to Pay tab if nothing is owed
+    if (tabKey === 'pay' && !IS_PAYABLE) return;
+
     document.querySelectorAll('.modal-tab-item').forEach(el => el.classList.remove('active'));
     document.getElementById('mtab-' + tabKey).classList.add('active');
 
@@ -1215,14 +1248,51 @@ function switchModalTab(tabKey) {
 }
 
 function openUnifiedModal(tabKey) {
+    // If requesting pay but nothing owed, open adjustment tab instead
+    if (tabKey === 'pay' && !IS_PAYABLE) tabKey = 'adj';
     switchModalTab(tabKey || 'pay');
     openModal('unified-modal');
 }
 
 function paySpecificBill(purchaseId, dueAmount, purchaseNo) {
-    document.getElementById('pay-purchase-id').value = purchaseId;
-    document.getElementById('pay-amount').value = dueAmount.toFixed(2);
+    const sel = document.getElementById('pay-purchase-id');
+    const amtInput = document.getElementById('pay-amount');
+    if (sel) sel.value = purchaseId;
+    if (amtInput) {
+        // Cap the due amount to max outstanding balance
+        const cappedAmount = Math.min(dueAmount, OUTSTANDING_BAL);
+        amtInput.value = cappedAmount.toFixed(2);
+        amtInput.max = OUTSTANDING_BAL.toFixed(2);
+    }
     openUnifiedModal('pay');
+}
+
+// Update the payment amount and max when a bill is selected
+function updatePayAmountFromBill(selectEl) {
+    const option = selectEl.options[selectEl.selectedIndex];
+    const due = parseFloat(option.dataset.due || OUTSTANDING_BAL);
+    const amtInput = document.getElementById('pay-amount');
+    if (amtInput) {
+        amtInput.value = due.toFixed(2);
+        amtInput.max = (selectEl.value === '' ? OUTSTANDING_BAL : Math.min(due, OUTSTANDING_BAL)).toFixed(2);
+    }
+}
+
+// Update adjustment max hint based on credit/debit selection
+function updateAdjMaxHint() {
+    const adjType = document.getElementById('adj-type-select');
+    const hint = document.getElementById('adj-max-hint');
+    const amtInput = document.getElementById('adj-amount');
+    if (!adjType || !hint) return;
+
+    if (adjType.value === 'credit' && OUTSTANDING_BAL > 0) {
+        hint.style.display = 'block';
+        hint.textContent = 'Max credit: \u20b9' + OUTSTANDING_BAL.toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (amtInput) amtInput.max = OUTSTANDING_BAL.toFixed(2);
+    } else {
+        hint.style.display = 'none';
+        if (amtInput) amtInput.removeAttribute('max');
+    }
 }
 
 function openReversalModal(txnId, refText) {
