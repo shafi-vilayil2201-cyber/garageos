@@ -18,10 +18,55 @@ if (!$user) {
     exit;
 }
 
-require_permission($user, 'users.manage');
+// Payroll managers need this page too (it's where advances are recorded),
+// and the seeded Manager role has payroll.manage but not users.manage.
+$canManageUsers = user_can($user, 'users.manage');
+$canManagePayroll = user_can($user, 'payroll.manage');
+if (!$canManageUsers && !$canManagePayroll) {
+    require_permission($user, 'users.manage');
+}
 
 $organizationId = $user['organization_id'];
 $employeeId = (int) ($_GET['id'] ?? 0);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'close_advance') {
+
+    csrf_verify();
+    require_permission($user, 'payroll.manage');
+
+    $method = $_POST['recovery_method'] ?? '';
+    $note = trim($_POST['recovery_note'] ?? '') ?: null;
+
+    $statement = $pdo->prepare("SELECT name FROM users WHERE id = :id AND organization_id = :organization_id");
+    $statement->execute(['id' => $employeeId, 'organization_id' => $organizationId]);
+    $targetName = $statement->fetchColumn();
+
+    if (!$targetName || !in_array($method, ['repaid', 'written_off'], true)) {
+        flash_set('Choose whether the advance was repaid or written off.', 'error');
+    } else {
+        try {
+            $pdo->beginTransaction();
+            $closedAmount = close_outstanding_advances($pdo, $organizationId, $employeeId, $method, $note, (int) $user['id']);
+            if ($closedAmount > 0) {
+                log_audit_event(
+                    $pdo, $user, 'update', 'salary_advance', $employeeId,
+                    ($method === 'repaid' ? 'Marked' : 'Wrote off') . ' ₹' . number_format($closedAmount, 2) . " outstanding advance for $targetName"
+                    . ($method === 'repaid' ? ' as repaid outside payroll' : '') . ($note ? ": $note" : '')
+                );
+            }
+            $pdo->commit();
+            flash_set($closedAmount > 0
+                ? '₹' . number_format($closedAmount, 2) . ' advance ' . ($method === 'repaid' ? 'marked as repaid.' : 'written off.')
+                : 'There was no outstanding advance to close.');
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            flash_set(user_facing_error($e), 'error');
+        }
+    }
+
+    header('Location: /employee.php?id=' . $employeeId);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'record_advance') {
 
@@ -30,14 +75,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
 
     $advanceAmount = (float) ($_POST['amount'] ?? 0);
     $paidAtRaw = trim($_POST['paid_at'] ?? '');
-    $paidAt = ($paidAtRaw !== '' && DateTime::createFromFormat('Y-m-d', $paidAtRaw)) ? $paidAtRaw : date('Y-m-d');
+    $paidAtParsed = $paidAtRaw !== '' ? DateTime::createFromFormat('!Y-m-d', $paidAtRaw) : false;
+    $paidAt = ($paidAtParsed && $paidAtParsed->format('Y-m-d') === $paidAtRaw && $paidAtRaw <= date('Y-m-d')) ? $paidAtRaw : date('Y-m-d');
     $notes = trim($_POST['notes'] ?? '') ?: null;
 
-    $statement = $pdo->prepare("SELECT name FROM users WHERE id = :id AND organization_id = :organization_id");
+    // Only someone payroll can actually recover it from.
+    $statement = $pdo->prepare("
+        SELECT name FROM users
+        WHERE id = :id AND organization_id = :organization_id AND status = 'active' AND salary_type IS NOT NULL
+    ");
     $statement->execute(['id' => $employeeId, 'organization_id' => $organizationId]);
     $targetName = $statement->fetchColumn();
 
-    if ($targetName && $advanceAmount > 0) {
+    if (!$targetName) {
+        flash_set('Advances can only be recorded for active employees on salary.', 'error');
+    } elseif ($advanceAmount > 0) {
         try {
             $pdo->beginTransaction();
             record_salary_advance($pdo, $organizationId, $employeeId, $advanceAmount, $paidAt, $notes, $user['id']);
@@ -150,9 +202,10 @@ $statement->execute(['organization_id' => $organizationId, 'user_id' => $employe
 $payrollHistory = $statement->fetchAll(PDO::FETCH_ASSOC);
 $latestPayroll = $payrollHistory[0] ?? null;
 
-$outstandingAdvance = $employee['salary_type']
-    ? outstanding_advance_for_user($pdo, $organizationId, $employeeId)
-    : 0.0;
+// Always computed: an employee who has since gone inactive or come off
+// salary can still owe an advance that no payroll run will recover.
+$outstandingAdvance = outstanding_advance_for_user($pdo, $organizationId, $employeeId);
+$isOnActivePayroll = $employee['salary_type'] && $employee['status'] === 'active';
 
 $pendingPayrollPeriods = [];
 if ($employee['salary_type'] && $employee['status'] === 'active') {
@@ -201,7 +254,11 @@ $topbarTitle = $employee['name'];
 
         <section class="page">
 
-            <a href="/employees.php" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to Employees</a>
+            <?php if ($canManageUsers): ?>
+                <a href="/employees.php" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to Employees</a>
+            <?php else: ?>
+                <a href="/payroll.php" class="link-action" style="margin-bottom:16px;"><?= icon('arrow-left', 14) ?> Back to Payroll</a>
+            <?php endif; ?>
 
             <div class="page-header page-header-tight">
                 <div>
@@ -216,7 +273,9 @@ $topbarTitle = $employee['name'];
                         <?php endif; ?>
                     </p>
                 </div>
-                <a href="/users.php?edit=<?= (int) $employee['id'] ?>" class="button secondary"><?= icon('edit', 16) ?> Edit</a>
+                <?php if ($canManageUsers): ?>
+                    <a href="/users.php?edit=<?= (int) $employee['id'] ?>" class="button secondary"><?= icon('edit', 16) ?> Edit</a>
+                <?php endif; ?>
             </div>
 
             <div class="content-grid">
@@ -323,7 +382,7 @@ $topbarTitle = $employee['name'];
                                 <span class="icon-badge"><?= icon('wallet', 15) ?></span>
                                 Payroll
                             </div>
-                            <?php if ($employee['salary_type'] && $employee['status'] === 'active'): ?>
+                            <?php if ($isOnActivePayroll && $canManagePayroll): ?>
                                 <button type="button" class="button secondary sm" onclick="openModal('record-advance-modal')"><?= icon('plus', 13) ?> Record advance</button>
                             <?php endif; ?>
                         </div>
@@ -341,7 +400,20 @@ $topbarTitle = $employee['name'];
                                     <span class="label">Outstanding advance</span>
                                     <span class="value">&#8377;<?= number_format($outstandingAdvance, 2) ?></span>
                                 </div>
-                                <p class="result-meta">Recovered in full from the next payroll run.</p>
+                                <?php if ($isOnActivePayroll): ?>
+                                    <p class="result-meta">Recovered in full from the next payroll run.</p>
+                                <?php else: ?>
+                                    <div class="form-error" style="margin-top:6px;">
+                                        No payroll run will recover this — <?= htmlspecialchars($employee['name']) ?> is
+                                        <?= $employee['status'] !== 'active' ? 'inactive' : 'no longer on salary' ?>.
+                                        If they paid it back or you're letting it go, close it below.
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($canManagePayroll): ?>
+                                    <button type="button" class="link-action" style="background:none; border:none; padding:0; margin-top:6px; cursor:pointer; font-size:12.5px;" onclick="openModal('close-advance-modal')">
+                                        <?= icon('check-circle', 13) ?> Repaid outside payroll / write off
+                                    </button>
+                                <?php endif; ?>
                             <?php endif; ?>
 
                             <?php if ($latestPayroll): ?>
@@ -417,7 +489,46 @@ $topbarTitle = $employee['name'];
 
 </div>
 
-<?php if ($employee['salary_type'] && $employee['status'] === 'active'): ?>
+<?php if ($outstandingAdvance > 0 && $canManagePayroll): ?>
+    <div class="modal-backdrop" id="close-advance-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-header-title">
+                    <span class="icon-badge"><?= icon('wallet', 16) ?></span>
+                    Close advance — <?= htmlspecialchars($employee['name']) ?>
+                </div>
+                <button type="button" class="modal-close" data-close-modal="close-advance-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" class="stack">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="close_advance">
+                    <p class="result-meta">Outstanding: <strong>&#8377;<?= number_format($outstandingAdvance, 2) ?></strong>. Once closed, it won't be deducted from any payroll run.</p>
+                    <div class="form-field">
+                        <label>What happened?</label>
+                        <label style="display:flex; gap:10px; align-items:center; justify-content:flex-start; font-weight:400; cursor:pointer;">
+                            <input type="radio" name="recovery_method" value="repaid" required style="width:18px; height:18px; flex:none; margin:0; accent-color:var(--accent); cursor:pointer;">
+                            <span>Repaid directly (cash / transfer)</span>
+                        </label>
+                        <label style="display:flex; gap:10px; align-items:center; justify-content:flex-start; font-weight:400; cursor:pointer;">
+                            <input type="radio" name="recovery_method" value="written_off" style="width:18px; height:18px; flex:none; margin:0; accent-color:var(--accent); cursor:pointer;">
+                            <span>Written off — won't be recovered</span>
+                        </label>
+                    </div>
+                    <div class="form-field">
+                        <label for="recovery-note">Note (optional)</label>
+                        <input type="text" id="recovery-note" name="recovery_note" maxlength="300" placeholder="e.g. Paid back in cash on last day">
+                    </div>
+                    <div class="actions">
+                        <button type="submit" class="button"><?= icon('check', 16) ?> Close advance</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
+<?php if ($isOnActivePayroll && $canManagePayroll): ?>
     <div class="modal-backdrop" id="record-advance-modal">
         <div class="modal">
             <div class="modal-header">
@@ -437,7 +548,7 @@ $topbarTitle = $employee['name'];
                     </div>
                     <div class="form-field">
                         <label for="advance-paid-at">Paid on</label>
-                        <input type="date" id="advance-paid-at" name="paid_at" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
+                        <input type="date" id="advance-paid-at" name="paid_at" value="<?= htmlspecialchars(date('Y-m-d')) ?>" max="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                     </div>
                     <div class="form-field">
                         <label for="advance-notes">Notes (optional)</label>
@@ -451,6 +562,10 @@ $topbarTitle = $employee['name'];
             </div>
         </div>
     </div>
+<?php endif; ?>
+
+<?php if ($isOnActivePayroll && $canManagePayroll && isset($_GET['advance'])): ?>
+    <script>openModal('record-advance-modal');</script>
 <?php endif; ?>
 
 </body>

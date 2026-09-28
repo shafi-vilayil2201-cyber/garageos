@@ -167,8 +167,52 @@ function mark_payroll_paid(PDO $pdo, array $user, int $organizationId, int $payr
     return true;
 }
 
+// Undo an accidental "Mark as Paid". Only the employee's most recent run
+// can be reopened: the card only ever offers "Mark as Paid" for the
+// latest run, so reopening an older one would leave it with no way to be
+// paid again. Returns null on success, or a message saying why not.
+function undo_payroll_payment(PDO $pdo, array $user, int $organizationId, int $payrollRunId, string $reason): ?string
+{
+    $statement = $pdo->prepare("
+        SELECT pr.id, pr.user_id, pr.period_month, pr.net_salary, pr.payment_status, u.name
+        FROM payroll_runs pr
+        INNER JOIN users u ON u.id = pr.user_id
+        WHERE pr.id = :id AND pr.organization_id = :organization_id
+        FOR UPDATE OF pr
+    ");
+    $statement->execute(['id' => $payrollRunId, 'organization_id' => $organizationId]);
+    $run = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!$run || $run['payment_status'] !== 'paid') {
+        return 'That payroll run is not marked as paid.';
+    }
+
+    $statement = $pdo->prepare("SELECT MAX(period_month) FROM payroll_runs WHERE organization_id = :organization_id AND user_id = :user_id");
+    $statement->execute(['organization_id' => $organizationId, 'user_id' => $run['user_id']]);
+    if ($statement->fetchColumn() !== $run['period_month']) {
+        return 'Only the most recent payroll run can be reopened.';
+    }
+
+    $statement = $pdo->prepare("
+        UPDATE payroll_runs
+        SET payment_status = 'unpaid', paid_at = NULL, paid_by = NULL
+        WHERE id = :id AND organization_id = :organization_id
+    ");
+    $statement->execute(['id' => $payrollRunId, 'organization_id' => $organizationId]);
+
+    log_audit_event(
+        $pdo, $user, 'update', 'payroll_run', $payrollRunId,
+        "Undid payment of {$run['name']}'s payroll for " . payroll_period_label($run['period_month'])
+        . ' (₹' . number_format((float) $run['net_salary'], 2) . "): $reason"
+    );
+
+    return null;
+}
+
 $generatedCount = 0;
 $paidCount = 0;
+$undoneCount = 0;
+$actionError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -210,6 +254,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (mark_payroll_paid($pdo, $user, $organizationId, $payrollRunId)) {
                 $paidCount = 1;
             }
+
+        } elseif ($action === 'undo_paid') {
+
+            $payrollRunId = (int) ($_POST['payroll_run_id'] ?? 0);
+            $reason = trim($_POST['reason'] ?? '');
+
+            if ($reason === '') {
+                $actionError = 'Give a reason for undoing the payment.';
+            } else {
+                $actionError = undo_payroll_payment($pdo, $user, $organizationId, $payrollRunId, mb_substr($reason, 0, 200));
+                if ($actionError === null) {
+                    $undoneCount = 1;
+                }
+            }
         }
 
         $pdo->commit();
@@ -218,6 +276,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('Salary generated.');
         } elseif ($paidCount > 0) {
             flash_set('Marked as paid.');
+        } elseif ($undoneCount > 0) {
+            flash_set('Payment undone — the run is unpaid again and can be recalculated or paid.');
+        } elseif ($actionError !== null) {
+            flash_set($actionError, 'error');
         }
 
         header('Location: /payroll.php');
@@ -225,7 +287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } catch (Throwable $e) {
         $pdo->rollBack();
-        error_log('Payroll action failed: ' . $e->getMessage());
+        flash_set(user_facing_error($e), 'error');
+        header('Location: /payroll.php');
+        exit;
     }
 }
 
@@ -289,6 +353,8 @@ if (!empty($salariedUsers)) {
     }
 }
 
+$strandedAdvances = stranded_salary_advances($pdo, $organizationId);
+
 $activeNav = 'payroll';
 $topbarTitle = 'Payroll';
 
@@ -323,6 +389,24 @@ $topbarTitle = 'Payroll';
                 </div>
             </div>
 
+            <?php if (!empty($strandedAdvances)): ?>
+                <div class="card" style="margin-bottom:16px; border-color:var(--warning, #f59e0b);">
+                    <div class="card-body">
+                        <div class="form-notice" style="margin-bottom:8px;"><?= icon('alert-triangle', 14) ?> Advances no payroll run will recover</div>
+                        <p class="result-meta" style="margin-bottom:8px;">These employees are inactive or no longer on salary, so their outstanding advance can't be deducted from pay. Open each one to mark it as repaid or write it off.</p>
+                        <?php foreach ($strandedAdvances as $stranded): ?>
+                            <div class="info-row">
+                                <span class="label">
+                                    <a href="/employee.php?id=<?= (int) $stranded['id'] ?>" class="link-action"><?= htmlspecialchars($stranded['name']) ?></a>
+                                    <span class="result-meta">· <?= $stranded['status'] !== 'active' ? 'Inactive' : 'Not on salary' ?></span>
+                                </span>
+                                <span class="value">&#8377;<?= number_format((float) $stranded['outstanding'], 2) ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?php if (empty($salariedUsers)): ?>
                 <div class="card">
                     <div class="empty-state">
@@ -355,7 +439,11 @@ $topbarTitle = 'Payroll';
                                         </div>
                                         <div class="info-row"><span class="label">Net</span><span class="value" style="color:var(--primary-dark); font-size:15px;">&#8377;<?= number_format((float) $latest['net_salary'], 2) ?></span></div>
                                         <?php if ($latest['payment_status'] === 'paid'): ?>
-                                            <p class="result-meta">Paid <?= htmlspecialchars(date('d M Y', strtotime($latest['paid_at']))) ?></p>
+                                            <p class="result-meta">
+                                                Paid <?= htmlspecialchars(date('d M Y', strtotime($latest['paid_at']))) ?>
+                                                · <button type="button" class="link-action" style="background:none; border:none; padding:0; cursor:pointer; font-size:12.5px;"
+                                                          onclick="openUndoPaid(<?= (int) $latest['id'] ?>, '<?= htmlspecialchars(addslashes($salariedUser['name'] . ' — ' . payroll_period_label($latest['period_month']) . ' — ₹' . number_format((float) $latest['net_salary'], 2)), ENT_QUOTES) ?>')">Undo payment</button>
+                                            </p>
                                         <?php endif; ?>
                                     </div>
                                 <?php else: ?>
@@ -374,7 +462,7 @@ $topbarTitle = 'Payroll';
                                         </form>
                                     <?php elseif ($latest && $latest['payment_status'] === 'unpaid'): ?>
                                         <form method="POST" action=""
-                                              data-confirm="Mark &#8377;<?= number_format((float) $latest['net_salary'], 2) ?> as paid to <?= htmlspecialchars($salariedUser['name'], ENT_QUOTES) ?> for <?= htmlspecialchars(payroll_period_label($latest['period_month']), ENT_QUOTES) ?>? This locks the record — it can no longer be recalculated."
+                                              data-confirm="Mark &#8377;<?= number_format((float) $latest['net_salary'], 2) ?> as paid to <?= htmlspecialchars($salariedUser['name'], ENT_QUOTES) ?> for <?= htmlspecialchars(payroll_period_label($latest['period_month']), ENT_QUOTES) ?>? It will count as a salary expense and can no longer be recalculated. If it was a mistake, use Undo payment on the card."
                                               data-confirm-title="Mark as paid?"
                                               data-confirm-label="Mark as Paid"
                                               data-confirm-variant="neutral">
@@ -393,6 +481,7 @@ $topbarTitle = 'Payroll';
                                     <?php else: ?>
                                         <p class="result-meta">Next payroll available from <?= htmlspecialchars((new DateTime($nextAvailableByUser[$uid]))->format('d M Y')) ?>.</p>
                                     <?php endif; ?>
+                                    <a href="/employee.php?id=<?= $uid ?>&advance=1" class="link-action" style="display:inline-flex; margin-top:10px; font-size:12.5px;"><?= icon('plus', 13) ?> Record advance</a>
                                 </div>
                             </div>
                         </div>
@@ -492,6 +581,44 @@ $topbarTitle = 'Payroll';
         </div>
     </div>
 <?php endforeach; ?>
+
+<div class="modal-backdrop" id="undo-paid-modal">
+    <div class="modal modal-narrow">
+        <div class="modal-header">
+            <div class="modal-header-title">
+                <span class="icon-badge danger"><?= icon('alert-triangle', 16) ?></span>
+                Undo payment?
+            </div>
+            <button type="button" class="modal-close" data-close-modal="undo-paid-modal" aria-label="Close"><?= icon('x', 18) ?></button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="" class="stack">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="undo_paid">
+                <input type="hidden" name="payroll_run_id" id="undo-paid-run-id" value="">
+                <p class="result-meta"><strong id="undo-paid-label"></strong></p>
+                <p class="result-meta">The run goes back to unpaid, so it drops out of salary expenses until it's marked paid again, and it can be recalculated. Use this only if it was marked paid by mistake.</p>
+                <div class="form-field">
+                    <label for="undo-paid-reason">Reason</label>
+                    <input type="text" id="undo-paid-reason" name="reason" maxlength="200" required placeholder="e.g. Marked paid by mistake — salary not given yet">
+                </div>
+                <div class="actions" style="justify-content:flex-end;">
+                    <button type="button" class="button secondary" data-close-modal="undo-paid-modal">Cancel</button>
+                    <button type="submit" class="button danger">Undo payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openUndoPaid(runId, label) {
+    document.getElementById('undo-paid-run-id').value = runId;
+    document.getElementById('undo-paid-label').textContent = label;
+    document.getElementById('undo-paid-reason').value = '';
+    openModal('undo-paid-modal');
+}
+</script>
 
 </body>
 </html>
