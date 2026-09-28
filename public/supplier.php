@@ -6,6 +6,7 @@ require_once __DIR__ . '/../app/Domain/Audit.php';
 require_once __DIR__ . '/../app/Domain/SupplierLedger.php';
 require_once __DIR__ . '/../app/View/Pagination.php';
 require_once __DIR__ . '/../app/Support/Flash.php';
+require_once __DIR__ . '/../app/Domain/PartUnit.php';
 
 $pdo = require __DIR__ . '/../config/database.php';
 
@@ -276,6 +277,8 @@ $ledgerOffset = ($ledgerPage - 1) * $perPage;
 );
 
 $ledgerTotalPages = max(1, (int) ceil($ledgerTotal / $perPage));
+$entryDetails = $ledger->getEntryDetails($organizationId, $supplierId, $ledgerEntries);
+
 $reversedBy = [];
 $reversalOf = [];
 foreach ($ledger->getReversalLinks($organizationId, $supplierId) as $link) {
@@ -549,6 +552,110 @@ $topbarTitle = $supplier['name'];
         .ledger-table tr.is-reversal td.credit {
             color: var(--muted);
         }
+        /* Expandable rows */
+        .ledger-table tr.ledger-row { cursor: pointer; }
+        .ledger-table tr.ledger-row:hover td { background: var(--hover, var(--surface-sunken)); }
+        .ledger-table tr.ledger-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .ledger-chevron {
+            display: inline-flex;
+            vertical-align: -2px;
+            margin-right: 4px;
+            color: var(--muted);
+            transition: transform 0.15s ease;
+        }
+        .ledger-table tr.ledger-row[aria-expanded="true"] .ledger-chevron { transform: rotate(90deg); }
+        .ledger-table tr.ledger-row[aria-expanded="true"] td { border-bottom-color: transparent; }
+        .ledger-table tr.ledger-detail > td {
+            background: var(--surface-sunken);
+            padding: 4px 20px 16px 44px;
+        }
+        .ledger-detail-body { font-size: 13px; max-width: 720px; }
+        .ledger-detail-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .ledger-items { width: 100%; border-collapse: collapse; }
+        .ledger-items td {
+            padding: 6px 0;
+            border-bottom: 1px dashed var(--border);
+            font-size: 13px;
+        }
+        .ledger-items td.num { text-align: right; padding-left: 16px; white-space: nowrap; }
+        .ledger-detail-meta { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+        .ledger-detail-meta strong { color: var(--text); }
+        .ledger-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ledger-chip {
+            padding: 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            background: var(--surface);
+            font-size: 12px;
+            color: var(--text);
+            text-decoration: none;
+        }
+        .ledger-chip:hover { border-color: var(--primary); color: var(--primary); }
+
+        .ledger-detail-reverse { display: none; margin-top: 12px; }
+
+        /* Bill row reached from a ledger / purchases link */
+        .bill-row { scroll-margin-top: 90px; }
+        .bill-row:target td { background: var(--warning-soft, #fef3c7); transition: background 0.3s ease; }
+
+        /* Phones: each ledger entry becomes a compact card */
+        @media (max-width: 767px) {
+            .ledger-table, .ledger-table tbody { display: block; }
+            .ledger-table tr.ledger-head { display: none; }
+            .ledger-table tr.ledger-row {
+                display: grid;
+                grid-template-columns: auto 1fr auto;
+                grid-template-areas:
+                    "type   type    amount"
+                    "details details action"
+                    "date   ref     balance";
+                gap: 4px 10px;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border);
+            }
+            .ledger-table tr.ledger-row td { padding: 0; border: 0; background: none; }
+            .ledger-table tr.ledger-row[aria-expanded="true"] { border-bottom-color: transparent; }
+            .ledger-table tr.ledger-row.is-cancelled,
+            .ledger-table tr.ledger-row.is-reversal { background: var(--surface-sunken); }
+            .ledger-table .c-type    { grid-area: type; }
+            .ledger-table .c-amount  { grid-area: amount; text-align: right; font-size: 15px; }
+            .ledger-table .c-amount.is-empty { display: none; }
+            .ledger-table .c-amount.debit::before  { content: "+ "; }
+            .ledger-table .c-amount.credit::before { content: "− "; }
+            .ledger-table .c-details { grid-area: details; }
+            .ledger-table .c-action  { grid-area: action; align-self: center; }
+            .ledger-table .c-date    { grid-area: date; align-self: end; color: var(--muted); font-size: 12px !important; }
+            .ledger-table .c-ref     { grid-area: ref; align-self: end; font-size: 12px; }
+            .ledger-table .c-balance { grid-area: balance; text-align: right; font-size: 13px; }
+            .ledger-table tr.ledger-bookend {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 16px;
+                background: var(--surface-sunken);
+                border-bottom: 1px solid var(--border);
+            }
+            .ledger-table tr.ledger-bookend td { padding: 0; border: 0; background: none; }
+            .ledger-table tr.ledger-bookend td:empty { display: none; }
+            .ledger-table tr.ledger-detail { display: block; }
+            .ledger-table tr.ledger-detail[hidden] { display: none; }
+            .ledger-table tr.ledger-detail > td {
+                display: block;
+                padding: 0 16px 14px;
+                border-bottom: 1px solid var(--border);
+            }
+            .ledger-items td.num { padding-left: 8px; }
+            .ledger-table .c-action button { display: none !important; }
+            .ledger-detail-reverse { display: inline-flex; }
+        }
+
         .ledger-link-note {
             display: flex;
             align-items: center;
@@ -770,7 +877,7 @@ $topbarTitle = $supplier['name'];
                             <?php $ledgerColspan = 6; ?>
                             <div class="table-wrap">
                                 <table class="data-table ledger-table">
-                                    <tr>
+                                    <tr class="ledger-head">
                                         <th>Date</th>
                                         <th>What happened</th>
                                         <th>Reference</th>
@@ -811,21 +918,31 @@ $topbarTitle = $supplier['name'];
                                             $typeBadge = $txnTypeBadge[$entry['transaction_type']] ?? 'badge-neutral';
                                         }
                                         ?>
-                                        <tr class="<?= $cancelledBy ? 'is-cancelled' : '' ?> <?= $cancelsEntry ? 'is-reversal' : '' ?>">
-                                            <td style="white-space:nowrap; font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($entry['transaction_date']))) ?></td>
-                                            <td>
+                                        <?php
+                                        $hasDebit  = (float) $entry['debit'] > 0;
+                                        $hasCredit = (float) $entry['credit'] > 0;
+                                        $detailId  = 'ledger-detail-' . $entryId;
+                                        $refId     = (int) $entry['reference_id'];
+                                        $billUrl   = '?id=' . $supplierId . '&tab=bills#bill-' . $refId;
+                                        ?>
+                                        <tr class="ledger-row <?= $cancelledBy ? 'is-cancelled' : '' ?> <?= $cancelsEntry ? 'is-reversal' : '' ?>" data-detail="<?= $detailId ?>" tabindex="0" aria-expanded="false" aria-controls="<?= $detailId ?>" title="Show details">
+                                            <td class="c-date" style="white-space:nowrap; font-size:13px;">
+                                                <span class="ledger-chevron"><?= icon('chevron-right', 13) ?></span>
+                                                <?= htmlspecialchars(date('d M Y', strtotime($entry['transaction_date']))) ?>
+                                            </td>
+                                            <td class="c-type">
                                                 <span class="badge <?= $typeBadge ?>" style="font-size:11px;">
                                                     <?= htmlspecialchars($typeLabel) ?>
                                                 </span>
                                             </td>
-                                            <td style="white-space:nowrap;">
-                                                <?php if ($entry['reference_type'] === 'purchase' && $entry['reference_id']): ?>
-                                                    <a href="/purchases.php" class="link-action"><strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong></a>
+                                            <td class="c-ref" style="white-space:nowrap;">
+                                                <?php if ($entry['reference_type'] === 'purchase' && $refId): ?>
+                                                    <a href="<?= $billUrl ?>" class="link-action" title="Open this bill"><strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong></a>
                                                 <?php else: ?>
                                                     <strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong>
                                                 <?php endif; ?>
                                             </td>
-                                            <td style="font-size:13px; color:var(--text);">
+                                            <td class="c-details" style="font-size:13px; color:var(--text);">
                                                 <?= htmlspecialchars($entry['description']) ?>
                                                 <?php if ($cancelledBy): ?>
                                                     <div class="ledger-link-note">
@@ -841,18 +958,18 @@ $topbarTitle = $supplier['name'];
                                                     </div>
                                                 <?php endif; ?>
                                             </td>
-                                            <td class="num <?= (float) $entry['debit'] > 0 ? 'debit' : '' ?>">
-                                                <?= (float) $entry['debit'] > 0 ? '₹' . number_format((float) $entry['debit'], 2) : '—' ?>
+                                            <td class="num c-amount <?= $hasDebit ? 'debit' : 'is-empty' ?>">
+                                                <?= $hasDebit ? '₹' . number_format((float) $entry['debit'], 2) : '—' ?>
                                             </td>
-                                            <td class="num <?= (float) $entry['credit'] > 0 ? 'credit' : '' ?>">
-                                                <?= (float) $entry['credit'] > 0 ? '₹' . number_format((float) $entry['credit'], 2) : '—' ?>
+                                            <td class="num c-amount <?= $hasCredit ? 'credit' : 'is-empty' ?>">
+                                                <?= $hasCredit ? '₹' . number_format((float) $entry['credit'], 2) : '—' ?>
                                             </td>
-                                            <td class="num" style="font-weight:700; color:<?= $rowColor ?>;">
+                                            <td class="num c-balance" style="font-weight:700; color:<?= $rowColor ?>;">
                                                 <?= $rowAmount ?>
                                                 <div class="ledger-balance-caption"><?= $rowCaption ?></div>
                                             </td>
                                             <?php if ($canFinance): ?>
-                                                <td style="text-align:center;">
+                                                <td class="c-action" style="text-align:center;">
                                                     <?php if ($cancelledBy): ?>
                                                         <span class="badge badge-neutral" style="font-size:10px;" title="A reversal entry has already been posted for this transaction">Reversed</span>
                                                     <?php elseif (!$cancelsEntry && $entry['reference_type'] !== 'supplier_transaction'): ?>
@@ -862,6 +979,77 @@ $topbarTitle = $supplier['name'];
                                                     <?php endif; ?>
                                                 </td>
                                             <?php endif; ?>
+                                        </tr>
+                                        <tr class="ledger-detail" id="<?= $detailId ?>" hidden>
+                                            <td colspan="<?= $ledgerColspan + 1 + ($canFinance ? 1 : 0) ?>">
+                                                <div class="ledger-detail-body">
+                                                    <?php if ($entry['reference_type'] === 'purchase' && isset($entryDetails['purchases'][$refId])): ?>
+                                                        <?php
+                                                        $detailBill  = $entryDetails['purchases'][$refId];
+                                                        $detailItems = $entryDetails['purchase_items'][$refId] ?? [];
+                                                        $detailDue   = (float) $detailBill['total'] - (float) $detailBill['amount_paid'];
+                                                        ?>
+                                                        <div class="ledger-detail-title">Items on bill <?= htmlspecialchars($detailBill['purchase_no']) ?></div>
+                                                        <?php if ($detailItems): ?>
+                                                            <table class="ledger-items">
+                                                                <?php foreach ($detailItems as $item): ?>
+                                                                    <tr>
+                                                                        <td>
+                                                                            <?= htmlspecialchars($item['part_name'] ?? 'Deleted part') ?>
+                                                                            <?php if (!empty($item['sku'])): ?><span class="muted">(<?= htmlspecialchars($item['sku']) ?>)</span><?php endif; ?>
+                                                                        </td>
+                                                                        <td class="num"><?= rtrim(rtrim(number_format((float) $item['quantity'], 2), '0'), '.') ?> <?= htmlspecialchars(part_unit_short($item['unit'])) ?> × ₹<?= number_format((float) $item['unit_cost'], 2) ?></td>
+                                                                        <td class="num"><strong>₹<?= number_format((float) $item['total'], 2) ?></strong></td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </table>
+                                                        <?php else: ?>
+                                                            <div class="muted">No line items recorded.</div>
+                                                        <?php endif; ?>
+                                                        <div class="ledger-detail-meta">
+                                                            Bill total <strong>₹<?= number_format((float) $detailBill['total'], 2) ?></strong>
+                                                            · Paid <strong>₹<?= number_format((float) $detailBill['amount_paid'], 2) ?></strong>
+                                                            · Still due <strong>₹<?= number_format(max(0, $detailDue), 2) ?></strong>
+                                                            · <a href="<?= $billUrl ?>" class="link-action">Open in Purchase Bills</a>
+                                                        </div>
+                                                    <?php elseif ($entry['reference_type'] === 'supplier_payment' && isset($entryDetails['payments'][$refId])): ?>
+                                                        <?php
+                                                        $detailPayment = $entryDetails['payments'][$refId];
+                                                        $detailAllocs  = $entryDetails['allocations'][$refId] ?? [];
+                                                        ?>
+                                                        <div class="ledger-detail-meta" style="margin-top:0;">
+                                                            Paid by <strong><?= htmlspecialchars(strtoupper(str_replace('_', ' ', $detailPayment['method']))) ?></strong>
+                                                            on <strong><?= htmlspecialchars(date('d M Y', strtotime($detailPayment['payment_date']))) ?></strong>
+                                                            <?php if ($detailPayment['reference_no']): ?>
+                                                                · UTR / Ref <strong><?= htmlspecialchars($detailPayment['reference_no']) ?></strong>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <div class="ledger-detail-title" style="margin-top:10px;">Bills settled by this payment</div>
+                                                        <?php if ($detailAllocs): ?>
+                                                            <div class="ledger-chip-row">
+                                                                <?php foreach ($detailAllocs as $alloc): ?>
+                                                                    <a href="?id=<?= $supplierId ?>&tab=bills#bill-<?= (int) $alloc['purchase_id'] ?>" class="ledger-chip">
+                                                                        <?= htmlspecialchars($alloc['purchase_no']) ?> · ₹<?= number_format((float) $alloc['amount'], 2) ?>
+                                                                    </a>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <div class="muted">Not linked to a specific bill — it reduced the overall balance (opening balance or extra charges).</div>
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
+
+                                                    <div class="ledger-detail-meta">
+                                                        Recorded<?= $entry['created_by_name'] ? ' by <strong>' . htmlspecialchars($entry['created_by_name']) . '</strong>' : '' ?>
+                                                        on <?= htmlspecialchars(date('d M Y, g:i A', strtotime($entry['created_at']))) ?>
+                                                    </div>
+
+                                                    <?php if ($canFinance && !$cancelledBy && !$cancelsEntry && $entry['reference_type'] !== 'supplier_transaction'): ?>
+                                                        <button type="button" class="button secondary sm ledger-detail-reverse" onclick="openReversalModal(<?= $entryId ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entryId)) ?>')">
+                                                            <?= icon('rotate-ccw', 13) ?> Reverse this entry
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
 
@@ -941,7 +1129,7 @@ $topbarTitle = $supplier['name'];
                                             default   => 'badge-danger'
                                         };
                                         ?>
-                                        <tr>
+                                        <tr id="bill-<?= (int) $bill['id'] ?>" class="bill-row">
                                             <td><strong><?= htmlspecialchars($bill['purchase_no']) ?></strong></td>
                                             <td style="font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($bill['created_at']))) ?></td>
                                             <td class="num">₹<?= number_format((float) $bill['total'], 2) ?></td>
@@ -1451,6 +1639,27 @@ function updateAdjMaxHint() {
         if (amtInput) amtInput.removeAttribute('max');
     }
 }
+
+document.querySelectorAll('.ledger-table tr.ledger-row').forEach(row => {
+    const toggle = () => {
+        const detail = document.getElementById(row.dataset.detail);
+        if (!detail) return;
+        const open = row.getAttribute('aria-expanded') !== 'true';
+        row.setAttribute('aria-expanded', open ? 'true' : 'false');
+        detail.hidden = !open;
+    };
+    row.addEventListener('click', event => {
+        if (event.target.closest('a, button')) return;
+        toggle();
+    });
+    row.addEventListener('keydown', event => {
+        if (event.target !== row) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggle();
+        }
+    });
+});
 
 function openReversalModal(txnId, refText) {
     document.getElementById('reversal-txn-id').value = txnId;

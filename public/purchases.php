@@ -122,7 +122,7 @@ $topbarTitle = 'Purchases';
                                         default   => 'badge-danger'
                                     };
                                     ?>
-                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills">
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills#bill-<?= (int) $purchase['id'] ?>">
                                         <td><strong><?= htmlspecialchars($purchase['purchase_no']) ?></strong></td>
                                         <td><?= htmlspecialchars($purchase['supplier_name']) ?></td>
                                         <td><?= htmlspecialchars(date('d M Y', strtotime($purchase['created_at']))) ?></td>
@@ -133,7 +133,7 @@ $topbarTitle = 'Purchases';
                                             </span>
                                         </td>
                                         <td style="text-align:right;">
-                                            <a href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills" class="link-action" style="font-size:12px;">
+                                            <a href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills#bill-<?= (int) $purchase['id'] ?>" class="link-action" style="font-size:12px;">
                                                 <?= icon('receipt', 13) ?> Bill & Ledger
                                             </a>
                                         </td>

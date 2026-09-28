@@ -114,23 +114,25 @@ class SupplierLedger
         $sql = "
             WITH full_ledger AS (
                 SELECT
-                    id,
-                    transaction_type,
-                    transaction_date,
-                    reference_no,
-                    description,
-                    debit,
-                    credit,
-                    reference_type,
-                    reference_id,
-                    SUM(debit - credit) OVER (
-                        ORDER BY transaction_date ASC, id ASC
+                    st.id,
+                    st.transaction_type,
+                    st.transaction_date,
+                    st.reference_no,
+                    st.description,
+                    st.debit,
+                    st.credit,
+                    st.reference_type,
+                    st.reference_id,
+                    SUM(st.debit - st.credit) OVER (
+                        ORDER BY st.transaction_date ASC, st.id ASC
                         ROWS UNBOUNDED PRECEDING
                     ) AS running_balance,
-                    created_at
-                FROM supplier_transactions
-                WHERE organization_id = :organization_id
-                  AND supplier_id     = :supplier_id
+                    st.created_at,
+                    u.name AS created_by_name
+                FROM supplier_transactions st
+                LEFT JOIN users u ON u.id = st.created_by
+                WHERE st.organization_id = :organization_id
+                  AND st.supplier_id     = :supplier_id
             )
             SELECT *
             FROM full_ledger
@@ -614,6 +616,84 @@ class SupplierLedger
             $transactionId,
             $user['id']
         );
+    }
+
+    /**
+     * Expandable-row details for a page of ledger entries: bill line items
+     * for purchases, method/UTR and settled bills for payments. Batched so
+     * a 25-row page costs a few queries, not one per row.
+     */
+    public function getEntryDetails(int $organizationId, int $supplierId, array $entries): array
+    {
+        $purchaseIds = [];
+        $paymentIds  = [];
+        foreach ($entries as $entry) {
+            if (!$entry['reference_id']) {
+                continue;
+            }
+            if ($entry['reference_type'] === 'purchase') {
+                $purchaseIds[] = (int) $entry['reference_id'];
+            } elseif ($entry['reference_type'] === 'supplier_payment') {
+                $paymentIds[] = (int) $entry['reference_id'];
+            }
+        }
+
+        $details = ['purchases' => [], 'purchase_items' => [], 'payments' => [], 'allocations' => []];
+
+        if ($purchaseIds) {
+            $in = implode(',', array_fill(0, count($purchaseIds), '?'));
+
+            $statement = $this->pdo->prepare("
+                SELECT id, purchase_no, total, amount_paid, payment_status
+                FROM purchases
+                WHERE organization_id = ? AND supplier_id = ? AND id IN ($in)
+            ");
+            $statement->execute(array_merge([$organizationId, $supplierId], $purchaseIds));
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $details['purchases'][(int) $row['id']] = $row;
+            }
+
+            $statement = $this->pdo->prepare("
+                SELECT pi.purchase_id, pi.quantity, pi.unit_cost, pi.total, p.name AS part_name, p.sku, p.unit
+                FROM purchase_items pi
+                INNER JOIN purchases pu ON pu.id = pi.purchase_id
+                LEFT JOIN parts p ON p.id = pi.part_id
+                WHERE pu.organization_id = ? AND pu.supplier_id = ? AND pi.purchase_id IN ($in)
+                ORDER BY pi.id
+            ");
+            $statement->execute(array_merge([$organizationId, $supplierId], $purchaseIds));
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $details['purchase_items'][(int) $row['purchase_id']][] = $row;
+            }
+        }
+
+        if ($paymentIds) {
+            $in = implode(',', array_fill(0, count($paymentIds), '?'));
+
+            $statement = $this->pdo->prepare("
+                SELECT id, method, reference_no, payment_date
+                FROM supplier_payments
+                WHERE organization_id = ? AND supplier_id = ? AND id IN ($in)
+            ");
+            $statement->execute(array_merge([$organizationId, $supplierId], $paymentIds));
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $details['payments'][(int) $row['id']] = $row;
+            }
+
+            $statement = $this->pdo->prepare("
+                SELECT spa.supplier_payment_id, spa.purchase_id, spa.amount, pu.purchase_no
+                FROM supplier_payment_allocations spa
+                INNER JOIN purchases pu ON pu.id = spa.purchase_id
+                WHERE pu.organization_id = ? AND pu.supplier_id = ? AND spa.supplier_payment_id IN ($in)
+                ORDER BY spa.id
+            ");
+            $statement->execute(array_merge([$organizationId, $supplierId], $paymentIds));
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $details['allocations'][(int) $row['supplier_payment_id']][] = $row;
+            }
+        }
+
+        return $details;
     }
 
     /**
