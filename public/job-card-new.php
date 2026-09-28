@@ -27,8 +27,7 @@ $branchId = $user['branch_id'];
 $error = null;
 
 // Jumping in from a customer's history page (public/customer.php) skips the
-// search-a-vehicle step entirely, since the customer is already known —
-// see the plan at /Users/shafivilayil/.claude/plans/partitioned-whistling-nova.md.
+// search-a-vehicle step entirely, since the customer is already known.
 // This is deliberately kept separate from vehicle_intake_form()/VehicleIntake.php
 // (shared with appointment-new.php) rather than adding a third mode there.
 $shortcutCustomerId = (int) ($_GET['customer_id'] ?? 0);
