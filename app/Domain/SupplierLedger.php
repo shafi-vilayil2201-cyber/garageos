@@ -617,6 +617,57 @@ class SupplierLedger
     }
 
     /**
+     * Balance owed from every transaction dated strictly before $date.
+     */
+    public function getBalanceBefore(int $organizationId, int $supplierId, string $date): float
+    {
+        $statement = $this->pdo->prepare("
+            SELECT COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)
+            FROM supplier_transactions
+            WHERE organization_id  = :organization_id
+              AND supplier_id      = :supplier_id
+              AND transaction_date < :date
+        ");
+        $statement->execute([
+            'organization_id' => $organizationId,
+            'supplier_id'     => $supplierId,
+            'date'            => $date
+        ]);
+
+        return (float) $statement->fetchColumn();
+    }
+
+    /**
+     * Each reversal paired with the entry it cancels, so the ledger can
+     * show them as a linked pair instead of two unrelated rows.
+     */
+    public function getReversalLinks(int $organizationId, int $supplierId): array
+    {
+        $statement = $this->pdo->prepare("
+            SELECT
+                r.id               AS reversal_id,
+                r.reference_no     AS reversal_ref,
+                r.transaction_date AS reversal_date,
+                o.id               AS original_id,
+                o.reference_no     AS original_ref,
+                o.transaction_date AS original_date
+            FROM supplier_transactions r
+            INNER JOIN supplier_transactions o
+                ON o.id = r.reference_id
+               AND o.organization_id = r.organization_id
+            WHERE r.organization_id = :organization_id
+              AND r.supplier_id     = :supplier_id
+              AND r.reference_type  = 'supplier_transaction'
+        ");
+        $statement->execute([
+            'organization_id' => $organizationId,
+            'supplier_id'     => $supplierId
+        ]);
+
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * IDs of this supplier's transactions that already have a reversal
      * entry pointing back at them.
      */

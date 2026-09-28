@@ -255,6 +255,16 @@ if ($periodPreset === 'this_month') {
     $dateTo   = ($fyStartYear + 1) . '-03-31';
 }
 
+$isValidDate = static function (?string $value): bool {
+    if (!$value) {
+        return false;
+    }
+    $parsed = DateTime::createFromFormat('!Y-m-d', $value);
+    return $parsed && $parsed->format('Y-m-d') === $value;
+};
+$dateFrom = $isValidDate($dateFrom) ? $dateFrom : null;
+$dateTo   = $isValidDate($dateTo) ? $dateTo : null;
+
 $ledgerPage = max(1, (int) ($_GET['lp'] ?? 1));
 $perPage    = 25;
 $ledgerOffset = ($ledgerPage - 1) * $perPage;
@@ -266,22 +276,53 @@ $ledgerOffset = ($ledgerPage - 1) * $perPage;
 );
 
 $ledgerTotalPages = max(1, (int) ceil($ledgerTotal / $perPage));
-$reversedTxnIds   = array_flip($ledger->getReversedTransactionIds($organizationId, $supplierId));
+$reversedBy = [];
+$reversalOf = [];
+foreach ($ledger->getReversalLinks($organizationId, $supplierId) as $link) {
+    $reversedBy[(int) $link['original_id']] = $link;
+    $reversalOf[(int) $link['reversal_id']] = $link;
+}
+
+// Period bookends: the ledger is newest-first, so the closing balance
+// sits at the top of page 1 and the opening balance at the bottom of
+// the last page.
+$periodOpening = $dateFrom ? $ledger->getBalanceBefore($organizationId, $supplierId, $dateFrom) : null;
+$periodClosing = null;
+if ($dateFrom || $dateTo) {
+    $periodClosing = $dateTo
+        ? $ledger->getBalanceBefore($organizationId, $supplierId, date('Y-m-d', strtotime($dateTo . ' +1 day')))
+        : (float) $summary['outstanding_balance'];
+}
+// Skipped under a type filter: the visible rows would no longer add up
+// from the opening line to the closing line.
+$showClosingRow = $periodClosing !== null && !$typeFilter && $ledgerPage === 1;
+$showOpeningRow = $periodOpening !== null && !$typeFilter && $ledgerPage >= $ledgerTotalPages;
+
+// "You owe ₹X" / "Supplier owes you ₹X" instead of a signed number.
+function owed_label(float $balance): array {
+    if ($balance < -0.009) {
+        return ['₹' . number_format(abs($balance), 2), 'Supplier owes you', 'var(--info, #2563eb)'];
+    }
+    if ($balance > 0.009) {
+        return ['₹' . number_format($balance, 2), 'You owe', 'var(--text)'];
+    }
+    return ['₹0.00', 'Settled', 'var(--success)'];
+}
 
 $allPurchases    = $ledger->getAllPurchases($organizationId, $supplierId);
 $unpaidPurchases = $ledger->getUnpaidPurchases($organizationId, $supplierId);
 $paymentPlans    = $ledger->getPaymentPlans($organizationId, $supplierId);
 
 $txnTypeLabels = [
-    'OPENING_BALANCE'    => 'Opening Balance',
-    'PURCHASE'           => 'Purchase',
-    'PAYMENT'            => 'Payment',
-    'PURCHASE_RETURN'    => 'Return',
-    'CREDIT_ADJUSTMENT'  => 'Credit (Disc/Return)',
-    'DEBIT_ADJUSTMENT'   => 'Debit (Charge)',
+    'OPENING_BALANCE'    => 'Opening balance',
+    'PURCHASE'           => 'Purchase bill',
+    'PAYMENT'            => 'Payment made',
+    'PURCHASE_RETURN'    => 'Parts returned',
+    'CREDIT_ADJUSTMENT'  => 'Discount / return',
+    'DEBIT_ADJUSTMENT'   => 'Extra charge',
     'REFUND'             => 'Refund',
-    'PAYMENT_REVERSAL'   => 'Pay. Reversal',
-    'PURCHASE_REVERSAL'  => 'Pur. Reversal'
+    'PAYMENT_REVERSAL'   => 'Payment cancelled',
+    'PURCHASE_REVERSAL'  => 'Bill cancelled'
 ];
 
 $txnTypeBadge = [
@@ -482,6 +523,40 @@ $topbarTitle = $supplier['name'];
 
         .ledger-table td.debit  { color: var(--danger); font-weight: 600; }
         .ledger-table td.credit { color: var(--success); font-weight: 600; }
+        .ledger-balance-caption {
+            font-size: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: inherit;
+            opacity: 0.8;
+        }
+        .ledger-table tr.ledger-bookend td {
+            background: var(--surface-sunken);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .ledger-table tr.is-cancelled td,
+        .ledger-table tr.is-reversal td {
+            background: var(--surface-sunken);
+        }
+        .ledger-table tr.is-cancelled td.debit,
+        .ledger-table tr.is-cancelled td.credit {
+            text-decoration: line-through;
+            color: var(--muted);
+        }
+        .ledger-table tr.is-reversal td.debit,
+        .ledger-table tr.is-reversal td.credit {
+            color: var(--muted);
+        }
+        .ledger-link-note {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 3px;
+            font-size: 11.5px;
+            color: var(--muted);
+        }
 
         .plan-item-card {
             border: 1px solid var(--border);
@@ -686,52 +761,101 @@ $topbarTitle = $supplier['name'];
                             <div class="empty-state">
                                 <?= icon('receipt', 28) ?>
                                 No transactions recorded for this period.
+                                <?php if ($periodClosing !== null && !$typeFilter): ?>
+                                    <?php [$closingAmount, $closingCaption] = owed_label($periodClosing); ?>
+                                    <div style="font-size:13px; margin-top:6px;">Balance at the end of this period: <strong><?= $closingAmount ?></strong> · <?= $closingCaption ?></div>
+                                <?php endif; ?>
                             </div>
                         <?php else: ?>
+                            <?php $ledgerColspan = 6; ?>
                             <div class="table-wrap">
                                 <table class="data-table ledger-table">
                                     <tr>
                                         <th>Date</th>
-                                        <th>Type</th>
+                                        <th>What happened</th>
                                         <th>Reference</th>
-                                        <th>Description</th>
-                                        <th style="text-align:right;">Debit (Payable +)</th>
-                                        <th style="text-align:right;">Credit (Paid -)</th>
+                                        <th>Details</th>
+                                        <th style="text-align:right;" title="Purchase bills and extra charges — increases what you owe">Bill / charge (+)</th>
+                                        <th style="text-align:right;" title="Payments, discounts and returns — reduces what you owe">Paid / credit (−)</th>
                                         <th style="text-align:right;">Balance</th>
                                         <?php if ($canFinance): ?>
                                             <th style="text-align:center; width:50px;"></th>
                                         <?php endif; ?>
                                     </tr>
+
+                                    <?php if ($showClosingRow): ?>
+                                        <?php [$bookAmount, $bookCaption, $bookColor] = owed_label($periodClosing); ?>
+                                        <tr class="ledger-bookend">
+                                            <td colspan="<?= $ledgerColspan ?>">
+                                                Closing balance<?= $dateTo ? ' on ' . htmlspecialchars(date('d M Y', strtotime($dateTo))) : ' today' ?>
+                                            </td>
+                                            <td class="num" style="color:<?= $bookColor ?>;">
+                                                <?= $bookAmount ?>
+                                                <div class="ledger-balance-caption"><?= $bookCaption ?></div>
+                                            </td>
+                                            <?php if ($canFinance): ?><td></td><?php endif; ?>
+                                        </tr>
+                                    <?php endif; ?>
+
                                     <?php foreach ($ledgerEntries as $entry): ?>
-                                        <tr>
+                                        <?php
+                                        $entryId       = (int) $entry['id'];
+                                        $cancelledBy   = $reversedBy[$entryId] ?? null;
+                                        $cancelsEntry  = $reversalOf[$entryId] ?? null;
+                                        [$rowAmount, $rowCaption, $rowColor] = owed_label((float) $entry['running_balance']);
+                                        if ($cancelsEntry) {
+                                            $typeLabel = 'Reversal';
+                                            $typeBadge = 'badge-neutral';
+                                        } else {
+                                            $typeLabel = $txnTypeLabels[$entry['transaction_type']] ?? $entry['transaction_type'];
+                                            $typeBadge = $txnTypeBadge[$entry['transaction_type']] ?? 'badge-neutral';
+                                        }
+                                        ?>
+                                        <tr class="<?= $cancelledBy ? 'is-cancelled' : '' ?> <?= $cancelsEntry ? 'is-reversal' : '' ?>">
                                             <td style="white-space:nowrap; font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($entry['transaction_date']))) ?></td>
                                             <td>
-                                                <span class="badge <?= $txnTypeBadge[$entry['transaction_type']] ?? 'badge-neutral' ?>" style="font-size:11px;">
-                                                    <?= htmlspecialchars($txnTypeLabels[$entry['transaction_type']] ?? $entry['transaction_type']) ?>
+                                                <span class="badge <?= $typeBadge ?>" style="font-size:11px;">
+                                                    <?= htmlspecialchars($typeLabel) ?>
                                                 </span>
                                             </td>
-                                            <td>
+                                            <td style="white-space:nowrap;">
                                                 <?php if ($entry['reference_type'] === 'purchase' && $entry['reference_id']): ?>
                                                     <a href="/purchases.php" class="link-action"><strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong></a>
                                                 <?php else: ?>
                                                     <strong><?= htmlspecialchars($entry['reference_no'] ?? '—') ?></strong>
                                                 <?php endif; ?>
                                             </td>
-                                            <td style="font-size:13px; color:var(--text);"><?= htmlspecialchars($entry['description']) ?></td>
+                                            <td style="font-size:13px; color:var(--text);">
+                                                <?= htmlspecialchars($entry['description']) ?>
+                                                <?php if ($cancelledBy): ?>
+                                                    <div class="ledger-link-note">
+                                                        <?= icon('rotate-ccw', 11) ?>
+                                                        Cancelled on <?= htmlspecialchars(date('d M Y', strtotime($cancelledBy['reversal_date']))) ?>
+                                                        by <?= htmlspecialchars($cancelledBy['reversal_ref'] ?? 'a reversal') ?> — no net effect on your balance
+                                                    </div>
+                                                <?php elseif ($cancelsEntry): ?>
+                                                    <div class="ledger-link-note">
+                                                        <?= icon('rotate-ccw', 11) ?>
+                                                        Cancels <?= htmlspecialchars($cancelsEntry['original_ref'] ?? 'an earlier entry') ?>
+                                                        from <?= htmlspecialchars(date('d M Y', strtotime($cancelsEntry['original_date']))) ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="num <?= (float) $entry['debit'] > 0 ? 'debit' : '' ?>">
                                                 <?= (float) $entry['debit'] > 0 ? '₹' . number_format((float) $entry['debit'], 2) : '—' ?>
                                             </td>
                                             <td class="num <?= (float) $entry['credit'] > 0 ? 'credit' : '' ?>">
                                                 <?= (float) $entry['credit'] > 0 ? '₹' . number_format((float) $entry['credit'], 2) : '—' ?>
                                             </td>
-                                            <td class="num" style="font-weight:700;">
-                                                ₹<?= number_format((float) $entry['running_balance'], 2) ?>
+                                            <td class="num" style="font-weight:700; color:<?= $rowColor ?>;">
+                                                <?= $rowAmount ?>
+                                                <div class="ledger-balance-caption"><?= $rowCaption ?></div>
                                             </td>
                                             <?php if ($canFinance): ?>
                                                 <td style="text-align:center;">
-                                                    <?php if (isset($reversedTxnIds[(int) $entry['id']])): ?>
+                                                    <?php if ($cancelledBy): ?>
                                                         <span class="badge badge-neutral" style="font-size:10px;" title="A reversal entry has already been posted for this transaction">Reversed</span>
-                                                    <?php elseif ($entry['reference_type'] !== 'supplier_transaction'): ?>
+                                                    <?php elseif (!$cancelsEntry && $entry['reference_type'] !== 'supplier_transaction'): ?>
                                                         <button type="button" class="link-action" style="color:var(--muted); font-size:12px; padding:8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px;" onclick="openReversalModal(<?= (int) $entry['id'] ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entry['id'])) ?>')" title="Reverse this transaction">
                                                             <?= icon('rotate-ccw', 14) ?>
                                                         </button>
@@ -740,6 +864,20 @@ $topbarTitle = $supplier['name'];
                                             <?php endif; ?>
                                         </tr>
                                     <?php endforeach; ?>
+
+                                    <?php if ($showOpeningRow): ?>
+                                        <?php [$bookAmount, $bookCaption, $bookColor] = owed_label($periodOpening); ?>
+                                        <tr class="ledger-bookend">
+                                            <td colspan="<?= $ledgerColspan ?>">
+                                                Opening balance on <?= htmlspecialchars(date('d M Y', strtotime($dateFrom))) ?>
+                                            </td>
+                                            <td class="num" style="color:<?= $bookColor ?>;">
+                                                <?= $bookAmount ?>
+                                                <div class="ledger-balance-caption"><?= $bookCaption ?></div>
+                                            </td>
+                                            <?php if ($canFinance): ?><td></td><?php endif; ?>
+                                        </tr>
+                                    <?php endif; ?>
                                 </table>
                             </div>
 
