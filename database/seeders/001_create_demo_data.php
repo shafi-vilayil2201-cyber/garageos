@@ -109,35 +109,15 @@ try {
     $userId = $statement->fetchColumn();
 
 
-    // 4. Create the Owner role
-    $statement = $pdo->prepare("
-        INSERT INTO roles (
-            organization_id,
-            name,
-            code,
-            description
-        )
-        VALUES (
-            :organization_id,
-            'Owner',
-            'OWNER',
-            'Full access to the organization'
-        )
-        RETURNING id
-    ");
-
-    $statement->execute([
-        'organization_id' => $organizationId
-    ]);
-
-    $roleId = $statement->fetchColumn();
-
-
-    // 5. Create system permissions
+    // 4. System permissions — kept in lockstep with onboard-client.php's
+    //    own list (and with every migration that's added a permission
+    //    code since) so a local dev setup and a real customer install
+    //    always end up with the same permission set.
     $permissions = [
         ['Dashboard', 'dashboard.view'],
         ['View job cards', 'job_cards.view'],
         ['Manage job cards', 'job_cards.manage'],
+        ['Restore job cards', 'job_cards.restore'],
         ['View invoices', 'invoices.view'],
         ['Manage invoices', 'invoices.manage'],
         ['View customers', 'customers.view'],
@@ -152,7 +132,13 @@ try {
         ['Manage suppliers', 'suppliers.manage'],
         ['View reports', 'reports.view'],
         ['Manage settings', 'settings.manage'],
-        ['Manage users', 'users.manage']
+        ['Manage users', 'users.manage'],
+        ['Manage attendance', 'attendance.manage'],
+        ['Manage payroll', 'payroll.manage'],
+        ['View own attendance', 'attendance.view_own'],
+        ['View finance', 'finance.view'],
+        ['Manage finance', 'finance.manage'],
+        ['View audit logs', 'audit.view']
     ];
 
     $permissionIds = [];
@@ -181,12 +167,82 @@ try {
             'description' => $name
         ]);
 
-        $permissionIds[] = $statement->fetchColumn();
+        $permissionIds[$code] = $statement->fetchColumn();
     }
 
 
-    // 6. Give Owner every permission
-    $statement = $pdo->prepare("
+    // 5. Standard roles — the same six roles and permission matrix
+    //    onboard-client.php seeds for a real customer, so RBAC can be
+    //    exercised locally exactly as it works in production (see
+    //    docs/project-documentation.md §7).
+    $roles = [
+        'OWNER' => [
+            'name' => 'Owner',
+            'description' => 'Full access to the organization',
+            'permissions' => array_keys($permissionIds)
+        ],
+        'MANAGER' => [
+            'name' => 'Manager',
+            'description' => 'Full access except organization settings, user management and the audit log',
+            'permissions' => array_diff(array_keys($permissionIds), ['settings.manage', 'users.manage', 'audit.view'])
+        ],
+        'ADVISOR' => [
+            'name' => 'Service Advisor',
+            'description' => 'Front desk: job cards, customers, vehicles, invoices',
+            'permissions' => [
+                'dashboard.view', 'job_cards.view', 'job_cards.manage',
+                'invoices.view', 'invoices.manage',
+                'customers.view', 'customers.manage',
+                'vehicles.view', 'vehicles.manage',
+                'parts.view', 'attendance.view_own'
+            ]
+        ],
+        'TECHNICIAN' => [
+            'name' => 'Technician',
+            'description' => 'Workshop floor: sees assigned job cards only',
+            'permissions' => ['dashboard.view', 'job_cards.view', 'attendance.view_own']
+        ],
+        'ACCOUNTANT' => [
+            'name' => 'Accountant',
+            'description' => 'Billing and financial reporting',
+            'permissions' => [
+                'dashboard.view', 'job_cards.view',
+                'invoices.view', 'invoices.manage',
+                'parts.view', 'purchases.view',
+                'reports.view', 'attendance.view_own',
+                'finance.view', 'finance.manage'
+            ]
+        ],
+        'PARTS_MANAGER' => [
+            'name' => 'Parts Manager',
+            'description' => 'Inventory, purchases and suppliers',
+            'permissions' => [
+                'dashboard.view', 'job_cards.view',
+                'parts.view', 'parts.manage',
+                'purchases.view', 'purchases.manage',
+                'suppliers.view', 'suppliers.manage',
+                'reports.view', 'attendance.view_own'
+            ]
+        ]
+    ];
+
+    $roleStatement = $pdo->prepare("
+        INSERT INTO roles (
+            organization_id,
+            name,
+            code,
+            description
+        )
+        VALUES (
+            :organization_id,
+            :name,
+            :code,
+            :description
+        )
+        RETURNING id
+    ");
+
+    $rolePermissionStatement = $pdo->prepare("
         INSERT INTO role_permissions (
             role_id,
             permission_id
@@ -198,16 +254,33 @@ try {
         ON CONFLICT DO NOTHING
     ");
 
-    foreach ($permissionIds as $permissionId) {
+    $ownerRoleId = null;
 
-        $statement->execute([
-            'role_id' => $roleId,
-            'permission_id' => $permissionId
+    foreach ($roles as $code => $role) {
+
+        $roleStatement->execute([
+            'organization_id' => $organizationId,
+            'name' => $role['name'],
+            'code' => $code,
+            'description' => $role['description']
         ]);
+
+        $roleId = $roleStatement->fetchColumn();
+
+        if ($code === 'OWNER') {
+            $ownerRoleId = $roleId;
+        }
+
+        foreach ($role['permissions'] as $permissionCode) {
+            $rolePermissionStatement->execute([
+                'role_id' => $roleId,
+                'permission_id' => $permissionIds[$permissionCode]
+            ]);
+        }
     }
 
 
-    // 7. Assign Owner role to Administrator
+    // 6. Assign Owner role to Administrator
     $statement = $pdo->prepare("
         INSERT INTO user_roles (
             user_id,
@@ -222,7 +295,7 @@ try {
 
     $statement->execute([
         'user_id' => $userId,
-        'role_id' => $roleId
+        'role_id' => $ownerRoleId
     ]);
 
 
@@ -232,6 +305,7 @@ try {
     echo "Organization: GarageOS Demo Workshop\n";
     echo "Branch: Main Branch\n";
     echo "Admin: {$adminEmail}\n";
+    echo "Roles seeded: Owner, Manager, Service Advisor, Technician, Accountant, Parts Manager\n";
     echo "\nNext: php database/seeders/002_seed_service_catalog.php\n";
 
 } catch (Throwable $e) {
