@@ -121,37 +121,71 @@ $statement = $pdo->prepare("SELECT COUNT(*) FROM suppliers WHERE organization_id
 $statement->execute(['organization_id' => $organizationId]);
 $totalActiveSuppliers = (int) $statement->fetchColumn();
 
-// Fetch suppliers with their calculated outstanding balance
+// Fetch suppliers with their calculated outstanding balance. This used
+// to LEFT JOIN supplier_transactions and purchases in the same query —
+// two independent one-to-many relations joined together fan out into
+// every (transaction, purchase) pair, so SUM(debit)/SUM(credit) each
+// got multiplied by that supplier's purchase count. Confirmed live: a
+// supplier with a true ₹10,120 balance and 7 purchases showed
+// ₹70,840 (exactly ×7) on this page while their own ledger page
+// (which sums supplier_transactions alone, no join) correctly showed
+// ₹10,120. Correlated subqueries below match the same pattern
+// SupplierLedger::getOutstandingBalance() already uses — no join, no
+// fan-out, one row of arithmetic per supplier regardless of how many
+// purchases or transactions they have.
 $sql = "
-    SELECT
-        s.id, s.name, s.code, s.phone, s.email, s.address, s.gstin, s.created_at,
-        COALESCE(SUM(st.debit), 0) - COALESCE(SUM(st.credit), 0) AS outstanding_balance,
-        COUNT(DISTINCT p.id) AS purchase_count
-    FROM suppliers s
-    LEFT JOIN supplier_transactions st
-        ON st.supplier_id = s.id
-       AND st.organization_id = s.organization_id
-    LEFT JOIN purchases p
-        ON p.supplier_id = s.id
-       AND p.organization_id = s.organization_id
-    WHERE s.organization_id = :organization_id
-      AND s.status = 'active'
-    GROUP BY s.id, s.name, s.code, s.phone, s.email, s.address, s.gstin, s.created_at
+    SELECT * FROM (
+        SELECT
+            s.id, s.name, s.code, s.phone, s.email, s.address, s.gstin, s.created_at,
+            COALESCE((
+                SELECT SUM(st.debit) - SUM(st.credit)
+                FROM supplier_transactions st
+                WHERE st.supplier_id = s.id AND st.organization_id = s.organization_id
+            ), 0) AS outstanding_balance,
+            (
+                SELECT COUNT(*)
+                FROM purchases p
+                WHERE p.supplier_id = s.id AND p.organization_id = s.organization_id
+            ) AS purchase_count
+        FROM suppliers s
+        WHERE s.organization_id = :organization_id
+          AND s.status = 'active'
+    ) supplier_balances
 ";
 
 if ($filter === 'due') {
-    $sql .= " HAVING COALESCE(SUM(st.debit), 0) - COALESCE(SUM(st.credit), 0) > 0.009";
+    $sql .= " WHERE outstanding_balance > 0.009";
 } elseif ($filter === 'settled') {
-    $sql .= " HAVING COALESCE(SUM(st.debit), 0) - COALESCE(SUM(st.credit), 0) <= 0.009";
+    $sql .= " WHERE outstanding_balance <= 0.009";
 }
 
-$sql .= " ORDER BY outstanding_balance DESC, s.name ASC";
+$sql .= " ORDER BY outstanding_balance DESC, name ASC";
 
 $statement = $pdo->prepare($sql);
 $statement->execute(['organization_id' => $organizationId]);
 $suppliers = $statement->fetchAll(PDO::FETCH_ASSOC);
 
-$suppliersWithDuesCount = count(array_filter($suppliers, fn($s) => (float) $s['outstanding_balance'] > 0.009));
+// The "Has Balance Due" filter tab's own count — computed independent
+// of $filter (unlike $suppliers above, which is only *this* view's
+// rows) so the tab always states how many suppliers actually have a
+// due, not how many of the currently-filtered set happen to. Without
+// this, viewing "Settled / Clear" made the tab read "Has Balance Due
+// (0)" even when suppliers genuinely owed money — counting whatever
+// the active filter happened to return instead of the real total.
+$statement = $pdo->prepare("
+    SELECT COUNT(*) FROM (
+        SELECT COALESCE((
+            SELECT SUM(st.debit) - SUM(st.credit)
+            FROM supplier_transactions st
+            WHERE st.supplier_id = s.id AND st.organization_id = s.organization_id
+        ), 0) AS outstanding_balance
+        FROM suppliers s
+        WHERE s.organization_id = :organization_id AND s.status = 'active'
+    ) supplier_balances
+    WHERE outstanding_balance > 0.009
+");
+$statement->execute(['organization_id' => $organizationId]);
+$suppliersWithDuesCount = (int) $statement->fetchColumn();
 
 $editingSupplier = null;
 if ($editingSupplierId) {
