@@ -21,6 +21,16 @@ $supplierId     = (int) ($_GET['id'] ?? 0);
 $dateFrom       = $_GET['from'] ?? null;
 $dateTo         = $_GET['to'] ?? null;
 
+$isValidDate = static function (?string $value): bool {
+    if (!$value) {
+        return false;
+    }
+    $parsed = DateTime::createFromFormat('!Y-m-d', $value);
+    return $parsed && $parsed->format('Y-m-d') === $value;
+};
+$dateFrom = $isValidDate($dateFrom) ? $dateFrom : null;
+$dateTo   = $isValidDate($dateTo) ? $dateTo : null;
+
 $statement = $pdo->prepare("
     SELECT id, name, code, phone, email, address, gstin
     FROM suppliers
@@ -47,23 +57,30 @@ header('Expires: 0');
 
 $output = fopen('php://output', 'w');
 
+// PHP 8.4 deprecates calling fputcsv() without an explicit $escape, and
+// the global error handler turns that deprecation into a 500 — so every
+// row goes through here with all arguments spelled out.
+$writeRow = static function (array $fields) use ($output): void {
+    fputcsv($output, $fields, ',', '"', '\\');
+};
+
 // BOM for UTF-8 Excel compatibility
 fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 
 // Header metadata
-fputcsv($output, ['Supplier Statement']);
-fputcsv($output, ['Supplier Name', $supplier['name']]);
-fputcsv($output, ['Supplier Code', $supplier['code'] ?? '']);
-fputcsv($output, ['Phone', $supplier['phone'] ?? '']);
-fputcsv($output, ['GSTIN', $supplier['gstin'] ?? '']);
+$writeRow(['Supplier Statement']);
+$writeRow(['Supplier Name', $supplier['name']]);
+$writeRow(['Supplier Code', $supplier['code'] ?? '']);
+$writeRow(['Phone', $supplier['phone'] ?? '']);
+$writeRow(['GSTIN', $supplier['gstin'] ?? '']);
 if ($dateFrom || $dateTo) {
-    fputcsv($output, ['Period', ($dateFrom ?: 'Beginning') . ' to ' . ($dateTo ?: 'Today')]);
+    $writeRow(['Period', ($dateFrom ?: 'Beginning') . ' to ' . ($dateTo ?: 'Today')]);
 }
-fputcsv($output, ['Generated On', date('Y-m-d H:i:s')]);
-fputcsv($output, []); // blank row
+$writeRow(['Generated On', date('Y-m-d H:i:s')]);
+$writeRow([]); // blank row
 
 // Table columns
-fputcsv($output, [
+$writeRow([
     'Date',
     'Type',
     'Reference No',
@@ -94,7 +111,7 @@ foreach ($rows as $row) {
     $totalCredit += (float) $row['credit'];
     $finalBalance = (float) $row['running_balance'];
 
-    fputcsv($output, [
+    $writeRow([
         $row['transaction_date'],
         $txnTypeLabels[$row['transaction_type']] ?? $row['transaction_type'],
         $row['reference_no'] ?? '',
@@ -105,8 +122,8 @@ foreach ($rows as $row) {
     ]);
 }
 
-fputcsv($output, []); // blank row
-fputcsv($output, [
+$writeRow([]); // blank row
+$writeRow([
     'Total / Current Balance',
     '',
     '',
