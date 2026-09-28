@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $statement->execute(['id' => $purchaseId, 'organization_id' => $organizationId]);
     $purchase = $statement->fetch(PDO::FETCH_ASSOC);
 
-    $balanceDue = $purchase ? (float) $purchase['total'] - (float) $purchase['amount_paid'] : 0;
+    $balanceDue = $purchase ? (float) $purchase['total'] - (float) $purchase['amount_paid'] - (float) $purchase['amount_credited'] : 0;
 
     if (!$purchase) {
         $error = 'Purchase not found.';
@@ -86,7 +86,7 @@ $supplierPayables = $ledger->getOrganizationPayables($organizationId);
 $totalPayable = $ledger->getTotalPayable($organizationId);
 
 $statement = $pdo->prepare("
-    SELECT p.id, p.purchase_no, p.total, p.amount_paid, p.payment_status, p.created_at, p.supplier_id, s.name AS supplier_name
+    SELECT p.id, p.purchase_no, p.total, p.amount_paid, p.amount_credited, p.payment_status, p.created_at, p.supplier_id, s.name AS supplier_name
     FROM purchases p
     INNER JOIN suppliers s ON s.id = p.supplier_id
     WHERE p.organization_id = :organization_id AND p.payment_status != 'paid'
@@ -221,8 +221,8 @@ $topbarTitle = 'Debt';
                             <table class="data-table">
                                 <tr><th>Purchase</th><th>Supplier</th><th>Status</th><th>Balance due</th><th></th></tr>
                                 <?php foreach ($payableRows as $row): ?>
-                                    <?php $rowBalance = (float) $row['total'] - (float) $row['amount_paid']; ?>
-                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>&tab=bills">
+                                    <?php $rowBalance = (float) $row['total'] - (float) $row['amount_paid'] - (float) $row['amount_credited']; ?>
+                                    <tr class="clickable" data-href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>&tab=bills#bill-<?= (int) $row['id'] ?>">
                                         <td><strong><?= htmlspecialchars($row['purchase_no']) ?></strong></td>
                                         <td>
                                             <a href="/supplier.php?id=<?= (int) $row['supplier_id'] ?>" style="text-decoration: none; color: inherit; font-weight: 500;">

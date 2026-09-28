@@ -27,17 +27,37 @@ class SupplierLedger
      */
     public function getSupplierSummary(int $organizationId, int $supplierId): array
     {
+        // The category totals skip every reversed entry and every reversal:
+        // a cancelled ₹100,000 credit and the entry cancelling it net to
+        // nothing, so neither should inflate "Credits" (or "Paid", etc.).
+        // outstanding_balance still sums every row — the pair cancels there.
         $statement = $this->pdo->prepare("
+            WITH entries AS (
+                SELECT
+                    st.transaction_type,
+                    st.debit,
+                    st.credit,
+                    (
+                        st.reference_type IS NOT DISTINCT FROM 'supplier_transaction'
+                        OR EXISTS (
+                            SELECT 1 FROM supplier_transactions r
+                            WHERE r.organization_id = st.organization_id
+                              AND r.reference_type  = 'supplier_transaction'
+                              AND r.reference_id    = st.id
+                        )
+                    ) AS is_cancelled_pair
+                FROM supplier_transactions st
+                WHERE st.organization_id = :organization_id
+                  AND st.supplier_id     = :supplier_id
+            )
             SELECT
-                COALESCE(SUM(CASE WHEN transaction_type = 'PURCHASE'           THEN debit END), 0) AS total_purchases,
-                COALESCE(SUM(CASE WHEN transaction_type = 'PAYMENT'            THEN credit END), 0) AS total_payments,
-                COALESCE(SUM(CASE WHEN transaction_type IN ('CREDIT_ADJUSTMENT', 'PURCHASE_RETURN', 'REFUND') THEN credit END), 0) AS total_credits,
-                COALESCE(SUM(CASE WHEN transaction_type IN ('DEBIT_ADJUSTMENT') THEN debit END), 0) AS total_debits,
-                COALESCE(SUM(CASE WHEN transaction_type = 'OPENING_BALANCE'    THEN debit END), 0) AS total_opening,
+                COALESCE(SUM(CASE WHEN NOT is_cancelled_pair AND transaction_type = 'PURCHASE'        THEN debit END), 0) AS total_purchases,
+                COALESCE(SUM(CASE WHEN NOT is_cancelled_pair AND transaction_type = 'PAYMENT'         THEN credit END), 0) AS total_payments,
+                COALESCE(SUM(CASE WHEN NOT is_cancelled_pair AND transaction_type IN ('CREDIT_ADJUSTMENT', 'PURCHASE_RETURN', 'REFUND') THEN credit END), 0) AS total_credits,
+                COALESCE(SUM(CASE WHEN NOT is_cancelled_pair AND transaction_type = 'DEBIT_ADJUSTMENT' THEN debit END), 0) AS total_debits,
+                COALESCE(SUM(CASE WHEN NOT is_cancelled_pair AND transaction_type = 'OPENING_BALANCE'  THEN debit END), 0) AS total_opening,
                 COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) AS outstanding_balance
-            FROM supplier_transactions
-            WHERE organization_id = :organization_id
-              AND supplier_id     = :supplier_id
+            FROM entries
         ");
         $statement->execute([
             'organization_id' => $organizationId,
@@ -288,61 +308,7 @@ class SupplierLedger
         // Generate reference number
         $payRefNo = $this->generateReferenceNo($organizationId, 'PAY');
 
-        // Resolve allocations: if empty, auto-allocate to unpaid purchases in FIFO order
-        $resolvedAllocations = [];
-        $unallocatedAmount = $amount;
-
-        if (!empty($allocations)) {
-            $billStatement = $this->pdo->prepare("
-                SELECT purchase_no, total - amount_paid AS balance_due
-                FROM purchases
-                WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
-            ");
-            foreach ($allocations as $alloc) {
-                $pId = (int) ($alloc['purchase_id'] ?? 0);
-                $pAmt = (float) ($alloc['amount'] ?? 0);
-                if ($pId > 0 && $pAmt > 0) {
-                    $billStatement->execute([
-                        'id'              => $pId,
-                        'organization_id' => $organizationId,
-                        'supplier_id'     => $supplierId
-                    ]);
-                    $bill = $billStatement->fetch(PDO::FETCH_ASSOC);
-                    if (!$bill) {
-                        throw new RuntimeException('The selected bill does not belong to this supplier.');
-                    }
-                    $billDue = (float) $bill['balance_due'];
-                    if ($billDue <= 0.009) {
-                        throw new RuntimeException('Bill ' . $bill['purchase_no'] . ' is already fully paid.');
-                    }
-                    if ($pAmt > $billDue + 0.01) {
-                        throw new RuntimeException(
-                            'Payment of ₹' . number_format($pAmt, 2) . ' exceeds the ₹' . number_format($billDue, 2)
-                            . ' due on bill ' . $bill['purchase_no'] . '. Reduce the amount or choose "Auto-Settle" to spread it across bills.'
-                        );
-                    }
-                    $resolvedAllocations[] = ['purchase_id' => $pId, 'amount' => $pAmt];
-                    $unallocatedAmount -= $pAmt;
-                }
-            }
-        } else {
-            // Auto FIFO allocation
-            $unpaid = $this->getUnpaidPurchases($organizationId, $supplierId);
-            foreach ($unpaid as $bill) {
-                if ($unallocatedAmount <= 0.009) {
-                    break;
-                }
-                $due = (float) $bill['balance_due'];
-                $allocAmt = min($unallocatedAmount, $due);
-                if ($allocAmt > 0) {
-                    $resolvedAllocations[] = [
-                        'purchase_id' => (int) $bill['id'],
-                        'amount'      => $allocAmt
-                    ];
-                    $unallocatedAmount -= $allocAmt;
-                }
-            }
-        }
+        $resolvedAllocations = $this->resolveBillAllocations($organizationId, $supplierId, $amount, $allocations, 'Payment');
 
         $firstPurchaseId = count($resolvedAllocations) === 1
             ? $resolvedAllocations[0]['purchase_id']
@@ -398,17 +364,6 @@ class SupplierLedger
                 VALUES (:payment_id, :purchase_id, :amount)
             ");
 
-            $updatePurchase = $this->pdo->prepare("
-                UPDATE purchases
-                SET amount_paid = LEAST(total, amount_paid + :amount),
-                    payment_status = CASE
-                        WHEN amount_paid + :amount2 >= total - 0.01 THEN 'paid'
-                        ELSE 'partial'
-                    END,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND organization_id = :organization_id
-            ");
-
             foreach ($resolvedAllocations as $alloc) {
                 $allocStatement->execute([
                     'payment_id'  => $paymentId,
@@ -416,16 +371,111 @@ class SupplierLedger
                     'amount'      => $alloc['amount']
                 ]);
 
-                $updatePurchase->execute([
-                    'amount'          => $alloc['amount'],
-                    'amount2'         => $alloc['amount'],
-                    'id'              => $alloc['purchase_id'],
-                    'organization_id' => $organizationId
-                ]);
+                $this->adjustBillSettlement($organizationId, $alloc['purchase_id'], 'amount_paid', $alloc['amount']);
             }
         }
 
         return $paymentId;
+    }
+
+    /**
+     * Decide which bills a payment or credit note settles. With an explicit
+     * [{purchase_id, amount}] list, each bill is checked against this
+     * supplier and its remaining balance; with an empty list, the amount is
+     * spread across unpaid bills oldest-first. Anything left over (e.g. it
+     * covers an opening balance or extra charge) stays unallocated.
+     */
+    private function resolveBillAllocations(
+        int $organizationId,
+        int $supplierId,
+        float $amount,
+        array $allocations,
+        string $label
+    ): array {
+        $resolved  = [];
+        $remaining = $amount;
+
+        if (!empty($allocations)) {
+            $billStatement = $this->pdo->prepare("
+                SELECT purchase_no, total - amount_paid - amount_credited AS balance_due
+                FROM purchases
+                WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
+                FOR UPDATE
+            ");
+            foreach ($allocations as $alloc) {
+                $pId  = (int) ($alloc['purchase_id'] ?? 0);
+                $pAmt = (float) ($alloc['amount'] ?? 0);
+                if ($pId <= 0 || $pAmt <= 0) {
+                    continue;
+                }
+                $billStatement->execute([
+                    'id'              => $pId,
+                    'organization_id' => $organizationId,
+                    'supplier_id'     => $supplierId
+                ]);
+                $bill = $billStatement->fetch(PDO::FETCH_ASSOC);
+                if (!$bill) {
+                    throw new RuntimeException('The selected bill does not belong to this supplier.');
+                }
+                $billDue = (float) $bill['balance_due'];
+                if ($billDue <= 0.009) {
+                    throw new RuntimeException('Bill ' . $bill['purchase_no'] . ' is already fully settled.');
+                }
+                if ($pAmt > $billDue + 0.01) {
+                    throw new RuntimeException(
+                        $label . ' of ₹' . number_format($pAmt, 2) . ' exceeds the ₹' . number_format($billDue, 2)
+                        . ' due on bill ' . $bill['purchase_no'] . '. Reduce the amount or choose the oldest-bills-first option to spread it across bills.'
+                    );
+                }
+                $resolved[] = ['purchase_id' => $pId, 'amount' => $pAmt];
+            }
+
+            return $resolved;
+        }
+
+        foreach ($this->getUnpaidPurchases($organizationId, $supplierId) as $bill) {
+            if ($remaining <= 0.009) {
+                break;
+            }
+            $allocAmt = min($remaining, (float) $bill['balance_due']);
+            if ($allocAmt > 0.009) {
+                $resolved[] = ['purchase_id' => (int) $bill['id'], 'amount' => round($allocAmt, 2)];
+                $remaining -= $allocAmt;
+            }
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * Add (or with a negative amount, remove) a payment or credit on one
+     * bill and recompute its status from paid + credited against total.
+     */
+    private function adjustBillSettlement(int $organizationId, int $purchaseId, string $column, float $amount): void
+    {
+        if (!in_array($column, ['amount_paid', 'amount_credited'], true)) {
+            throw new InvalidArgumentException('Unknown settlement column.');
+        }
+        $other = $column === 'amount_paid' ? 'amount_credited' : 'amount_paid';
+
+        $statement = $this->pdo->prepare("
+            UPDATE purchases
+            SET {$column} = GREATEST(0, LEAST(total - {$other}, {$column} + :amount)),
+                payment_status = CASE
+                    WHEN GREATEST(0, LEAST(total - {$other}, {$column} + :amount2)) + {$other} >= total - 0.01 THEN 'paid'
+                    WHEN GREATEST(0, LEAST(total - {$other}, {$column} + :amount3)) + {$other} <= 0.009 THEN 'unpaid'
+                    ELSE 'partial'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND organization_id = :organization_id
+        ");
+        $statement->execute([
+            'amount'          => $amount,
+            'amount2'         => $amount,
+            'amount3'         => $amount,
+            'id'              => $purchaseId,
+            'organization_id' => $organizationId
+        ]);
     }
 
     /**
@@ -436,7 +486,8 @@ class SupplierLedger
         int $supplierId,
         float $amount,
         string $reason,
-        array $user
+        array $user,
+        ?int $purchaseId = null
     ): int {
         // Guard: prevent credit adjustments that exceed the outstanding balance
         $currentBalance = $this->getOutstandingBalance($organizationId, $supplierId);
@@ -454,9 +505,17 @@ class SupplierLedger
             );
         }
 
+        $allocations = $this->resolveBillAllocations(
+            $organizationId,
+            $supplierId,
+            $amount,
+            $purchaseId ? [['purchase_id' => $purchaseId, 'amount' => $amount]] : [],
+            'Credit'
+        );
+
         $refNo = $this->generateReferenceNo($organizationId, 'ADJ');
 
-        return $this->insertTransaction(
+        $transactionId = $this->insertTransaction(
             $organizationId,
             $supplierId,
             'CREDIT_ADJUSTMENT',
@@ -469,6 +528,21 @@ class SupplierLedger
             null,
             $user['id']
         );
+
+        $allocStatement = $this->pdo->prepare("
+            INSERT INTO supplier_credit_allocations (supplier_transaction_id, purchase_id, amount)
+            VALUES (:transaction_id, :purchase_id, :amount)
+        ");
+        foreach ($allocations as $alloc) {
+            $allocStatement->execute([
+                'transaction_id' => $transactionId,
+                'purchase_id'    => $alloc['purchase_id'],
+                'amount'         => $alloc['amount']
+            ]);
+            $this->adjustBillSettlement($organizationId, $alloc['purchase_id'], 'amount_credited', $alloc['amount']);
+        }
+
+        return $transactionId;
     }
 
     /**
@@ -570,29 +644,22 @@ class SupplierLedger
                 WHERE supplier_payment_id = :payment_id
             ");
             $allocStmt->execute(['payment_id' => $original['reference_id']]);
-            $allocations = $allocStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $rollbackPurchase = $this->pdo->prepare("
-                UPDATE purchases
-                SET amount_paid = GREATEST(0, amount_paid - :amount),
-                    payment_status = CASE
-                        WHEN GREATEST(0, amount_paid - :amount2) <= 0.009 THEN 'unpaid'
-                        WHEN GREATEST(0, amount_paid - :amount3) >= total - 0.01 THEN 'paid'
-                        ELSE 'partial'
-                    END,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND organization_id = :organization_id
-            ");
-
-            foreach ($allocations as $alloc) {
-                $rollbackPurchase->execute([
-                    'amount'          => $alloc['amount'],
-                    'amount2'         => $alloc['amount'],
-                    'amount3'         => $alloc['amount'],
-                    'id'              => $alloc['purchase_id'],
-                    'organization_id' => $organizationId
-                ]);
+            foreach ($allocStmt->fetchAll(PDO::FETCH_ASSOC) as $alloc) {
+                $this->adjustBillSettlement($organizationId, (int) $alloc['purchase_id'], 'amount_paid', -(float) $alloc['amount']);
             }
+        }
+
+        // Reversing a credit note reopens the bills it had been applied to.
+        $creditAllocStmt = $this->pdo->prepare("
+            SELECT purchase_id, amount
+            FROM supplier_credit_allocations
+            WHERE supplier_transaction_id = :transaction_id
+        ");
+        $creditAllocStmt->execute(['transaction_id' => $transactionId]);
+
+        foreach ($creditAllocStmt->fetchAll(PDO::FETCH_ASSOC) as $alloc) {
+            $this->adjustBillSettlement($organizationId, (int) $alloc['purchase_id'], 'amount_credited', -(float) $alloc['amount']);
         }
 
         // Swap debit/credit to reverse
@@ -627,7 +694,11 @@ class SupplierLedger
     {
         $purchaseIds = [];
         $paymentIds  = [];
+        $creditIds   = [];
         foreach ($entries as $entry) {
+            if ((float) $entry['credit'] > 0 && $entry['reference_type'] === null) {
+                $creditIds[] = (int) $entry['id'];
+            }
             if (!$entry['reference_id']) {
                 continue;
             }
@@ -638,13 +709,28 @@ class SupplierLedger
             }
         }
 
-        $details = ['purchases' => [], 'purchase_items' => [], 'payments' => [], 'allocations' => []];
+        $details = ['purchases' => [], 'purchase_items' => [], 'payments' => [], 'allocations' => [], 'credit_allocations' => []];
+
+        if ($creditIds) {
+            $in = implode(',', array_fill(0, count($creditIds), '?'));
+            $statement = $this->pdo->prepare("
+                SELECT sca.supplier_transaction_id, sca.purchase_id, sca.amount, pu.purchase_no
+                FROM supplier_credit_allocations sca
+                INNER JOIN purchases pu ON pu.id = sca.purchase_id
+                WHERE pu.organization_id = ? AND pu.supplier_id = ? AND sca.supplier_transaction_id IN ($in)
+                ORDER BY sca.id
+            ");
+            $statement->execute(array_merge([$organizationId, $supplierId], $creditIds));
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $details['credit_allocations'][(int) $row['supplier_transaction_id']][] = $row;
+            }
+        }
 
         if ($purchaseIds) {
             $in = implode(',', array_fill(0, count($purchaseIds), '?'));
 
             $statement = $this->pdo->prepare("
-                SELECT id, purchase_no, total, amount_paid, payment_status
+                SELECT id, purchase_no, total, amount_paid, amount_credited, payment_status
                 FROM purchases
                 WHERE organization_id = ? AND supplier_id = ? AND id IN ($in)
             ");
@@ -910,8 +996,8 @@ class SupplierLedger
     public function getAllPurchases(int $organizationId, int $supplierId): array
     {
         $statement = $this->pdo->prepare("
-            SELECT id, purchase_no, subtotal, tax_amount, total, amount_paid, payment_status, created_at,
-                   (total - amount_paid) AS balance_due
+            SELECT id, purchase_no, subtotal, tax_amount, total, amount_paid, amount_credited, payment_status, created_at,
+                   (total - amount_paid - amount_credited) AS balance_due
             FROM purchases
             WHERE organization_id = :organization_id
               AND supplier_id     = :supplier_id
@@ -932,7 +1018,7 @@ class SupplierLedger
     public function getUnpaidPurchases(int $organizationId, int $supplierId): array
     {
         $statement = $this->pdo->prepare("
-            SELECT id, purchase_no, total, amount_paid, (total - amount_paid) AS balance_due, created_at
+            SELECT id, purchase_no, total, amount_paid, amount_credited, (total - amount_paid - amount_credited) AS balance_due, created_at
             FROM purchases
             WHERE organization_id = :organization_id
               AND supplier_id     = :supplier_id

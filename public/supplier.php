@@ -102,7 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 }
 
                 if ($adjType === 'credit') {
-                    $txnId = $ledger->recordCreditAdjustment($organizationId, $supplierId, $amount, $reason, $user);
+                    $creditPurchaseId = (int) ($_POST['purchase_id'] ?? 0) ?: null;
+                    $txnId = $ledger->recordCreditAdjustment($organizationId, $supplierId, $amount, $reason, $user, $creditPurchaseId);
                     log_audit_event($pdo, $user, 'create', 'supplier_transaction', $txnId,
                         'Credit adjustment of ₹' . number_format($amount, 2) . ' for ' . $supplier['name'] . ': ' . $reason
                     );
@@ -769,7 +770,9 @@ $topbarTitle = $supplier['name'];
                         </div>
                         <div class="stat-icon"><?= icon('receipt', 17) ?></div>
                     </div>
-                    <div class="stat-meta">Discounts & adjustments</div>
+                    <div class="stat-meta">
+                        Discounts & returns<?php if ((float) $summary['total_debits'] > 0.009): ?> · Extra charges ₹<?= number_format((float) $summary['total_debits'], 2) ?><?php endif; ?>
+                    </div>
                 </div>
 
                 <div class="card stat-card">
@@ -987,7 +990,7 @@ $topbarTitle = $supplier['name'];
                                                         <?php
                                                         $detailBill  = $entryDetails['purchases'][$refId];
                                                         $detailItems = $entryDetails['purchase_items'][$refId] ?? [];
-                                                        $detailDue   = (float) $detailBill['total'] - (float) $detailBill['amount_paid'];
+                                                        $detailDue   = (float) $detailBill['total'] - (float) $detailBill['amount_paid'] - (float) $detailBill['amount_credited'];
                                                         ?>
                                                         <div class="ledger-detail-title">Items on bill <?= htmlspecialchars($detailBill['purchase_no']) ?></div>
                                                         <?php if ($detailItems): ?>
@@ -1009,6 +1012,9 @@ $topbarTitle = $supplier['name'];
                                                         <div class="ledger-detail-meta">
                                                             Bill total <strong>₹<?= number_format((float) $detailBill['total'], 2) ?></strong>
                                                             · Paid <strong>₹<?= number_format((float) $detailBill['amount_paid'], 2) ?></strong>
+                                                            <?php if ((float) $detailBill['amount_credited'] > 0.009): ?>
+                                                                · Credits <strong>₹<?= number_format((float) $detailBill['amount_credited'], 2) ?></strong>
+                                                            <?php endif; ?>
                                                             · Still due <strong>₹<?= number_format(max(0, $detailDue), 2) ?></strong>
                                                             · <a href="<?= $billUrl ?>" class="link-action">Open in Purchase Bills</a>
                                                         </div>
@@ -1024,10 +1030,28 @@ $topbarTitle = $supplier['name'];
                                                                 · UTR / Ref <strong><?= htmlspecialchars($detailPayment['reference_no']) ?></strong>
                                                             <?php endif; ?>
                                                         </div>
-                                                        <div class="ledger-detail-title" style="margin-top:10px;">Bills settled by this payment</div>
+                                                        <div class="ledger-detail-title" style="margin-top:10px;">
+                                                            <?= $cancelledBy ? 'Bills this payment had settled (reopened when it was cancelled)' : 'Bills settled by this payment' ?>
+                                                        </div>
                                                         <?php if ($detailAllocs): ?>
                                                             <div class="ledger-chip-row">
                                                                 <?php foreach ($detailAllocs as $alloc): ?>
+                                                                    <a href="?id=<?= $supplierId ?>&tab=bills#bill-<?= (int) $alloc['purchase_id'] ?>" class="ledger-chip">
+                                                                        <?= htmlspecialchars($alloc['purchase_no']) ?> · ₹<?= number_format((float) $alloc['amount'], 2) ?>
+                                                                    </a>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <div class="muted">Not linked to a specific bill — it reduced the overall balance (opening balance or extra charges).</div>
+                                                        <?php endif; ?>
+                                                    <?php elseif ((float) $entry['credit'] > 0 && $entry['reference_type'] === null): ?>
+                                                        <?php $detailCreditAllocs = $entryDetails['credit_allocations'][$entryId] ?? []; ?>
+                                                        <div class="ledger-detail-title">
+                                                            <?= $cancelledBy ? 'Bills this credit had reduced (reopened when it was cancelled)' : 'Bills this credit was applied to' ?>
+                                                        </div>
+                                                        <?php if ($detailCreditAllocs): ?>
+                                                            <div class="ledger-chip-row">
+                                                                <?php foreach ($detailCreditAllocs as $alloc): ?>
                                                                     <a href="?id=<?= $supplierId ?>&tab=bills#bill-<?= (int) $alloc['purchase_id'] ?>" class="ledger-chip">
                                                                         <?= htmlspecialchars($alloc['purchase_no']) ?> · ₹<?= number_format((float) $alloc['amount'], 2) ?>
                                                                     </a>
@@ -1116,6 +1140,7 @@ $topbarTitle = $supplier['name'];
                                         <th>Date</th>
                                         <th style="text-align:right;">Bill Total</th>
                                         <th style="text-align:right;">Paid</th>
+                                        <th style="text-align:right;" title="Discounts and returns applied to this bill">Credits</th>
                                         <th style="text-align:right;">Balance Due</th>
                                         <th>Status</th>
                                         <th style="text-align:right;"></th>
@@ -1134,12 +1159,15 @@ $topbarTitle = $supplier['name'];
                                             <td style="font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($bill['created_at']))) ?></td>
                                             <td class="num">₹<?= number_format((float) $bill['total'], 2) ?></td>
                                             <td class="num" style="color:var(--success);">₹<?= number_format((float) $bill['amount_paid'], 2) ?></td>
+                                            <td class="num" style="color:var(--success);">
+                                                <?= (float) $bill['amount_credited'] > 0.009 ? '₹' . number_format((float) $bill['amount_credited'], 2) : '<span class="muted">—</span>' ?>
+                                            </td>
                                             <td class="num" style="font-weight:700; color: <?= $due > 0.009 ? 'var(--danger)' : 'var(--success)' ?>;">
-                                                ₹<?= number_format($due, 2) ?>
+                                                ₹<?= number_format(max(0, $due), 2) ?>
                                             </td>
                                             <td>
                                                 <span class="badge <?= $statusClass ?>" style="font-size:11px;">
-                                                    <?= ucfirst($bill['payment_status']) ?>
+                                                    <?= $bill['payment_status'] === 'paid' && (float) $bill['amount_credited'] > 0.009 ? 'Settled' : ucfirst($bill['payment_status']) ?>
                                                 </span>
                                             </td>
                                             <td style="text-align:right;">
@@ -1443,6 +1471,20 @@ $topbarTitle = $supplier['name'];
                                 <?= $isPayable ? 'Max credit: ₹' . number_format($outstandingBal, 2) : '' ?>
                             </small>
                         </div>
+                        <?php if ($unpaidPurchases): ?>
+                            <div class="form-field" id="adj-bill-field">
+                                <label>Apply credit to</label>
+                                <select name="purchase_id" id="adj-purchase-id" onchange="updateAdjMaxHint()">
+                                    <option value="" data-due="">Oldest unpaid bills first</option>
+                                    <?php foreach ($unpaidPurchases as $up): ?>
+                                        <option value="<?= (int) $up['id'] ?>" data-due="<?= number_format((float) $up['balance_due'], 2, '.', '') ?>">
+                                            <?= htmlspecialchars($up['purchase_no']) ?> — Due: ₹<?= number_format((float) $up['balance_due'], 2) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <small style="color:var(--muted); font-size:11.5px; margin-top:3px; display:block;">The credit reduces what's due on the bill, so the Bills tab stays in step with the ledger.</small>
+                            </div>
+                        <?php endif; ?>
                         <div class="form-field">
                             <label>Reason / Note</label>
                             <input type="text" name="reason" required placeholder="e.g. Volume discount on brake pads, returned defective piece">
@@ -1630,10 +1672,19 @@ function updateAdjMaxHint() {
     const amtInput = document.getElementById('adj-amount');
     if (!adjType || !hint) return;
 
+    const billField = document.getElementById('adj-bill-field');
+    const billSelect = document.getElementById('adj-purchase-id');
+    if (billField) billField.style.display = adjType.value === 'credit' ? '' : 'none';
+    if (billSelect && adjType.value !== 'credit') billSelect.value = '';
+
     if (adjType.value === 'credit' && OUTSTANDING_BAL > 0) {
+        const option = billSelect ? billSelect.options[billSelect.selectedIndex] : null;
+        const billDue = option && option.dataset.due ? parseFloat(option.dataset.due) : null;
+        const maxCredit = billDue !== null ? Math.min(billDue, OUTSTANDING_BAL) : OUTSTANDING_BAL;
         hint.style.display = 'block';
-        hint.textContent = 'Max credit: \u20b9' + OUTSTANDING_BAL.toLocaleString('en-IN', {minimumFractionDigits: 2});
-        if (amtInput) amtInput.max = OUTSTANDING_BAL.toFixed(2);
+        hint.textContent = (billDue !== null ? 'Max credit on this bill: \u20b9' : 'Max credit: \u20b9')
+            + maxCredit.toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (amtInput) amtInput.max = maxCredit.toFixed(2);
     } else {
         hint.style.display = 'none';
         if (amtInput) amtInput.removeAttribute('max');
