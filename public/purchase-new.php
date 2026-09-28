@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } catch (Throwable $e) {
             $pdo->rollBack();
-            $error = $e->getMessage();
+            $error = user_facing_error($e);
         }
     }
 }

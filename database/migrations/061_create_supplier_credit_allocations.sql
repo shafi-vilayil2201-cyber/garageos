@@ -31,6 +31,24 @@ CREATE TABLE supplier_credit_allocations (
 CREATE INDEX idx_sca_transaction ON supplier_credit_allocations (supplier_transaction_id);
 CREATE INDEX idx_sca_purchase    ON supplier_credit_allocations (purchase_id);
 
+-- Reversing a purchase now cancels its bill (purchases.status =
+-- 'cancelled'). Bring earlier reversals in line so those bills stop
+-- showing as due. Their stock is left as-is: whether those parts were
+-- already used can't be known after the fact.
+UPDATE purchases p
+SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+WHERE p.status <> 'cancelled'
+  AND EXISTS (
+      SELECT 1
+      FROM supplier_transactions o
+      INNER JOIN supplier_transactions r
+          ON r.reference_type = 'supplier_transaction'
+         AND r.reference_id   = o.id
+      WHERE o.transaction_type = 'PURCHASE'
+        AND o.reference_type   = 'purchase'
+        AND o.reference_id     = p.id
+  );
+
 -- Backfill: apply every existing, still-active credit note to that
 -- supplier's bills oldest-first. Credits and bill balances are each laid
 -- end to end as running ranges per supplier; a credit covers a bill by
@@ -63,6 +81,7 @@ bills AS (
         SUM(p.total - p.amount_paid) OVER w                             AS range_end
     FROM purchases p
     WHERE p.total - p.amount_paid > 0.009
+      AND p.status <> 'cancelled'
     WINDOW w AS (PARTITION BY p.organization_id, p.supplier_id ORDER BY p.created_at, p.id)
 )
 INSERT INTO supplier_credit_allocations (supplier_transaction_id, purchase_id, amount)

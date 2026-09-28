@@ -115,11 +115,12 @@ $topbarTitle = 'Purchases';
                                 </tr>
                                 <?php foreach ($purchases as $purchase): ?>
                                     <?php
-                                    $paymentStatus = $purchase['payment_status'] ?? 'unpaid';
+                                    $paymentStatus = $purchase['status'] === 'cancelled' ? 'cancelled' : ($purchase['payment_status'] ?? 'unpaid');
                                     $statusBadgeClass = match ($paymentStatus) {
-                                        'paid'    => 'badge-success',
-                                        'partial' => 'badge-warning',
-                                        default   => 'badge-danger'
+                                        'paid'      => 'badge-success',
+                                        'partial'   => 'badge-warning',
+                                        'cancelled' => 'badge-neutral',
+                                        default     => 'badge-danger'
                                     };
                                     ?>
                                     <tr class="clickable" data-href="/supplier.php?id=<?= (int) $purchase['supplier_id'] ?>&tab=bills#bill-<?= (int) $purchase['id'] ?>">

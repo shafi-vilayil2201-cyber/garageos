@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $error = $e->getMessage();
+            $error = user_facing_error($e);
         }
     }
 }
@@ -89,7 +89,7 @@ $statement = $pdo->prepare("
     SELECT p.id, p.purchase_no, p.total, p.amount_paid, p.amount_credited, p.payment_status, p.created_at, p.supplier_id, s.name AS supplier_name
     FROM purchases p
     INNER JOIN suppliers s ON s.id = p.supplier_id
-    WHERE p.organization_id = :organization_id AND p.payment_status != 'paid'
+    WHERE p.organization_id = :organization_id AND p.payment_status != 'paid' AND p.status != 'cancelled'
     ORDER BY p.created_at DESC
 ");
 $statement->execute(['organization_id' => $organizationId]);

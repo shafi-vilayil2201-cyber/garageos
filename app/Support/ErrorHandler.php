@@ -92,6 +92,23 @@ function garageos_handle_shutdown(): void
     }
 }
 
+// For pages that catch an exception and show it inline (toast / form
+// error): our own validation errors are thrown as RuntimeException with a
+// message written for the user, so those show as-is. Database errors
+// (PDOException is also a RuntimeException, hence checked first) and
+// anything else are logged and replaced with a generic message, so SQL
+// text never reaches the screen.
+function user_facing_error(Throwable $e, string $fallback = 'Something went wrong while saving. Please try again.'): string
+{
+    if ($e instanceof RuntimeException && !($e instanceof PDOException)) {
+        return $e->getMessage();
+    }
+
+    error_log('[GarageOS] ' . get_class($e) . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+
+    return $fallback;
+}
+
 set_exception_handler('garageos_handle_exception');
 set_error_handler('garageos_handle_error');
 register_shutdown_function('garageos_handle_shutdown');

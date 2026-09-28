@@ -221,14 +221,24 @@ class SupplierLedger
      */
     public function getTotalPayable(int $organizationId): float
     {
+        // Per-supplier balances first, then add up only the positive ones:
+        // a supplier who owes *you* (credit surplus) must not reduce what
+        // you owe everyone else.
         $statement = $this->pdo->prepare("
-            SELECT COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)
-            FROM supplier_transactions
-            WHERE organization_id = :organization_id
+            SELECT COALESCE(SUM(balance), 0)
+            FROM (
+                SELECT SUM(st.debit) - SUM(st.credit) AS balance
+                FROM supplier_transactions st
+                INNER JOIN suppliers s ON s.id = st.supplier_id AND s.organization_id = st.organization_id
+                WHERE st.organization_id = :organization_id
+                  AND s.status = 'active'
+                GROUP BY st.supplier_id
+            ) supplier_balances
+            WHERE balance > 0.009
         ");
         $statement->execute(['organization_id' => $organizationId]);
 
-        return max(0, (float) $statement->fetchColumn());
+        return (float) $statement->fetchColumn();
     }
 
     // -----------------------------------------------------------------
@@ -287,13 +297,19 @@ class SupplierLedger
         array $user
     ): int {
         $paymentDate = $paymentDate ?: date('Y-m-d');
+        $this->assertPastOrToday($paymentDate, 'payment date');
+        if (!in_array($method, self::PAYMENT_METHODS, true)) {
+            throw new RuntimeException('Choose a valid payment method.');
+        }
+
+        $this->lockSupplier($organizationId, $supplierId);
 
         // Guard: prevent payments when supplier already has a credit surplus
         $currentBalance = $this->getOutstandingBalance($organizationId, $supplierId);
-        if ($currentBalance <= 0) {
-            throw new RuntimeException(
-                'This supplier has a credit surplus of ₹' . number_format(abs($currentBalance), 2)
-                . '. No payment is due. Reverse the excess credit first if needed.'
+        if ($currentBalance <= 0.009) {
+            throw new RuntimeException($currentBalance < -0.009
+                ? 'This supplier has a credit surplus of ₹' . number_format(abs($currentBalance), 2) . '. No payment is due.'
+                : 'Nothing is due to this supplier — the balance is already settled.'
             );
         }
 
@@ -397,7 +413,7 @@ class SupplierLedger
 
         if (!empty($allocations)) {
             $billStatement = $this->pdo->prepare("
-                SELECT purchase_no, total - amount_paid - amount_credited AS balance_due
+                SELECT purchase_no, status, total - amount_paid - amount_credited AS balance_due
                 FROM purchases
                 WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
                 FOR UPDATE
@@ -416,6 +432,9 @@ class SupplierLedger
                 $bill = $billStatement->fetch(PDO::FETCH_ASSOC);
                 if (!$bill) {
                     throw new RuntimeException('The selected bill does not belong to this supplier.');
+                }
+                if ($bill['status'] === 'cancelled') {
+                    throw new RuntimeException('Bill ' . $bill['purchase_no'] . ' has been cancelled.');
                 }
                 $billDue = (float) $bill['balance_due'];
                 if ($billDue <= 0.009) {
@@ -489,12 +508,14 @@ class SupplierLedger
         array $user,
         ?int $purchaseId = null
     ): int {
+        $this->lockSupplier($organizationId, $supplierId);
+
         // Guard: prevent credit adjustments that exceed the outstanding balance
         $currentBalance = $this->getOutstandingBalance($organizationId, $supplierId);
-        if ($currentBalance <= 0) {
-            throw new RuntimeException(
-                'This supplier already has a credit surplus of ₹' . number_format(abs($currentBalance), 2)
-                . '. A credit adjustment is not applicable.'
+        if ($currentBalance <= 0.009) {
+            throw new RuntimeException($currentBalance < -0.009
+                ? 'This supplier already has a credit surplus of ₹' . number_format(abs($currentBalance), 2) . '. A credit is not applicable.'
+                : 'Nothing is due to this supplier, so there is nothing to credit.'
             );
         }
         if ($amount > $currentBalance + 0.01) {
@@ -555,6 +576,8 @@ class SupplierLedger
         string $reason,
         array $user
     ): int {
+        $this->lockSupplier($organizationId, $supplierId);
+
         $refNo = $this->generateReferenceNo($organizationId, 'ADJ');
 
         return $this->insertTransaction(
@@ -584,6 +607,15 @@ class SupplierLedger
         string $asOfDate,
         array $user
     ): int {
+        $this->assertPastOrToday($asOfDate, 'as-of date');
+        $this->lockSupplier($organizationId, $supplierId);
+
+        if ($this->hasActiveOpeningBalance($organizationId, $supplierId)) {
+            throw new RuntimeException(
+                'This supplier already has an opening balance. To change it, reverse the existing opening balance in the ledger first, then set the new one.'
+            );
+        }
+
         return $this->insertTransaction(
             $organizationId,
             $supplierId,
@@ -610,8 +642,8 @@ class SupplierLedger
         string $reason,
         array $user
     ): int {
-        // Row lock so two concurrent reversal requests can't both pass the
-        // "already reversed?" check below.
+        $this->lockSupplier($organizationId, $supplierId);
+
         $statement = $this->pdo->prepare("
             SELECT * FROM supplier_transactions
             WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
@@ -634,6 +666,10 @@ class SupplierLedger
 
         if (in_array($transactionId, $this->getReversedTransactionIds($organizationId, $supplierId), true)) {
             throw new RuntimeException('This transaction has already been reversed.');
+        }
+
+        if ($original['transaction_type'] === 'PURCHASE' && $original['reference_type'] === 'purchase' && $original['reference_id']) {
+            $this->cancelPurchase($organizationId, (int) $original['reference_id'], $user);
         }
 
         // If reversing a payment, roll back the allocations in purchases
@@ -730,7 +766,7 @@ class SupplierLedger
             $in = implode(',', array_fill(0, count($purchaseIds), '?'));
 
             $statement = $this->pdo->prepare("
-                SELECT id, purchase_no, total, amount_paid, amount_credited, payment_status
+                SELECT id, purchase_no, total, amount_paid, amount_credited, payment_status, status
                 FROM purchases
                 WHERE organization_id = ? AND supplier_id = ? AND id IN ($in)
             ");
@@ -831,6 +867,30 @@ class SupplierLedger
         ]);
 
         return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Whether the supplier has an opening balance that hasn't been reversed.
+     */
+    public function hasActiveOpeningBalance(int $organizationId, int $supplierId): bool
+    {
+        $statement = $this->pdo->prepare("
+            SELECT 1
+            FROM supplier_transactions st
+            WHERE st.organization_id  = :organization_id
+              AND st.supplier_id      = :supplier_id
+              AND st.transaction_type = 'OPENING_BALANCE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM supplier_transactions r
+                  WHERE r.organization_id = st.organization_id
+                    AND r.reference_type  = 'supplier_transaction'
+                    AND r.reference_id    = st.id
+              )
+            LIMIT 1
+        ");
+        $statement->execute(['organization_id' => $organizationId, 'supplier_id' => $supplierId]);
+
+        return (bool) $statement->fetchColumn();
     }
 
     /**
@@ -996,8 +1056,8 @@ class SupplierLedger
     public function getAllPurchases(int $organizationId, int $supplierId): array
     {
         $statement = $this->pdo->prepare("
-            SELECT id, purchase_no, subtotal, tax_amount, total, amount_paid, amount_credited, payment_status, created_at,
-                   (total - amount_paid - amount_credited) AS balance_due
+            SELECT id, purchase_no, subtotal, tax_amount, total, amount_paid, amount_credited, payment_status, status, created_at,
+                   CASE WHEN status = 'cancelled' THEN 0 ELSE total - amount_paid - amount_credited END AS balance_due
             FROM purchases
             WHERE organization_id = :organization_id
               AND supplier_id     = :supplier_id
@@ -1023,7 +1083,8 @@ class SupplierLedger
             WHERE organization_id = :organization_id
               AND supplier_id     = :supplier_id
               AND payment_status != 'paid'
-            ORDER BY created_at ASC
+              AND status != 'cancelled'
+            ORDER BY created_at ASC, id ASC
         ");
         $statement->execute([
             'organization_id' => $organizationId,
@@ -1036,6 +1097,126 @@ class SupplierLedger
     // -----------------------------------------------------------------
     //  Private helpers
     // -----------------------------------------------------------------
+
+    public const PAYMENT_METHODS = ['cash', 'upi', 'bank_transfer', 'card'];
+
+    /**
+     * Reversing a purchase voids the bill itself, not just its ledger line:
+     * marks it cancelled (so it stops showing as due and stops receiving
+     * payments or credits) and takes its parts back out of stock.
+     */
+    private function cancelPurchase(int $organizationId, int $purchaseId, array $user): void
+    {
+        $statement = $this->pdo->prepare("
+            SELECT id, purchase_no, branch_id, status, amount_paid, amount_credited
+            FROM purchases
+            WHERE id = :id AND organization_id = :organization_id
+            FOR UPDATE
+        ");
+        $statement->execute(['id' => $purchaseId, 'organization_id' => $organizationId]);
+        $purchase = $statement->fetch(PDO::FETCH_ASSOC);
+
+        if (!$purchase || $purchase['status'] === 'cancelled') {
+            return;
+        }
+
+        $settled = (float) $purchase['amount_paid'] + (float) $purchase['amount_credited'];
+        if ($settled > 0.009) {
+            throw new RuntimeException(
+                'Bill ' . $purchase['purchase_no'] . ' already has ₹' . number_format($settled, 2)
+                . ' paid or credited against it. Reverse those payments or credits first, then cancel the bill.'
+            );
+        }
+
+        $statement = $this->pdo->prepare("
+            SELECT pi.part_id, SUM(pi.quantity) AS quantity, p.name AS part_name,
+                   COALESCE(inv.quantity, 0) AS in_stock
+            FROM purchase_items pi
+            INNER JOIN parts p ON p.id = pi.part_id
+            LEFT JOIN inventory inv ON inv.part_id = pi.part_id AND inv.branch_id = :branch_id
+            WHERE pi.purchase_id = :purchase_id
+            GROUP BY pi.part_id, p.name, inv.quantity
+        ");
+        $statement->execute(['purchase_id' => $purchaseId, 'branch_id' => $purchase['branch_id']]);
+        $items = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($items as $item) {
+            if ((float) $item['in_stock'] + 0.0001 < (float) $item['quantity']) {
+                throw new RuntimeException(
+                    'Only ' . rtrim(rtrim(number_format((float) $item['in_stock'], 2), '0'), '.') . ' of '
+                    . $item['part_name'] . ' is left in stock, but bill ' . $purchase['purchase_no'] . ' added '
+                    . rtrim(rtrim(number_format((float) $item['quantity'], 2), '0'), '.')
+                    . '. Some parts were already used, so the bill can\'t be cancelled — record a return / credit note for the unused parts instead.'
+                );
+            }
+        }
+
+        $removeStock = $this->pdo->prepare("
+            UPDATE inventory SET quantity = quantity - :quantity, updated_at = CURRENT_TIMESTAMP
+            WHERE part_id = :part_id AND branch_id = :branch_id
+        ");
+        $logMovement = $this->pdo->prepare("
+            INSERT INTO inventory_movements (organization_id, branch_id, part_id, quantity, direction, reason, reference_type, reference_id, created_by)
+            VALUES (:organization_id, :branch_id, :part_id, :quantity, 'out', 'adjustment', 'purchase_cancellation', :reference_id, :created_by)
+        ");
+
+        foreach ($items as $item) {
+            $removeStock->execute([
+                'quantity'  => $item['quantity'],
+                'part_id'   => $item['part_id'],
+                'branch_id' => $purchase['branch_id']
+            ]);
+            $logMovement->execute([
+                'organization_id' => $organizationId,
+                'branch_id'       => $purchase['branch_id'],
+                'part_id'         => $item['part_id'],
+                'quantity'        => $item['quantity'],
+                'reference_id'    => $purchaseId,
+                'created_by'      => $user['id']
+            ]);
+        }
+
+        $statement = $this->pdo->prepare("
+            UPDATE purchases SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND organization_id = :organization_id
+        ");
+        $statement->execute(['id' => $purchaseId, 'organization_id' => $organizationId]);
+    }
+
+    /**
+     * Row-lock the supplier for the rest of the caller's transaction. Every
+     * write that checks the balance first takes this lock, so two quick
+     * submits (double-click, two tabs) run one after the other and the
+     * second one sees the first one's effect instead of the same stale
+     * balance.
+     */
+    private function lockSupplier(int $organizationId, int $supplierId): void
+    {
+        $statement = $this->pdo->prepare("
+            SELECT id FROM suppliers
+            WHERE id = :id AND organization_id = :organization_id
+            FOR UPDATE
+        ");
+        $statement->execute(['id' => $supplierId, 'organization_id' => $organizationId]);
+
+        if (!$statement->fetchColumn()) {
+            throw new RuntimeException('Supplier not found.');
+        }
+    }
+
+    /**
+     * A real calendar date (YYYY-MM-DD) that is not in the future.
+     */
+    private function assertPastOrToday(string $date, string $label): void
+    {
+        $parsed = DateTime::createFromFormat('!Y-m-d', $date);
+        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
+            throw new RuntimeException('Enter a valid ' . $label . '.');
+        }
+        if ($date > date('Y-m-d')) {
+            throw new RuntimeException(ucfirst($label) . ' cannot be in the future.');
+        }
+    }
 
     private function insertTransaction(
         int $organizationId,

@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        $error = $e->getMessage();
+        $error = user_facing_error($e);
         // Also set as flash so it shows prominently as a toast
         flash_set($error, 'error');
     }
@@ -279,6 +279,11 @@ $ledgerOffset = ($ledgerPage - 1) * $perPage;
 
 $ledgerTotalPages = max(1, (int) ceil($ledgerTotal / $perPage));
 $entryDetails = $ledger->getEntryDetails($organizationId, $supplierId, $ledgerEntries);
+
+$hasOpeningBalance = $ledger->hasActiveOpeningBalance($organizationId, $supplierId);
+$statement = $pdo->prepare("SELECT COUNT(*) FROM supplier_transactions WHERE organization_id = :organization_id AND supplier_id = :supplier_id");
+$statement->execute(['organization_id' => $organizationId, 'supplier_id' => $supplierId]);
+$allLedgerEntryCount = (int) $statement->fetchColumn();
 
 $reversedBy = [];
 $reversalOf = [];
@@ -604,6 +609,8 @@ $topbarTitle = $supplier['name'];
 
         /* Bill row reached from a ledger / purchases link */
         .bill-row { scroll-margin-top: 90px; }
+        .bill-row.is-cancelled-bill td { color: var(--muted); }
+        .bill-row.is-cancelled-bill td.num { text-decoration: line-through; }
         .bill-row:target td { background: var(--warning-soft, #fef3c7); transition: background 0.3s ease; }
 
         /* Phones: each ledger entry becomes a compact card */
@@ -748,7 +755,8 @@ $topbarTitle = $supplier['name'];
                         </div>
                         <div class="stat-icon"><?= icon('truck', 17) ?></div>
                     </div>
-                    <div class="stat-meta"><?= count($allPurchases) ?> total purchase bill<?= count($allPurchases) === 1 ? '' : 's' ?></div>
+                    <?php $activeBillCount = count(array_filter($allPurchases, fn($bill) => $bill['status'] !== 'cancelled')); ?>
+                    <div class="stat-meta"><?= $activeBillCount ?> purchase bill<?= $activeBillCount === 1 ? '' : 's' ?></div>
                 </div>
 
                 <div class="card stat-card">
@@ -1015,7 +1023,11 @@ $topbarTitle = $supplier['name'];
                                                             <?php if ((float) $detailBill['amount_credited'] > 0.009): ?>
                                                                 · Credits <strong>₹<?= number_format((float) $detailBill['amount_credited'], 2) ?></strong>
                                                             <?php endif; ?>
-                                                            · Still due <strong>₹<?= number_format(max(0, $detailDue), 2) ?></strong>
+                                                            <?php if ($detailBill['status'] === 'cancelled'): ?>
+                                                                · <strong>Bill cancelled</strong> — its parts were taken back out of stock
+                                                            <?php else: ?>
+                                                                · Still due <strong>₹<?= number_format(max(0, $detailDue), 2) ?></strong>
+                                                            <?php endif; ?>
                                                             · <a href="<?= $billUrl ?>" class="link-action">Open in Purchase Bills</a>
                                                         </div>
                                                     <?php elseif ($entry['reference_type'] === 'supplier_payment' && isset($entryDetails['payments'][$refId])): ?>
@@ -1148,13 +1160,21 @@ $topbarTitle = $supplier['name'];
                                     <?php foreach ($allPurchases as $bill): ?>
                                         <?php
                                         $due = (float) $bill['balance_due'];
-                                        $statusClass = match ($bill['payment_status']) {
+                                        $isCancelledBill = $bill['status'] === 'cancelled';
+                                        $statusClass = $isCancelledBill ? 'badge-neutral' : match ($bill['payment_status']) {
                                             'paid'    => 'badge-success',
                                             'partial' => 'badge-warning',
                                             default   => 'badge-danger'
                                         };
+                                        if ($isCancelledBill) {
+                                            $statusText = 'Cancelled';
+                                        } elseif ($bill['payment_status'] === 'paid' && (float) $bill['amount_credited'] > 0.009) {
+                                            $statusText = 'Settled';
+                                        } else {
+                                            $statusText = ucfirst($bill['payment_status']);
+                                        }
                                         ?>
-                                        <tr id="bill-<?= (int) $bill['id'] ?>" class="bill-row">
+                                        <tr id="bill-<?= (int) $bill['id'] ?>" class="bill-row <?= $isCancelledBill ? 'is-cancelled-bill' : '' ?>">
                                             <td><strong><?= htmlspecialchars($bill['purchase_no']) ?></strong></td>
                                             <td style="font-size:13px;"><?= htmlspecialchars(date('d M Y', strtotime($bill['created_at']))) ?></td>
                                             <td class="num">₹<?= number_format((float) $bill['total'], 2) ?></td>
@@ -1167,7 +1187,7 @@ $topbarTitle = $supplier['name'];
                                             </td>
                                             <td>
                                                 <span class="badge <?= $statusClass ?>" style="font-size:11px;">
-                                                    <?= $bill['payment_status'] === 'paid' && (float) $bill['amount_credited'] > 0.009 ? 'Settled' : ucfirst($bill['payment_status']) ?>
+                                                    <?= $statusText ?>
                                                 </span>
                                             </td>
                                             <td style="text-align:right;">
@@ -1428,7 +1448,7 @@ $topbarTitle = $supplier['name'];
                         </div>
                         <div class="form-field">
                             <label>Payment Date</label>
-                            <input type="date" name="payment_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
+                            <input type="date" name="payment_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" max="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                         </div>
                         <div class="form-field">
                             <label>Bill Allocation</label>
@@ -1499,7 +1519,19 @@ $topbarTitle = $supplier['name'];
                 <form method="POST" action="" id="form-open" style="display:none;">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="opening_balance">
-                    <p class="muted" style="font-size:13px; margin-bottom:12px;">Set the amount owed prior to tracking in GarageOS.</p>
+                    <?php if ($hasOpeningBalance): ?>
+                        <div style="padding:16px; text-align:center; color:var(--muted); font-size:14px;">
+                            <?= icon('check-circle', 20) ?>
+                            <div style="margin-top:8px;">This supplier already has an opening balance. To change it, reverse the existing one in the ledger, then set the new amount here.</div>
+                        </div>
+                    <?php else: ?>
+                    <p class="muted" style="font-size:13px; margin-bottom:12px;">Set the amount you owed this supplier before you started using GarageOS.</p>
+                    <?php if ($allLedgerEntryCount > 0): ?>
+                        <div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; margin-bottom:12px; border-radius:8px; font-size:12.5px; background:var(--warning-soft); color:#92400e;">
+                            <?= icon('alert-triangle', 14) ?>
+                            <span>This supplier already has <?= $allLedgerEntryCount ?> ledger <?= $allLedgerEntryCount === 1 ? 'entry' : 'entries' ?>. Only use this for an old balance that isn't recorded as a purchase — for new amounts, use a purchase or an Adjustment (debit) instead.</span>
+                        </div>
+                    <?php endif; ?>
                     <div class="form-grid single">
                         <div class="form-field">
                             <label>Opening Amount Owed (₹)</label>
@@ -1507,7 +1539,7 @@ $topbarTitle = $supplier['name'];
                         </div>
                         <div class="form-field">
                             <label>As of Date</label>
-                            <input type="date" name="as_of_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
+                            <input type="date" name="as_of_date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" max="<?= htmlspecialchars(date('Y-m-d')) ?>" required>
                         </div>
                         <div class="form-field">
                             <label>Note (Optional)</label>
@@ -1517,6 +1549,7 @@ $topbarTitle = $supplier['name'];
                     <div class="form-actions" style="margin-top:16px;">
                         <button type="submit" class="button"><?= icon('check', 16) ?> Set Opening Balance</button>
                     </div>
+                    <?php endif; ?>
                 </form>
 
             </div>
@@ -1599,6 +1632,10 @@ $topbarTitle = $supplier['name'];
                 <p style="font-size:14px; margin-bottom:14px;">
                     Are you sure you want to reverse <strong id="reversal-ref-text">this entry</strong>?
                     This will post an opposing transaction to preserve audit integrity and reopen linked bills.
+                </p>
+                <p class="muted" style="font-size:12.5px; margin-bottom:14px;">
+                    Reversing a <strong>purchase bill</strong> also cancels the bill and takes its parts back out of stock.
+                    It only works if nothing has been paid or credited on that bill yet.
                 </p>
                 <form method="POST" action="">
                     <?= csrf_field() ?>
@@ -1690,6 +1727,24 @@ function updateAdjMaxHint() {
         if (amtInput) amtInput.removeAttribute('max');
     }
 }
+
+// Money forms submit once: the server already serialises writes per
+// supplier, this just stops a double-click from sending a second request.
+document.querySelectorAll('#unified-modal form, #reversal-modal form, #plan-modal form').forEach(form => {
+    form.addEventListener('submit', () => {
+        const button = form.querySelector('button[type="submit"]');
+        if (!button) return;
+        button.disabled = true;
+        button.dataset.originalHtml = button.innerHTML;
+        button.textContent = 'Saving…';
+    });
+});
+window.addEventListener('pageshow', () => {
+    document.querySelectorAll('button[data-original-html]').forEach(button => {
+        button.disabled = false;
+        button.innerHTML = button.dataset.originalHtml;
+    });
+});
 
 document.querySelectorAll('.ledger-table tr.ledger-row').forEach(row => {
     const toggle = () => {
