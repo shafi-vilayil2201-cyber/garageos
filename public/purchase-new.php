@@ -49,8 +49,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $supplierIsValid = false;
+    if ($supplierId) {
+        $statement = $pdo->prepare("SELECT 1 FROM suppliers WHERE id = :id AND organization_id = :organization_id AND status = 'active'");
+        $statement->execute(['id' => $supplierId, 'organization_id' => $organizationId]);
+        $supplierIsValid = (bool) $statement->fetchColumn();
+    }
+
+    $partsAreValid = true;
+    if (!empty($lines)) {
+        $linePartIds = array_values(array_unique(array_column($lines, 'part_id')));
+        $placeholders = implode(',', array_fill(0, count($linePartIds), '?'));
+        $statement = $pdo->prepare("SELECT COUNT(*) FROM parts WHERE organization_id = ? AND status = 'active' AND id IN ($placeholders)");
+        $statement->execute(array_merge([$organizationId], $linePartIds));
+        $partsAreValid = (int) $statement->fetchColumn() === count($linePartIds);
+    }
+
     if (!$supplierId || empty($lines)) {
         $error = 'Select a supplier and add at least one part with a quantity.';
+    } elseif (!$supplierIsValid) {
+        $error = 'The selected supplier was not found. Refresh the page and try again.';
+    } elseif (!$partsAreValid) {
+        $error = 'One or more selected parts were not found. Refresh the page and try again.';
     } else {
 
         $pdo->beginTransaction();
@@ -173,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$statement = $pdo->prepare("SELECT id, name FROM suppliers WHERE organization_id = :organization_id ORDER BY name");
+$statement = $pdo->prepare("SELECT id, name FROM suppliers WHERE organization_id = :organization_id AND status = 'active' ORDER BY name");
 $statement->execute(['organization_id' => $organizationId]);
 $suppliers = $statement->fetchAll(PDO::FETCH_ASSOC);
 

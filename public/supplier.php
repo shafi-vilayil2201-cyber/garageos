@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                     throw new RuntimeException('Reason for reversal is required.');
                 }
 
-                $newTxnId = $ledger->reverseTransaction($organizationId, $txnId, $reason, $user);
+                $newTxnId = $ledger->reverseTransaction($organizationId, $supplierId, $txnId, $reason, $user);
 
                 log_audit_event($pdo, $user, 'create', 'supplier_transaction', $newTxnId,
                     'Reversed supplier transaction #' . $txnId . ': ' . $reason
@@ -155,16 +155,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canFinance) {
                 $planAmount   = (float) ($_POST['plan_amount'] ?? 0);
                 $frequency    = $_POST['frequency'] ?? 'monthly';
                 $planMethod   = $_POST['plan_method'] ?? null;
-                $startDate    = $_POST['start_date'] ?? '';
-                $endDate      = $_POST['end_date'] ?? null;
+                $startDate    = trim($_POST['start_date'] ?? '');
+                $endDate      = trim($_POST['end_date'] ?? '') ?: null;
                 $totalPlanned = (float) ($_POST['total_planned'] ?? 0) ?: null;
                 $notes        = trim($_POST['plan_notes'] ?? '');
 
                 if ($planAmount <= 0) {
                     throw new RuntimeException('Enter a valid installment amount.');
                 }
-                if (!$startDate) {
-                    throw new RuntimeException('Start date is required.');
+                if (!in_array($frequency, ['weekly', 'monthly', 'quarterly'], true)) {
+                    throw new RuntimeException('Choose a valid frequency.');
+                }
+                if (!in_array($planMethod, ['', null, 'upi', 'bank_transfer', 'cash', 'card'], true)) {
+                    throw new RuntimeException('Choose a valid payment mode.');
+                }
+                $startDateObj = DateTime::createFromFormat('!Y-m-d', $startDate);
+                if (!$startDateObj || $startDateObj->format('Y-m-d') !== $startDate) {
+                    throw new RuntimeException('Enter a valid start date.');
+                }
+                if ($endDate !== null) {
+                    $endDateObj = DateTime::createFromFormat('!Y-m-d', $endDate);
+                    if (!$endDateObj || $endDateObj->format('Y-m-d') !== $endDate) {
+                        throw new RuntimeException('Enter a valid end date.');
+                    }
+                    if ($endDateObj < $startDateObj) {
+                        throw new RuntimeException('End date cannot be before the start date.');
+                    }
                 }
 
                 $planId = $ledger->createPaymentPlan(
@@ -250,6 +266,7 @@ $ledgerOffset = ($ledgerPage - 1) * $perPage;
 );
 
 $ledgerTotalPages = max(1, (int) ceil($ledgerTotal / $perPage));
+$reversedTxnIds   = array_flip($ledger->getReversedTransactionIds($organizationId, $supplierId));
 
 $allPurchases    = $ledger->getAllPurchases($organizationId, $supplierId);
 $unpaidPurchases = $ledger->getUnpaidPurchases($organizationId, $supplierId);
@@ -712,7 +729,9 @@ $topbarTitle = $supplier['name'];
                                             </td>
                                             <?php if ($canFinance): ?>
                                                 <td style="text-align:center;">
-                                                    <?php if (!str_ends_with($entry['transaction_type'], '_REVERSAL')): ?>
+                                                    <?php if (isset($reversedTxnIds[(int) $entry['id']])): ?>
+                                                        <span class="badge badge-neutral" style="font-size:10px;" title="A reversal entry has already been posted for this transaction">Reversed</span>
+                                                    <?php elseif ($entry['reference_type'] !== 'supplier_transaction'): ?>
                                                         <button type="button" class="link-action" style="color:var(--muted); font-size:12px; padding:8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px;" onclick="openReversalModal(<?= (int) $entry['id'] ?>, '<?= htmlspecialchars(addslashes($entry['reference_no'] ?? 'Txn #' . $entry['id'])) ?>')" title="Reverse this transaction">
                                                             <?= icon('rotate-ccw', 14) ?>
                                                         </button>

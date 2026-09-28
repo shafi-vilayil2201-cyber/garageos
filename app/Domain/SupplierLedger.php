@@ -291,10 +291,34 @@ class SupplierLedger
         $unallocatedAmount = $amount;
 
         if (!empty($allocations)) {
+            $billStatement = $this->pdo->prepare("
+                SELECT purchase_no, total - amount_paid AS balance_due
+                FROM purchases
+                WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
+            ");
             foreach ($allocations as $alloc) {
                 $pId = (int) ($alloc['purchase_id'] ?? 0);
                 $pAmt = (float) ($alloc['amount'] ?? 0);
                 if ($pId > 0 && $pAmt > 0) {
+                    $billStatement->execute([
+                        'id'              => $pId,
+                        'organization_id' => $organizationId,
+                        'supplier_id'     => $supplierId
+                    ]);
+                    $bill = $billStatement->fetch(PDO::FETCH_ASSOC);
+                    if (!$bill) {
+                        throw new RuntimeException('The selected bill does not belong to this supplier.');
+                    }
+                    $billDue = (float) $bill['balance_due'];
+                    if ($billDue <= 0.009) {
+                        throw new RuntimeException('Bill ' . $bill['purchase_no'] . ' is already fully paid.');
+                    }
+                    if ($pAmt > $billDue + 0.01) {
+                        throw new RuntimeException(
+                            'Payment of ₹' . number_format($pAmt, 2) . ' exceeds the ₹' . number_format($billDue, 2)
+                            . ' due on bill ' . $bill['purchase_no'] . '. Reduce the amount or choose "Auto-Settle" to spread it across bills.'
+                        );
+                    }
                     $resolvedAllocations[] = ['purchase_id' => $pId, 'amount' => $pAmt];
                     $unallocatedAmount -= $pAmt;
                 }
@@ -505,22 +529,35 @@ class SupplierLedger
      */
     public function reverseTransaction(
         int $organizationId,
+        int $supplierId,
         int $transactionId,
         string $reason,
         array $user
     ): int {
+        // Row lock so two concurrent reversal requests can't both pass the
+        // "already reversed?" check below.
         $statement = $this->pdo->prepare("
             SELECT * FROM supplier_transactions
-            WHERE id = :id AND organization_id = :organization_id
+            WHERE id = :id AND organization_id = :organization_id AND supplier_id = :supplier_id
+            FOR UPDATE
         ");
         $statement->execute([
             'id'              => $transactionId,
-            'organization_id' => $organizationId
+            'organization_id' => $organizationId,
+            'supplier_id'     => $supplierId
         ]);
         $original = $statement->fetch(PDO::FETCH_ASSOC);
 
         if (!$original) {
             throw new RuntimeException('Transaction not found.');
+        }
+
+        if ($original['reference_type'] === 'supplier_transaction') {
+            throw new RuntimeException('This entry is itself a reversal and cannot be reversed again.');
+        }
+
+        if (in_array($transactionId, $this->getReversedTransactionIds($organizationId, $supplierId), true)) {
+            throw new RuntimeException('This transaction has already been reversed.');
         }
 
         // If reversing a payment, roll back the allocations in purchases
@@ -577,6 +614,28 @@ class SupplierLedger
             $transactionId,
             $user['id']
         );
+    }
+
+    /**
+     * IDs of this supplier's transactions that already have a reversal
+     * entry pointing back at them.
+     */
+    public function getReversedTransactionIds(int $organizationId, int $supplierId): array
+    {
+        $statement = $this->pdo->prepare("
+            SELECT reference_id
+            FROM supplier_transactions
+            WHERE organization_id = :organization_id
+              AND supplier_id     = :supplier_id
+              AND reference_type  = 'supplier_transaction'
+              AND reference_id IS NOT NULL
+        ");
+        $statement->execute([
+            'organization_id' => $organizationId,
+            'supplier_id'     => $supplierId
+        ]);
+
+        return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
     }
 
     // -----------------------------------------------------------------
