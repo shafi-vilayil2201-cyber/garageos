@@ -17,10 +17,14 @@
 #
 # Usage (on the production VM, from the ~/garageos checkout):
 #   ./scripts/deploy.sh
+#
+# The demo copy set up by install-demo-instance.sh is deployed the same
+# way, pointed at its own folder:
+#   GARAGEOS_APP_ROOT=/var/www/garageos-demo ./scripts/deploy.sh
 
 set -euo pipefail
 
-APP_ROOT="/var/www/garageos"
+APP_ROOT="${GARAGEOS_APP_ROOT:-/var/www/garageos}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log()  { echo -e "\n\033[1;32m==>\033[0m $1"; }
@@ -28,7 +32,13 @@ fail() { echo -e "\n\033[1;31mERROR:\033[0m $1" >&2; exit 1; }
 
 [ -d "$APP_ROOT/current" ] || fail "$APP_ROOT/current not found — is this the production VM?"
 
-log "Syncing code to $APP_ROOT/current"
+# current/ is a symlink to releases/<version>, owned by www-data. Newer
+# rsync releases refuse to write through a symlink owned by a non-root
+# user ("refusing to follow a symlink owned by an untrusted user"), which
+# would make every deploy fail — so sync into the real directory instead.
+TARGET_DIR="$(readlink -f "$APP_ROOT/current")"
+
+log "Syncing code to $APP_ROOT/current (-> $TARGET_DIR)"
 
 # --delete keeps current/ from accumulating files removed from git over
 # time, but it must never be allowed to touch anything that lives only
@@ -39,7 +49,7 @@ sudo rsync -a --delete \
     --exclude='.env' \
     --exclude='.git' \
     --exclude='public/uploads' \
-    "$REPO_ROOT/" "$APP_ROOT/current/"
+    "$REPO_ROOT/" "$TARGET_DIR/"
 
 log "Fixing ownership"
 sudo chown -R www-data:www-data "$APP_ROOT"
