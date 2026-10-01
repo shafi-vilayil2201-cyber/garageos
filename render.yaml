@@ -1,0 +1,28 @@
+# Render Blueprint for a GarageOS demo environment (free web service +
+# an external Postgres such as Neon). Real client installs don't use this —
+# they run scripts/install-garageos.sh on their own server.
+services:
+  - type: web
+    name: garageos-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    healthCheckPath: /
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DB_SSLMODE
+        value: require
+      - key: DB_PORT
+        value: "5432"
+      # Filled in on Render's dashboard from the Neon connection details —
+      # never committed to git.
+      - key: DB_HOST
+        sync: false
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false

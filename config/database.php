@@ -31,6 +31,14 @@ $password = env('DB_PASSWORD', 'garageos_dev_2026');
 
 $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
 
+// Hosted Postgres (e.g. Neon) only accepts encrypted connections, so it's
+// set via DB_SSLMODE=require there; left unset, a local/VM install keeps
+// libpq's default behaviour exactly as before.
+$sslMode = env('DB_SSLMODE');
+if ($sslMode) {
+    $dsn .= ";sslmode=$sslMode";
+}
+
 $pdo = new PDO($dsn, $user, $password);
 
 $pdo->setAttribute(
