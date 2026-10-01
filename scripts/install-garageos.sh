@@ -239,6 +239,14 @@ certbot --nginx -d "$APP_DOMAIN" -m "$CERT_EMAIL" --agree-tos --non-interactive 
     || echo "Certbot failed — confirm ${APP_DOMAIN} already points at this server's IP, then re-run: certbot --nginx -d ${APP_DOMAIN}"
 
 # ---------------------------------------------------------------------------
+# 9b. Security hardening (headers, database connect restriction)
+# ---------------------------------------------------------------------------
+
+log "Applying security hardening"
+"$APP_ROOT/current/scripts/harden-server.sh" \
+    || echo -e "\n\033[1;33mWARNING:\033[0m hardening did not complete — re-run later: sudo $APP_ROOT/current/scripts/harden-server.sh"
+
+# ---------------------------------------------------------------------------
 # 10. Health check
 # ---------------------------------------------------------------------------
 

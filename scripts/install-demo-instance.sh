@@ -54,6 +54,12 @@ db_exists() {
     sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$1'" | grep -q 1
 }
 
+# www-data right after install; the demo's own user once harden-server.sh
+# has isolated it.
+demo_owner() {
+    stat -c '%U' "$DEMO_ROOT/shared" 2>/dev/null || echo www-data
+}
+
 # Creates (or re-creates) the demo database, runs migrations and loads the
 # sample workshop, then prints the demo login. Shared by install and reset.
 seed_demo_database() {
@@ -61,17 +67,20 @@ seed_demo_database() {
     local admin_password
     admin_password=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 14)
 
+    local owner
+    owner=$(demo_owner)
+
     log "Running database migrations"
-    sudo -u www-data php "$DEMO_ROOT/current/database/migrate.php"
+    sudo -u "$owner" php "$DEMO_ROOT/current/database/migrate.php"
 
     log "Loading sample workshop data"
     local output
     if ! output=$(printf '%s\n%s\n' "$admin_email" "$admin_password" \
-        | sudo -u www-data php "$DEMO_ROOT/current/database/seeders/001_create_demo_data.php" 2>&1); then
+        | sudo -u "$owner" php "$DEMO_ROOT/current/database/seeders/001_create_demo_data.php" 2>&1); then
         echo "$output"; fail "Creating the demo workshop failed."
     fi
     for seeder in 002_seed_service_catalog.php 003_seed_demo_workshop_data.php; do
-        if ! output=$(sudo -u www-data php "$DEMO_ROOT/current/database/seeders/$seeder" 2>&1); then
+        if ! output=$(sudo -u "$owner" php "$DEMO_ROOT/current/database/seeders/$seeder" 2>&1); then
             echo "$output"; fail "Seeder $seeder failed."
         fi
     done
@@ -97,12 +106,14 @@ if [ "${1:-}" = "--reset" ]; then
     sudo -u postgres psql -v ON_ERROR_STOP=1 -q <<SQL
 DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);
 CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
+REVOKE CONNECT ON DATABASE ${DB_NAME} FROM PUBLIC;
+GRANT CONNECT ON DATABASE ${DB_NAME} TO ${DB_USER};
 SQL
 
     log "Clearing demo uploads"
     rm -rf "$DEMO_ROOT/current/public/uploads"
     mkdir -p "$DEMO_ROOT/current/public/uploads"
-    chown -R www-data:www-data "$DEMO_ROOT/current/public/uploads"
+    chown -R "$(demo_owner):$(demo_owner)" "$DEMO_ROOT/current/public/uploads"
 
     seed_demo_database "$(cat "$LOGIN_FILE")"
     log "Demo reset complete"
@@ -129,7 +140,15 @@ if [ "${1:-}" = "--remove" ]; then
 DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);
 DROP ROLE IF EXISTS ${DB_USER};
 SQL
+    POOL_FILE=$(ls /etc/php/*/fpm/pool.d/garageos-demo.conf 2>/dev/null | head -1 || true)
+    if [ -n "$POOL_FILE" ]; then
+        rm -f "$POOL_FILE"
+        systemctl reload "$PHP_FPM_SERVICE"
+    fi
     rm -rf "$DEMO_ROOT"
+    if id garageos-demo >/dev/null 2>&1; then
+        userdel garageos-demo
+    fi
     log "Demo removed. The real install was not touched."
     exit 0
 fi
@@ -233,10 +252,14 @@ log "Requesting HTTPS certificate for ${DEMO_DOMAIN}"
 certbot --nginx -d "$DEMO_DOMAIN" -m "$CERT_EMAIL" --agree-tos --non-interactive --redirect \
     || echo "Certbot failed — confirm ${DEMO_DOMAIN} points at this server's IP, then re-run: sudo certbot --nginx -d ${DEMO_DOMAIN}"
 
+log "Applying security hardening (demo runs as its own user)"
+"$RELEASE_DIR/scripts/harden-server.sh"
+
 log "Verifying the demo"
 sleep 2
 HEALTH=$(curl -sk "https://${DEMO_DOMAIN}/health.php" || curl -s -H "Host: ${DEMO_DOMAIN}" "http://127.0.0.1/health.php" || echo '{"status":"unreachable"}')
 echo "$HEALTH"
+echo "(The demo login was printed above, under 'Demo login'.)"
 
 echo -e "\nDemo is at https://${DEMO_DOMAIN}"
 echo "Reset it between prospects with: sudo ./scripts/install-demo-instance.sh --reset"

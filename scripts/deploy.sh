@@ -51,11 +51,15 @@ sudo rsync -a --delete \
     --exclude='public/uploads' \
     "$REPO_ROOT/" "$TARGET_DIR/"
 
-log "Fixing ownership"
-sudo chown -R www-data:www-data "$APP_ROOT"
+# Keep whoever already owns this install (www-data for a client install;
+# the demo copy runs as its own user after harden-server.sh).
+APP_OWNER="$(sudo stat -c '%U' "$APP_ROOT/shared" 2>/dev/null || echo www-data)"
+
+log "Fixing ownership ($APP_OWNER)"
+sudo chown -R "$APP_OWNER:$APP_OWNER" "$APP_ROOT"
 
 log "Running database migrations"
-sudo -u www-data php "$APP_ROOT/current/database/migrate.php"
+sudo -u "$APP_OWNER" php "$APP_ROOT/current/database/migrate.php"
 
 log "Restarting php-fpm"
 sudo systemctl restart php*-fpm

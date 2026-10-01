@@ -3,9 +3,9 @@
 // A CSRF token independent of the app's own cookie-based auth session —
 // this rides on PHP's native session purely to hold that one value.
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/Session.php';
+
+garageos_start_session();
 
 function csrf_token(): string
 {

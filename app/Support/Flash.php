@@ -15,9 +15,9 @@
 // output by then, and session_start() after that point doesn't just
 // fail — it prints a "headers already sent" warning straight into the
 // page, breaking the layout around it.
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../Security/Session.php';
+
+garageos_start_session();
 
 function flash_set(string $message, string $type = 'success'): void
 {
